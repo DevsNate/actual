@@ -39,3 +39,7 @@ catalog idempotency receipts and admitted endpoint behavior before they are
 enabled. It does not change `/sync`, the stock file catalog, encrypted budget
 files, or CRDT behavior. The route is an internal web semantic API, not yet a
 claim about a stock YNAB endpoint.
+
+The atomic command boundary and the distinction between membership,
+materialization, and selection are defined in
+[`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md).
