@@ -20,7 +20,7 @@ v26.8.1. The baseline commit is
 | ---------- | ---------------------------------------- | ------------------ | -------------- | ---------------------------------------------------- |
 | ACTUAL-001 | Authentication and sessions              | Keep               | implemented    | Actual account DB plus semantic principal adapter    |
 | ACTUAL-002 | Express server shell                     | Keep and extend    | admitted       | Existing host mounts semantic web and stock gateways |
-| ACTUAL-003 | File and user-access catalog             | Modify             | proposed       | Canonical plans and memberships in PostgreSQL        |
+| ACTUAL-003 | File and user-access catalog             | Modify             | migrating      | Canonical plans and memberships in PostgreSQL        |
 | ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger       |
 | ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                    |
 | ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services                  |
@@ -28,8 +28,8 @@ v26.8.1. The baseline commit is
 | ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                             |
 | ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands       |
 | ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                        |
-| ADD-001    | Canonical semantic database              | Add                | proposed       | PostgreSQL budgeting authority                       |
-| ADD-002    | Knowledge and receipt ledger             | Add                | proposed       | Ordered per-plan/device synchronization state        |
+| ADD-001    | Canonical semantic database              | Add                | implemented    | PostgreSQL foundation; entity authority follows      |
+| ADD-002    | Knowledge and receipt ledger             | Add                | implemented    | Ordered per-plan/device synchronization state        |
 | ADD-003    | YNAB protocol gateway                    | Add                | proposed       | Evidence-derived stock projections                   |
 | ADD-004    | Web semantic API                         | Add                | proposed       | React query/command boundary                         |
 | ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests     |
@@ -82,7 +82,13 @@ v26.8.1. The baseline commit is
 - **Migration:** A compatibility view or importer may expose legacy files
   during transition.
 - **Evidence:** `STARTUP-001` and `PLAN-001`.
-- **Status:** proposed.
+- **Implementation:** `@actual-app/semantic-postgres` now owns the canonical
+  plan, membership, and catalog-knowledge schema and provides a principal-
+  scoped catalog reader. The stock file catalog remains reachable until the
+  semantic route adapters and migration path are complete.
+- **Verification:** Strict package typecheck, catalog-isolation test, and
+  repository-wide lint.
+- **Status:** migrating.
 
 ### ACTUAL-004 — CRDT synchronization
 
@@ -162,7 +168,19 @@ v26.8.1. The baseline commit is
   sets, idempotency receipts, and tombstones.
 - **Later scope:** accounts, payees, categories, transactions, splits,
   schedules, targets, and mappings.
-- **Status:** proposed.
+- **Implementation:** `packages/semantic-postgres` migration
+  `0001_semantic_foundation.sql` defines canonical plans, memberships, catalog
+  knowledge, devices, change sets, entity changes, and durable receipts. Text
+  identifiers deliberately preserve opaque stock identities rather than
+  assuming every admitted identifier is a UUID.
+- **Boundary:** This is the canonical storage foundation, not yet the live
+  authority for budgeting entities. No inferred account, transfer, schedule,
+  or target policy is encoded in this migration.
+- **Verification:** Migration contract test, strict TypeScript build, focused
+  repository tests, root lint/typecheck, and a disposable PostgreSQL 17
+  integration run that applies the migration twice and exercises plan/catalog
+  persistence, tombstone commit, exact replay, and conflicting replay.
+- **Status:** implemented; live routing and budgeting tables remain pending.
 
 ### ADD-002 — Knowledge and receipt ledger
 
@@ -171,7 +189,19 @@ v26.8.1. The baseline commit is
   schema version, affected identities, tombstones, idempotency key, and
   acknowledgment state committed with the semantic operation.
 - **Evidence:** `STARTUP-001`, `PLAN-001`, and stock protocol analysis.
-- **Status:** proposed.
+- **Implementation:** `PostgresSemanticStore.commitChangeSet` uses one
+  PostgreSQL transaction with an idempotency advisory lock and plan/device row
+  locks to append an ordered change set and tombstone-capable entity changes,
+  advance knowledge, and persist the exact response receipt. Identical
+  requests replay the stored response; reuse of an idempotency key with another
+  digest fails closed.
+- **Verification:** Focused tests cover first commit, exact replay, conflicting
+  replay rollback, validation before database access, and the schema's
+  knowledge/receipt foreign-key constraints. The same lifecycle passes against
+  disposable PostgreSQL 17, with exactly one change set and receipt after
+  replay.
+- **Status:** implemented; acknowledgment delivery and pruning policy remain
+  pending.
 
 ### ADD-003 — YNAB protocol gateway
 

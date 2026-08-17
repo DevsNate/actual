@@ -1,0 +1,37 @@
+# Semantic PostgreSQL storage
+
+This package is the canonical persistence boundary for the selective Actual
+fork. It is intentionally independent of Express, React, the YNAB gateway,
+Actual's CRDT messages, and budgeting-policy implementations.
+
+## Current scope
+
+- plan and budget-version identities;
+- principal memberships and catalog knowledge;
+- per-plan and per-device knowledge;
+- ordered change sets with schema versions and affected entity identities;
+- explicit tombstones;
+- durable idempotency receipts containing the exact accepted response; and
+- transactional migrations protected by a PostgreSQL advisory lock.
+
+`commitChangeSet` serializes reuse of a device idempotency key, locks plan and
+device knowledge, and commits the change set, knowledge advancement, and exact
+response receipt in one database transaction. An identical retry replays the
+receipt. A different payload using the same key fails closed.
+
+## Deliberate exclusions
+
+This foundation does not define account, transaction, split, transfer,
+schedule, target, credit-card, or account-lifecycle policy. Those tables and
+commands are admitted only after their behavior is supported by the stock
+evidence knowledge base. It also does not duplicate Actual authentication;
+memberships refer to principals produced by the retained Actual session
+system.
+
+All changes to this boundary must update
+`project-docs/architecture/stock-actual-change-ledger.md` in the same commit.
+
+Set `SEMANTIC_POSTGRES_TEST_URL` when running the package tests to enable the
+disposable PostgreSQL integration suite. The suite applies migrations twice to
+verify idempotence and exercises catalog persistence, tombstone commit, exact
+receipt replay, and conflicting replay.
