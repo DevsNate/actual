@@ -248,4 +248,25 @@ describe('semantic foundation migration', () => {
       'REFERENCES semantic_catalog_change_sets(principal_id, server_knowledge)',
     );
   });
+
+  test('preserves complete canonical plan entity payloads', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0003_canonical_plan_entities.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('ADD COLUMN currency_format JSONB');
+    expect(migration).toContain('ADD COLUMN date_format JSONB');
+    expect(migration).toContain('CREATE TABLE semantic_plan_entities');
+    expect(migration).toContain('payload JSONB NOT NULL');
+    expect(migration).toContain('is_tombstone BOOLEAN NOT NULL');
+    expect(migration).toContain(
+      'PRIMARY KEY (plan_id, entity_kind, entity_id)',
+    );
+  });
 });

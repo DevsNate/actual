@@ -86,7 +86,8 @@ The implementation sequence is:
 
 1. add principal/device-scoped catalog knowledge and command receipts
    (**schema implemented; atomic command writer pending**);
-2. add canonical plan metadata and evidence-backed bootstrap entities;
+2. add canonical plan metadata and an unknown-field-preserving entity store
+   (**schema implemented; exact default bootstrap evidence pending**);
 3. implement atomic create, rename, and delete domain commands;
 4. expose the native React command API;
 5. project the same commands through admitted YNAB-shaped endpoints; and

@@ -192,6 +192,10 @@ API` contains the expiry correction and first route integration.
   exact command receipts from the per-plan budget ledger. No API currently
   advances these tables; the atomic lifecycle command writer remains gated on
   canonical plan bootstrap storage.
+- **Entity extension:** `0003_canonical_plan_entities.sql` adds structured
+  date/currency metadata and a schema-versioned, tombstone-capable canonical
+  entity snapshot table. Complete JSON payloads preserve unknown fields; no
+  entity-specific behavior or default bootstrap contents are inferred.
 - **Boundary:** This is the canonical storage foundation, not yet the live
   authority for budgeting entities. No inferred account, transfer, schedule,
   or target policy is encoded in this migration.

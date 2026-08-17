@@ -7,6 +7,8 @@ Actual's CRDT messages, and budgeting-policy implementations.
 ## Current scope
 
 - plan and budget-version identities;
+- structured date/currency metadata and complete canonical plan-entity
+  snapshots;
 - principal memberships and catalog knowledge;
 - principal/device catalog knowledge plus ordered catalog change and receipt
   schema;
@@ -24,6 +26,11 @@ receipt. A different payload using the same key fails closed.
 The catalog ledger migration is intentionally schema-only for now. No route
 may advance it until the atomic plan lifecycle writer can commit catalog facts
 and the complete canonical budget bootstrap together.
+
+Canonical entity snapshots retain a complete JSON payload, entity kind,
+identity, schema version, tombstone state, and last server knowledge. This is
+the unknown-field-preserving storage boundary; domain services may interpret
+only fields supported by admitted evidence.
 
 ## Deliberate exclusions
 
