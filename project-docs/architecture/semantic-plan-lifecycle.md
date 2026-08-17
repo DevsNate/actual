@@ -85,7 +85,8 @@ the service, and project its result.
 The implementation sequence is:
 
 1. add principal/device-scoped catalog knowledge and command receipts
-   (**schema implemented; atomic command writer pending**);
+   (**schema and atomic command writer implemented; product commands
+   pending**);
 2. add canonical plan metadata and an unknown-field-preserving entity store
    (**schema implemented; exact default bootstrap evidence pending**);
 3. implement atomic create, rename, and delete domain commands;

@@ -11,6 +11,7 @@
     ".": "./src/index.ts",
     "./foundation-migration": "./src/foundation-migration.ts",
     "./catalog-command-migration": "./src/catalog-command-migration.ts",
+    "./catalog-schema-version-migration": "./src/catalog-schema-version-migration.ts",
     "./canonical-plan-migration": "./src/canonical-plan-migration.ts"
   },
   "scripts": {

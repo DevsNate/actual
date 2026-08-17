@@ -4,6 +4,7 @@ import {
 } from '@actual-app/semantic-postgres';
 import { semanticCanonicalPlanMigration } from '@actual-app/semantic-postgres/canonical-plan-migration';
 import { semanticCatalogCommandMigration } from '@actual-app/semantic-postgres/catalog-command-migration';
+import { semanticCatalogSchemaVersionMigration } from '@actual-app/semantic-postgres/catalog-schema-version-migration';
 import { semanticFoundationMigration } from '@actual-app/semantic-postgres/foundation-migration';
 import { Pool } from 'pg';
 
@@ -19,6 +20,7 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticFoundationMigration,
       semanticCatalogCommandMigration,
       semanticCanonicalPlanMigration,
+      semanticCatalogSchemaVersionMigration,
     ]);
   } catch (error) {
     await pool.end();

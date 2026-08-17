@@ -194,9 +194,10 @@ API` contains the expiry correction and first route integration.
   assuming every admitted identifier is a UUID.
 - **Catalog extension:** `0002_catalog_command_ledger.sql` separates catalog
   device knowledge, ordered catalog change sets, complete entity changes, and
-  exact command receipts from the per-plan budget ledger. No API currently
-  advances these tables; the atomic lifecycle command writer remains gated on
-  canonical plan bootstrap storage.
+  exact command receipts from the per-plan budget ledger.
+- **Catalog command extension:**
+  `0004_catalog_command_schema_version.sql` versions catalog command envelopes
+  without rewriting the already-applied catalog migration.
 - **Entity extension:** `0003_canonical_plan_entities.sql` adds structured
   date/currency metadata and a schema-versioned, tombstone-capable canonical
   entity snapshot table. Complete JSON payloads preserve unknown fields; no
@@ -225,14 +226,21 @@ Mount semantic catalog API`.
   advance knowledge, and persist the exact response receipt. Identical
   requests replay the stored response; reuse of an idempotency key with another
   digest fails closed.
+- **Catalog implementation:** `commitCatalogCommand` independently locks the
+  principal/device/idempotency tuple, checks both knowledge counters, appends
+  the versioned catalog change set and complete entity changes, advances
+  catalog knowledge, and stores the exact response receipt in one transaction.
+  This is storage infrastructure; it does not expose plan creation or mutate
+  canonical plan rows by itself.
 - **Verification:** Focused tests cover first commit, exact replay, conflicting
   replay rollback, validation before database access, and the schema's
   knowledge/receipt foreign-key constraints. The same lifecycle passes against
   disposable PostgreSQL 17, with exactly one change set and receipt after
   replay.
 - **Commit/PR:** `6e50cfc`.
-- **Status:** implemented for budget commands and catalog schema; the catalog
-  command writer, acknowledgment delivery, and pruning policy remain pending.
+- **Status:** implemented for budget and catalog command storage;
+  acknowledgment delivery, product commands, and pruning policy remain
+  pending.
 
 ### ADD-003 — YNAB protocol gateway
 

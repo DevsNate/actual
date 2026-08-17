@@ -1,4 +1,6 @@
 import type {
+  CatalogCommand,
+  CatalogCommandResult,
   CatalogSnapshot,
   PlanMembership,
   PrincipalId,
@@ -26,6 +28,16 @@ type ReceiptRow = {
   server_knowledge: string;
   response: Readonly<Record<string, unknown>>;
 };
+
+type CatalogKnowledgeCommandRow = {
+  server_knowledge: string;
+};
+
+type CatalogDeviceKnowledgeRow = {
+  server_knowledge_of_device: string;
+};
+
+type CatalogReceiptRow = ReceiptRow;
 
 type CatalogRow = {
   catalog_server_knowledge: string;
@@ -101,6 +113,82 @@ export class PostgresSemanticStore {
       },
       memberships: result.rows.filter(hasMembership).map(mapMembership),
     };
+  }
+
+  async commitCatalogCommand(
+    command: CatalogCommand,
+  ): Promise<CatalogCommandResult> {
+    validateCatalogCommand(command);
+    return this.transact(async client => {
+      await lockCatalogIdempotencyKey(client, command);
+      const replay = await findCatalogReceipt(client, command);
+      if (replay) {
+        return replay;
+      }
+
+      const currentServerKnowledge = await lockCatalogKnowledge(
+        client,
+        command.principalId,
+      );
+      if (currentServerKnowledge !== command.expectedServerKnowledge) {
+        throw new SemanticStoreError(
+          'SERVER_KNOWLEDGE_MISMATCH',
+          `Expected catalog server knowledge ${command.expectedServerKnowledge}, received ${currentServerKnowledge}`,
+        );
+      }
+
+      const deviceKnowledge = await lockCatalogDeviceKnowledge(client, command);
+      if (deviceKnowledge !== command.startingDeviceKnowledge) {
+        throw new SemanticStoreError(
+          'DEVICE_KNOWLEDGE_MISMATCH',
+          `Expected catalog device knowledge ${command.startingDeviceKnowledge}, received ${deviceKnowledge}`,
+        );
+      }
+
+      const nextServerKnowledge = currentServerKnowledge + 1;
+      await insertCatalogChangeSet(client, command, nextServerKnowledge);
+      await insertCatalogEntityChanges(client, command);
+      await client.query(
+        `UPDATE semantic_catalog_knowledge
+         SET server_knowledge = $2, updated_at = now()
+         WHERE principal_id = $1`,
+        [command.principalId, nextServerKnowledge],
+      );
+      await client.query(
+        `UPDATE semantic_catalog_devices
+         SET server_knowledge_of_device = $3, updated_at = now()
+         WHERE principal_id = $1 AND device_id = $2`,
+        [
+          command.principalId,
+          command.originDeviceId,
+          command.endingDeviceKnowledge,
+        ],
+      );
+      await client.query(
+        `INSERT INTO semantic_catalog_command_receipts
+           (principal_id, device_id, idempotency_key, payload_digest,
+            starting_device_knowledge, ending_device_knowledge,
+            server_knowledge, response)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          command.principalId,
+          command.originDeviceId,
+          command.idempotencyKey,
+          command.payloadDigest,
+          command.startingDeviceKnowledge,
+          command.endingDeviceKnowledge,
+          nextServerKnowledge,
+          command.response,
+        ],
+      );
+
+      return {
+        replayed: false,
+        serverKnowledge: nextServerKnowledge,
+        endingDeviceKnowledge: command.endingDeviceKnowledge,
+        response: command.response,
+      };
+    });
   }
 
   async commitChangeSet(
@@ -206,6 +294,146 @@ export class PostgresSemanticStore {
     } finally {
       client.release();
     }
+  }
+}
+
+async function lockCatalogIdempotencyKey(
+  client: PoolClient,
+  command: CatalogCommand,
+): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+    `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
+  ]);
+}
+
+async function findCatalogReceipt(
+  client: PoolClient,
+  command: CatalogCommand,
+): Promise<CatalogCommandResult | null> {
+  const receipt = await client.query<CatalogReceiptRow>(
+    `SELECT payload_digest, ending_device_knowledge,
+            server_knowledge, response
+     FROM semantic_catalog_command_receipts
+     WHERE principal_id = $1 AND device_id = $2 AND idempotency_key = $3
+     FOR UPDATE`,
+    [command.principalId, command.originDeviceId, command.idempotencyKey],
+  );
+  const row = receipt.rows[0];
+  if (!row) {
+    return null;
+  }
+  if (row.payload_digest !== command.payloadDigest) {
+    throw new SemanticStoreError(
+      'IDEMPOTENCY_CONFLICT',
+      'The catalog idempotency key was already used with a different payload',
+    );
+  }
+  return {
+    replayed: true,
+    serverKnowledge: toSafeInteger(
+      row.server_knowledge,
+      'catalog server knowledge',
+    ),
+    endingDeviceKnowledge: toSafeInteger(
+      row.ending_device_knowledge,
+      'catalog ending device knowledge',
+    ),
+    response: row.response,
+  };
+}
+
+async function lockCatalogKnowledge(
+  client: PoolClient,
+  principalId: PrincipalId,
+): Promise<number> {
+  await client.query(
+    `INSERT INTO semantic_catalog_knowledge (principal_id, server_knowledge)
+     VALUES ($1, 0)
+     ON CONFLICT (principal_id) DO NOTHING`,
+    [principalId],
+  );
+  const result = await client.query<CatalogKnowledgeCommandRow>(
+    `SELECT server_knowledge
+     FROM semantic_catalog_knowledge
+     WHERE principal_id = $1
+     FOR UPDATE`,
+    [principalId],
+  );
+  return toSafeInteger(
+    result.rows[0].server_knowledge,
+    'catalog server knowledge',
+  );
+}
+
+async function lockCatalogDeviceKnowledge(
+  client: PoolClient,
+  command: CatalogCommand,
+): Promise<number> {
+  await client.query(
+    `INSERT INTO semantic_catalog_devices
+       (principal_id, device_id, server_knowledge_of_device)
+     VALUES ($1, $2, 0)
+     ON CONFLICT (principal_id, device_id) DO NOTHING`,
+    [command.principalId, command.originDeviceId],
+  );
+  const result = await client.query<CatalogDeviceKnowledgeRow>(
+    `SELECT server_knowledge_of_device
+     FROM semantic_catalog_devices
+     WHERE principal_id = $1 AND device_id = $2
+     FOR UPDATE`,
+    [command.principalId, command.originDeviceId],
+  );
+  return toSafeInteger(
+    result.rows[0].server_knowledge_of_device,
+    'catalog device knowledge',
+  );
+}
+
+async function insertCatalogChangeSet(
+  client: PoolClient,
+  command: CatalogCommand,
+  serverKnowledge: number,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO semantic_catalog_change_sets
+       (change_set_id, principal_id, server_knowledge, origin_device_id,
+        starting_device_knowledge, ending_device_knowledge,
+        schema_version, command_kind, idempotency_key, payload_digest)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+    [
+      command.changeSetId,
+      command.principalId,
+      serverKnowledge,
+      command.originDeviceId,
+      command.startingDeviceKnowledge,
+      command.endingDeviceKnowledge,
+      command.schemaVersion,
+      command.commandKind,
+      command.idempotencyKey,
+      command.payloadDigest,
+    ],
+  );
+}
+
+async function insertCatalogEntityChanges(
+  client: PoolClient,
+  command: CatalogCommand,
+): Promise<void> {
+  for (const [ordinal, change] of command.changes.entries()) {
+    await client.query(
+      `INSERT INTO semantic_catalog_entity_changes
+         (change_set_id, ordinal, entity_kind, entity_id,
+          is_tombstone, payload)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        command.changeSetId,
+        ordinal,
+        change.entityKind,
+        change.entityId,
+        change.isTombstone,
+        change.payload,
+      ],
+    );
   }
 }
 
@@ -369,6 +597,38 @@ function validateCreatePlan(input: CreatePlanInput): void {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
       'Plan creation contains invalid identity, name, or permissions',
+    );
+  }
+}
+
+function validateCatalogCommand(command: CatalogCommand): void {
+  const validKnowledge = [
+    command.startingDeviceKnowledge,
+    command.endingDeviceKnowledge,
+    command.expectedServerKnowledge,
+  ].every(value => Number.isSafeInteger(value) && value >= 0);
+  const validDigest = /^[0-9a-f]{64}$/u.test(command.payloadDigest);
+  const validChanges =
+    command.changes.length > 0 &&
+    command.changes.every(
+      change => change.entityKind.trim() && change.entityId.trim(),
+    );
+  if (
+    !command.changeSetId ||
+    !command.principalId ||
+    !command.originDeviceId ||
+    !command.commandKind.trim() ||
+    !command.idempotencyKey ||
+    !validKnowledge ||
+    command.endingDeviceKnowledge < command.startingDeviceKnowledge ||
+    !Number.isSafeInteger(command.schemaVersion) ||
+    command.schemaVersion <= 0 ||
+    !validDigest ||
+    !validChanges
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Catalog command failed semantic storage validation',
     );
   }
 }

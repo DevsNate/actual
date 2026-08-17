@@ -107,4 +107,78 @@ integrationTest('PostgresSemanticStore integration', () => {
       }),
     ).rejects.toBeInstanceOf(SemanticStoreError);
   });
+
+  test('commits and exactly replays an isolated catalog command', async () => {
+    const operation = {
+      changeSetId: 'catalog-change-integration',
+      principalId: 'catalog-principal-integration',
+      originDeviceId: 'catalog-device-integration',
+      startingDeviceKnowledge: 0,
+      endingDeviceKnowledge: 1,
+      expectedServerKnowledge: 0,
+      schemaVersion: 1,
+      commandKind: 'create-plan',
+      idempotencyKey: 'catalog-request-integration',
+      payloadDigest: 'e'.repeat(64),
+      changes: [
+        {
+          entityKind: 'plan-membership',
+          entityId: 'catalog-membership-integration',
+          isTombstone: false,
+          payload: {
+            planId: 'catalog-plan-integration',
+            name: 'Catalog integration plan',
+          },
+        },
+      ],
+      response: {
+        planId: 'catalog-plan-integration',
+        budgetVersionId: 'catalog-version-integration',
+      },
+    } as const;
+
+    await expect(store.commitCatalogCommand(operation)).resolves.toEqual({
+      replayed: false,
+      serverKnowledge: 1,
+      endingDeviceKnowledge: 1,
+      response: operation.response,
+    });
+    await expect(store.commitCatalogCommand(operation)).resolves.toEqual({
+      replayed: true,
+      serverKnowledge: 1,
+      endingDeviceKnowledge: 1,
+      response: operation.response,
+    });
+
+    const counts = await pool.query<{
+      change_count: string;
+      entity_count: string;
+      receipt_count: string;
+      schema_version: number;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM semantic_catalog_change_sets
+          WHERE principal_id = $1) AS change_count,
+         (SELECT count(*) FROM semantic_catalog_entity_changes
+          WHERE change_set_id = $2) AS entity_count,
+         (SELECT count(*) FROM semantic_catalog_command_receipts
+          WHERE principal_id = $1) AS receipt_count,
+         (SELECT schema_version FROM semantic_catalog_change_sets
+          WHERE change_set_id = $2) AS schema_version`,
+      [operation.principalId, operation.changeSetId],
+    );
+    expect(counts.rows[0]).toEqual({
+      change_count: '1',
+      entity_count: '1',
+      receipt_count: '1',
+      schema_version: 1,
+    });
+
+    await expect(
+      store.commitCatalogCommand({
+        ...operation,
+        payloadDigest: 'f'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(SemanticStoreError);
+  });
 });

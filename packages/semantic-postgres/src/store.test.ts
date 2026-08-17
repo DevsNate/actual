@@ -1,6 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
+import type { CatalogCommand } from '@actual-app/semantic-core';
 import type { Pool } from 'pg';
 
 import type { SemanticStoreError } from './errors';
@@ -65,6 +66,33 @@ function changeSet(
       {
         entityKind: 'plan',
         entityId: 'plan-1',
+        isTombstone: false,
+        payload: { name: 'My plan' },
+      },
+    ],
+    response: { accepted: true },
+    ...overrides,
+  };
+}
+
+function catalogCommand(
+  overrides: Partial<CatalogCommand> = {},
+): CatalogCommand {
+  return {
+    changeSetId: 'catalog-change-1',
+    principalId: 'principal-1',
+    originDeviceId: 'catalog-device-1',
+    startingDeviceKnowledge: 0,
+    endingDeviceKnowledge: 1,
+    expectedServerKnowledge: 0,
+    schemaVersion: 1,
+    commandKind: 'create-plan',
+    idempotencyKey: 'catalog-request-1',
+    payloadDigest: digest,
+    changes: [
+      {
+        entityKind: 'plan-membership',
+        entityId: 'membership-1',
         isTombstone: false,
         payload: { name: 'My plan' },
       },
@@ -142,6 +170,104 @@ describe('PostgresSemanticStore', () => {
     );
     expect(statements.at(-1)).toBe('COMMIT');
     expect(database.released).toBe(true);
+  });
+
+  test('commits an ordered catalog command and receipt atomically', async () => {
+    const database = new ScriptedDatabase();
+    database.enqueue([]); // BEGIN
+    database.enqueue([]); // idempotency lock
+    database.enqueue([]); // no receipt
+    database.enqueue([]); // ensure catalog knowledge
+    database.enqueue([{ server_knowledge: '0' }]);
+    database.enqueue([]); // ensure catalog device
+    database.enqueue([{ server_knowledge_of_device: '0' }]);
+
+    const store = new PostgresSemanticStore(database.pool);
+    await expect(store.commitCatalogCommand(catalogCommand())).resolves.toEqual(
+      {
+        replayed: false,
+        serverKnowledge: 1,
+        endingDeviceKnowledge: 1,
+        response: { accepted: true },
+      },
+    );
+
+    const statements = database.queries.map(query => query.text);
+    expect(statements).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('INSERT INTO semantic_catalog_change_sets'),
+        expect.stringContaining('INSERT INTO semantic_catalog_entity_changes'),
+        expect.stringContaining('UPDATE semantic_catalog_knowledge'),
+        expect.stringContaining(
+          'INSERT INTO semantic_catalog_command_receipts',
+        ),
+      ]),
+    );
+    expect(statements.at(-1)).toBe('COMMIT');
+    expect(database.released).toBe(true);
+  });
+
+  test('replays an identical catalog receipt without a second change set', async () => {
+    const database = new ScriptedDatabase();
+    database.enqueue([]); // BEGIN
+    database.enqueue([]); // idempotency lock
+    database.enqueue([
+      {
+        payload_digest: digest,
+        ending_device_knowledge: '1',
+        server_knowledge: '8',
+        response: { accepted: true },
+      },
+    ]);
+
+    const store = new PostgresSemanticStore(database.pool);
+    await expect(store.commitCatalogCommand(catalogCommand())).resolves.toEqual(
+      {
+        replayed: true,
+        serverKnowledge: 8,
+        endingDeviceKnowledge: 1,
+        response: { accepted: true },
+      },
+    );
+    expect(
+      database.queries.some(query =>
+        query.text.includes('INSERT INTO semantic_catalog_change_sets'),
+      ),
+    ).toBe(false);
+    expect(database.queries.at(-1)?.text).toBe('COMMIT');
+  });
+
+  test('rolls back a conflicting catalog idempotency key', async () => {
+    const database = new ScriptedDatabase();
+    database.enqueue([]); // BEGIN
+    database.enqueue([]); // idempotency lock
+    database.enqueue([
+      {
+        payload_digest: 'b'.repeat(64),
+        ending_device_knowledge: '1',
+        server_knowledge: '8',
+        response: { accepted: true },
+      },
+    ]);
+
+    const store = new PostgresSemanticStore(database.pool);
+    await expect(
+      store.commitCatalogCommand(catalogCommand()),
+    ).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_CONFLICT',
+    } satisfies Partial<SemanticStoreError>);
+    expect(database.queries.at(-1)?.text).toBe('ROLLBACK');
+    expect(database.released).toBe(true);
+  });
+
+  test('rejects a malformed catalog command before database access', async () => {
+    const database = new ScriptedDatabase();
+    const store = new PostgresSemanticStore(database.pool);
+
+    await expect(
+      store.commitCatalogCommand(catalogCommand({ changes: [] })),
+    ).rejects.toMatchObject({ code: 'INVALID_OPERATION' });
+    expect(database.queries).toHaveLength(0);
   });
 
   test('replays an identical receipt without creating a second change set', async () => {
@@ -268,5 +394,21 @@ describe('semantic foundation migration', () => {
     expect(migration).toContain(
       'PRIMARY KEY (plan_id, entity_kind, entity_id)',
     );
+  });
+
+  test('versions catalog commands without changing an applied migration', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0004_catalog_command_schema_version.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('ALTER TABLE semantic_catalog_change_sets');
+    expect(migration).toContain('schema_version INTEGER NOT NULL');
+    expect(migration).toContain('CHECK (schema_version > 0)');
   });
 });

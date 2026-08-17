@@ -1,4 +1,10 @@
-import type { PlanId } from '@actual-app/semantic-core';
+import type {
+  CatalogCommand,
+  CatalogCommandResult,
+  PlanId,
+} from '@actual-app/semantic-core';
+
+export type { CatalogCommand, CatalogCommandResult };
 
 export type EntityChangeInput = {
   entityKind: string;
