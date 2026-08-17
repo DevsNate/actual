@@ -5,31 +5,29 @@ RUN apt-get update && apt-get install -y openssl
 
 WORKDIR /app
 
-# Copy only the files needed for installing dependencies
+# Copy the workspace manifests and sources before installation. The monorepo
+# adds workspaces regularly, so a hand-maintained package allowlist is brittle
+# and can produce an image that differs from the checked-out dependency graph.
 COPY .yarn ./.yarn
-COPY yarn.lock package.json .yarnrc.yml tsconfig.json lage.config.js ./
-COPY packages/api/package.json packages/api/package.json
-COPY packages/component-library/package.json packages/component-library/package.json
-COPY packages/crdt/package.json packages/crdt/package.json
-COPY packages/desktop-client/package.json packages/desktop-client/package.json
-COPY packages/desktop-electron/package.json packages/desktop-electron/package.json
-COPY packages/eslint-plugin-actual/package.json packages/eslint-plugin-actual/package.json
-COPY packages/loot-core/package.json packages/loot-core/package.json
-COPY packages/sync-server/package.json packages/sync-server/package.json
-COPY packages/plugins-service/package.json packages/plugins-service/package.json
-
+COPY yarn.lock package.json .yarnrc.yml .gitignore tsconfig.json lage.config.js ./
+COPY packages/ ./packages/
 COPY ./bin/package-browser ./bin/package-browser
 
 RUN yarn install
 
-FROM deps AS builder
+FROM deps AS test
 
 WORKDIR /app
 
-COPY packages/ ./packages/
+ENV NODE_ENV=test
+
+FROM test AS builder
+
+WORKDIR /app
 
 # Increase memory limit for the build process to 8GB
 ENV NODE_OPTIONS=--max_old_space_size=8192
+ENV NODE_ENV=production
 
 # lage's task hasher invokes `git ls-tree HEAD` during initialization, so it
 # needs a git repo even when individual targets disable caching. .dockerignore
@@ -70,6 +68,8 @@ ENV NODE_ENV=production
 COPY --from=builder /app/node_modules /app/node_modules
 COPY --from=builder /app/packages/sync-server/package.json ./
 COPY --from=builder /app/packages/sync-server/build ./build
+
+USER actual
 
 ENTRYPOINT ["/usr/bin/tini", "-g", "--"]
 EXPOSE 5006

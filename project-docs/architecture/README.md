@@ -11,6 +11,7 @@ authentication, plan lifecycle, or the React data boundary:
 1. [`selective-fork-decision.md`](selective-fork-decision.md)
 2. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
 3. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
+4. [`semantic-docker-development.md`](semantic-docker-development.md)
 
 ## Required workflow
 

@@ -34,6 +34,7 @@ v26.8.1. The baseline commit is
 | ADD-004    | Web semantic API                         | Add                | implemented    | Read-only authenticated catalog slice             |
 | ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests  |
 | ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
+| ADD-007    | Local semantic development stack         | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
 
 ## Detailed entries
 
@@ -149,6 +150,10 @@ API` contains the expiry correction and first route integration.
   accessibility, localization, responsive behavior, and basic components.
 - **Replacement boundary:** The data layer calls the semantic web API. UI
   workflows and appearance are recreated from captured stock behavior.
+- **Portability correction:** The component-library theme documentation now
+  shares the lowercase `src/themes` directory used by its CSS package exports.
+  Stock tracked the documentation under `src/Themes`, which succeeds on a
+  case-insensitive macOS checkout but breaks the Linux production build.
 - **Status:** admitted.
 
 ### ACTUAL-008 — Import, export, and backups
@@ -276,6 +281,24 @@ Mount semantic catalog API`.
   vocabulary without depending on one another's transports.
 - **Verification:** Strict TypeScript build and package tests.
 - **Commit/PR:** `7c60694`.
+- **Status:** implemented.
+
+### ADD-007 — Local semantic development stack
+
+- **Disposition:** Add.
+- **Purpose:** Run the forked React/server build and canonical PostgreSQL
+  authority together without modifying stock Actual's Compose workflows.
+- **Implementation:** `docker-compose.semantic.yml` builds the fork server,
+  enables the semantic API, waits for PostgreSQL health, persists server and
+  database state separately, and provides an on-demand integration-test
+  target. `bin/semantic-stack` exposes explicit lifecycle commands.
+- **Safety boundary:** The default password is local-development-only. Reset is
+  an explicit destructive command. Docker does not replace physical iPhone
+  compatibility acceptance.
+- **Verification:** Image build, service health, bundled migration count,
+  retained Actual authentication, authenticated catalog read, and disposable
+  integration tests.
+- **Commit/PR:** `[AI] Add semantic Docker development stack`.
 - **Status:** implemented.
 
 ## Ledger update template

@@ -1,0 +1,46 @@
+#!/bin/sh
+
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+COMPOSE_FILE="$ROOT/docker-compose.semantic.yml"
+
+compose() {
+  docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+test_compose() {
+  docker compose --project-name actual-semantic-test -f "$COMPOSE_FILE" "$@"
+}
+
+cleanup_test_stack() {
+  test_compose --profile test down --volumes --remove-orphans
+}
+
+case "${1:-up}" in
+  up)
+    compose up --detach --build semantic-server
+    ;;
+  down)
+    compose down --remove-orphans
+    ;;
+  reset)
+    compose down --volumes --remove-orphans
+    compose up --detach --build semantic-server
+    ;;
+  test)
+    trap cleanup_test_stack EXIT
+    test_compose --profile test up --build --abort-on-container-exit \
+      --exit-code-from semantic-test semantic-test
+    ;;
+  logs)
+    compose logs --follow semantic-server semantic-db
+    ;;
+  status)
+    compose ps
+    ;;
+  *)
+    echo "Usage: bin/semantic-stack {up|down|reset|test|logs|status}" >&2
+    exit 2
+    ;;
+esac
