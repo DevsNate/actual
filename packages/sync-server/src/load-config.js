@@ -296,6 +296,24 @@ const configSchema = convict({
       env: 'ACTUAL_CORS_PROXY_ENABLED',
     },
   },
+  semantic: {
+    doc: 'Canonical semantic storage and API configuration.',
+
+    enabled: {
+      doc: 'Enable the experimental semantic API.',
+      format: Boolean,
+      default: false,
+      env: 'ACTUAL_SEMANTIC_ENABLED',
+    },
+
+    databaseUrl: {
+      doc: 'PostgreSQL connection URL for canonical semantic storage.',
+      format: String,
+      default: '',
+      env: 'ACTUAL_SEMANTIC_DATABASE_URL',
+      sensitive: true,
+    },
+  },
 });
 
 let configPath = null;

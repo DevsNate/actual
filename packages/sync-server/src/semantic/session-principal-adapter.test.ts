@@ -7,14 +7,14 @@ function dependencies(
   overrides: Partial<ActualAuthDependencies> = {},
 ): ActualAuthDependencies {
   return {
-    findSession: () => ({ user_id: 'user-1', expires_at: 2_000 }),
+    findSession: () => ({ user_id: 'user-1', expires_at: 2_000_000_000 }),
     findUser: () => ({
       id: 'user-1',
       user_name: 'person@example.com',
       display_name: 'Person',
       role: 'BASIC',
     }),
-    now: () => 1_000,
+    now: () => 1_999_999_999_000,
     ...overrides,
   };
 }
@@ -53,7 +53,10 @@ describe('resolveActualPrincipal', () => {
     );
 
     expect(() =>
-      resolveActualPrincipal('token', dependencies({ now: () => 2_000 })),
+      resolveActualPrincipal(
+        'token',
+        dependencies({ now: () => 2_000_000_000_000 }),
+      ),
     ).toThrowError(
       expect.objectContaining<Partial<AuthenticationError>>({
         code: 'expired-session',

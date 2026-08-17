@@ -19,6 +19,7 @@ import * as secretApp from './app-secrets';
 import * as simpleFinApp from './app-simplefin/app-simplefin';
 import * as syncApp from './app-sync';
 import { config } from './load-config';
+import { createPostgresSemanticCatalogHandlers } from './semantic/postgres-runtime';
 
 const app = express();
 
@@ -64,6 +65,18 @@ app.use('/pluggyai', pluggai.handlers);
 app.use('/akahu', akahuApp.handlers);
 app.use('/enablebanking', enableBankingApp.handlers);
 app.use('/secret', secretApp.handlers);
+
+if (config.get('semantic.enabled')) {
+  const databaseUrl = config.get('semantic.databaseUrl').trim();
+  if (!databaseUrl) {
+    throw new Error(
+      'ACTUAL_SEMANTIC_DATABASE_URL is required when ACTUAL_SEMANTIC_ENABLED is true',
+    );
+  }
+  const semanticCatalog =
+    await createPostgresSemanticCatalogHandlers(databaseUrl);
+  app.use('/semantic/v1', semanticCatalog.handlers);
+}
 
 if (config.get('corsProxy.enabled')) {
   app.use('/cors-proxy', corsApp.handlers);

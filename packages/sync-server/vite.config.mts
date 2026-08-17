@@ -24,7 +24,11 @@ export default defineConfig({
     // Inline workspace deps that ship as TS source. Anything else
     // (express, better-sqlite3, bcrypt, @actual-app/web, etc.) stays
     // external so Node resolves it at runtime.
-    noExternal: ['@actual-app/crdt'],
+    noExternal: [
+      '@actual-app/crdt',
+      '@actual-app/semantic-core',
+      '@actual-app/semantic-postgres',
+    ],
   },
   build: {
     ssr: true,

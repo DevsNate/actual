@@ -6,7 +6,15 @@ import type { Pool, PoolClient } from 'pg';
 
 const MIGRATION_LOCK = 'actual_semantic_postgres_migrations';
 
-export async function migrateSemanticDatabase(pool: Pool): Promise<void> {
+export type SemanticMigration = {
+  filename: string;
+  sql: string;
+};
+
+export async function migrateSemanticDatabase(
+  pool: Pool,
+  suppliedMigrations?: readonly SemanticMigration[],
+): Promise<void> {
   await pool.query(
     `CREATE TABLE IF NOT EXISTS semantic_schema_migrations (
        filename TEXT PRIMARY KEY,
@@ -14,20 +22,16 @@ export async function migrateSemanticDatabase(pool: Pool): Promise<void> {
      )`,
   );
 
-  const directory = fileURLToPath(new URL('../migrations/', import.meta.url));
-  const filenames = (await readdir(directory))
-    .filter(filename => filename.endsWith('.sql'))
-    .sort();
+  const migrations = suppliedMigrations ?? (await readMigrationFiles());
 
-  for (const filename of filenames) {
-    await applyMigration(pool, directory, filename);
+  for (const migration of migrations) {
+    await applyMigration(pool, migration);
   }
 }
 
 async function applyMigration(
   pool: Pool,
-  directory: string,
-  filename: string,
+  migration: SemanticMigration,
 ): Promise<void> {
   const client = await pool.connect();
   try {
@@ -37,10 +41,10 @@ async function applyMigration(
     ]);
     const applied = await client.query(
       'SELECT 1 FROM semantic_schema_migrations WHERE filename = $1',
-      [filename],
+      [migration.filename],
     );
     if (applied.rowCount === 0) {
-      await runMigrationFile(client, directory, filename);
+      await runMigration(client, migration);
     }
     await client.query('COMMIT');
   } catch (error) {
@@ -51,15 +55,26 @@ async function applyMigration(
   }
 }
 
-async function runMigrationFile(
+async function runMigration(
   client: PoolClient,
-  directory: string,
-  filename: string,
+  migration: SemanticMigration,
 ): Promise<void> {
-  const sql = await readFile(join(directory, filename), 'utf8');
-  await client.query(sql);
+  await client.query(migration.sql);
   await client.query(
     'INSERT INTO semantic_schema_migrations (filename) VALUES ($1)',
-    [filename],
+    [migration.filename],
+  );
+}
+
+async function readMigrationFiles(): Promise<readonly SemanticMigration[]> {
+  const directory = fileURLToPath(new URL('../migrations/', import.meta.url));
+  const filenames = (await readdir(directory))
+    .filter(filename => filename.endsWith('.sql'))
+    .sort();
+  return Promise.all(
+    filenames.map(async filename => ({
+      filename,
+      sql: await readFile(join(directory, filename), 'utf8'),
+    })),
   );
 }

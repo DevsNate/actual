@@ -13,7 +13,7 @@
     "strict": true,
     "outDir": "dist",
     "tsBuildInfoFile": "dist/.tsbuildinfo",
-    "types": ["node", "vitest/globals"]
+    "types": ["node", "vite/client", "vitest/globals"]
   },
   "references": [{ "path": "../semantic-core" }],
   "include": ["./src/"]

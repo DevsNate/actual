@@ -27,6 +27,8 @@ const defaultDependencies: ActualAuthDependencies = {
   now: Date.now,
 };
 
+const MILLISECONDS_PER_SECOND = 1000;
+
 /** Project a validated Actual session into the shared semantic identity. */
 export function resolveActualPrincipal(
   sessionToken: string,
@@ -48,7 +50,10 @@ export function resolveActualPrincipal(
   }
 
   const expiresAt = requireFiniteNumber(session.expires_at, 'expires_at');
-  if (expiresAt !== -1 && expiresAt <= dependencies.now()) {
+  if (
+    expiresAt !== -1 &&
+    expiresAt * MILLISECONDS_PER_SECOND <= dependencies.now()
+  ) {
     throw new AuthenticationError(
       'expired-session',
       'The Actual session has expired',

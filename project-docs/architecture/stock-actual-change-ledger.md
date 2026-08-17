@@ -16,24 +16,24 @@ v26.8.1. The baseline commit is
 
 ## Summary
 
-| ID         | Stock area                               | Disposition        | Current status | Replacement or retained boundary                     |
-| ---------- | ---------------------------------------- | ------------------ | -------------- | ---------------------------------------------------- |
-| ACTUAL-001 | Authentication and sessions              | Keep               | implemented    | Actual account DB plus semantic principal adapter    |
-| ACTUAL-002 | Express server shell                     | Keep and extend    | admitted       | Existing host mounts semantic web and stock gateways |
-| ACTUAL-003 | File and user-access catalog             | Modify             | migrating      | Canonical plans and memberships in PostgreSQL        |
-| ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger       |
-| ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                    |
-| ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services                  |
-| ACTUAL-007 | React application shell                  | Keep and reshape   | admitted       | YNAB-compatible UI over semantic web API             |
-| ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                             |
-| ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands       |
-| ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                        |
-| ADD-001    | Canonical semantic database              | Add                | implemented    | PostgreSQL foundation; entity authority follows      |
-| ADD-002    | Knowledge and receipt ledger             | Add                | implemented    | Ordered per-plan/device synchronization state        |
-| ADD-003    | YNAB protocol gateway                    | Add                | proposed       | Evidence-derived stock projections                   |
-| ADD-004    | Web semantic API                         | Add                | proposed       | React query/command boundary                         |
-| ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests     |
-| ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace                |
+| ID         | Stock area                               | Disposition        | Current status | Replacement or retained boundary                  |
+| ---------- | ---------------------------------------- | ------------------ | -------------- | ------------------------------------------------- |
+| ACTUAL-001 | Authentication and sessions              | Keep               | implemented    | Actual account DB plus semantic principal adapter |
+| ACTUAL-002 | Express server shell                     | Keep and extend    | implemented    | Feature-gated semantic catalog route mounted      |
+| ACTUAL-003 | File and user-access catalog             | Modify             | migrating      | Canonical plans and memberships in PostgreSQL     |
+| ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger    |
+| ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                 |
+| ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services               |
+| ACTUAL-007 | React application shell                  | Keep and reshape   | admitted       | YNAB-compatible UI over semantic web API          |
+| ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                          |
+| ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands    |
+| ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                     |
+| ADD-001    | Canonical semantic database              | Add                | implemented    | PostgreSQL foundation; entity authority follows   |
+| ADD-002    | Knowledge and receipt ledger             | Add                | implemented    | Ordered per-plan/device synchronization state     |
+| ADD-003    | YNAB protocol gateway                    | Add                | proposed       | Evidence-derived stock projections                |
+| ADD-004    | Web semantic API                         | Add                | implemented    | Read-only authenticated catalog slice             |
+| ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests  |
+| ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
 
 ## Detailed entries
 
@@ -57,6 +57,11 @@ v26.8.1. The baseline commit is
 - **Verification:** Focused tests cover valid, non-expiring, missing, expired,
   and identity-mismatch cases. The existing sync-server authentication suite is
   retained.
+- **Correction:** The adapter converts Actual's Unix-seconds `expires_at`
+  before comparing it with `Date.now()` milliseconds. The route-level
+  integration test uses an epoch-shaped expiring session to prevent recurrence.
+- **Commit/PR:** `7c60694` introduced the adapter; `[AI] Mount semantic catalog
+API` contains the expiry correction and first route integration.
 - **Status:** implemented; gateway middleware integration remains pending.
 
 ### ACTUAL-002 — Express server shell
@@ -68,7 +73,15 @@ v26.8.1. The baseline commit is
 - **Fork boundary:** Mount semantic routes and the stock compatibility gateway
   without weakening existing middleware.
 - **Verification required:** Stock sync-server tests and route-isolation tests.
-- **Status:** admitted.
+- **Implementation:** When explicitly enabled, the retained server mounts
+  `GET /semantic/v1/catalog` before the React catch-all. PostgreSQL migration
+  failure or missing database configuration prevents startup. The default
+  remains disabled, leaving all stock routes unchanged.
+- **Verification:** Production Vite build, focused route/auth tests, and a
+  disposable PostgreSQL end-to-end test through an Actual session.
+- **Commit/PR:** `[AI] Mount semantic catalog API`.
+- **Status:** implemented for the catalog slice; gateway and command routes
+  remain pending.
 
 ### ACTUAL-003 — File and user-access catalog
 
@@ -88,6 +101,7 @@ v26.8.1. The baseline commit is
   semantic route adapters and migration path are complete.
 - **Verification:** Strict package typecheck, catalog-isolation test, and
   repository-wide lint.
+- **Commit/PR:** `6e50cfc`.
 - **Status:** migrating.
 
 ### ACTUAL-004 — CRDT synchronization
@@ -180,6 +194,8 @@ v26.8.1. The baseline commit is
   repository tests, root lint/typecheck, and a disposable PostgreSQL 17
   integration run that applies the migration twice and exercises plan/catalog
   persistence, tombstone commit, exact replay, and conflicting replay.
+- **Commit/PR:** `6e50cfc`; bundled migration support is included in `[AI]
+Mount semantic catalog API`.
 - **Status:** implemented; live routing and budgeting tables remain pending.
 
 ### ADD-002 — Knowledge and receipt ledger
@@ -200,6 +216,7 @@ v26.8.1. The baseline commit is
   knowledge/receipt foreign-key constraints. The same lifecycle passes against
   disposable PostgreSQL 17, with exactly one change set and receipt after
   replay.
+- **Commit/PR:** `6e50cfc`.
 - **Status:** implemented; acknowledgment delivery and pruning policy remain
   pending.
 
@@ -218,7 +235,19 @@ v26.8.1. The baseline commit is
 - **Disposition:** Add.
 - **Initial scope:** plan picker queries and plan lifecycle commands over the
   same semantic service used by ADD-003.
-- **Status:** proposed.
+- **Implementation:** Feature-gated `GET /semantic/v1/catalog` authenticates
+  with the retained `X-Actual-Token`, derives the principal server-side, and
+  returns only that principal's canonical PostgreSQL memberships and catalog
+  knowledge. Storage errors expose neither partial data nor database details.
+- **Deliberate exclusion:** Plan lifecycle mutation remains disabled until its
+  idempotency receipt and admitted endpoint contract are implemented.
+- **Configuration:** `ACTUAL_SEMANTIC_ENABLED=true` plus
+  `ACTUAL_SEMANTIC_DATABASE_URL`. Disabled is the default.
+- **Verification:** Unauthorized/scoped/error route tests, production bundle,
+  and disposable PostgreSQL integration through a real Actual account/session
+  row. See `semantic-catalog-api.md`.
+- **Commit/PR:** `[AI] Mount semantic catalog API`.
+- **Status:** implemented for read-only catalog; commands pending.
 
 ### ADD-005 — Compatibility fixture suite
 
@@ -237,6 +266,7 @@ v26.8.1. The baseline commit is
 - **Reason:** Both the stock gateway and React API need one stable domain
   vocabulary without depending on one another's transports.
 - **Verification:** Strict TypeScript build and package tests.
+- **Commit/PR:** `7c60694`.
 - **Status:** implemented.
 
 ## Ledger update template
