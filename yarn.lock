@@ -176,11 +176,21 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@actual-app/semantic-core@workspace:*, @actual-app/semantic-core@workspace:packages/semantic-core":
+  version: 0.0.0-use.local
+  resolution: "@actual-app/semantic-core@workspace:packages/semantic-core"
+  dependencies:
+    "@typescript/native-preview": "npm:beta"
+    vitest: "npm:^4.1.10"
+  languageName: unknown
+  linkType: soft
+
 "@actual-app/sync-server@workspace:*, @actual-app/sync-server@workspace:packages/sync-server":
   version: 0.0.0-use.local
   resolution: "@actual-app/sync-server@workspace:packages/sync-server"
   dependencies:
     "@actual-app/crdt": "workspace:*"
+    "@actual-app/semantic-core": "workspace:*"
     "@actual-app/web": "workspace:*"
     "@types/bcrypt": "npm:^6.0.0"
     "@types/better-sqlite3": "npm:^7.6.13"

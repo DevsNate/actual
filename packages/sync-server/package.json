@@ -89,6 +89,7 @@
   },
   "dependencies": {
     "@actual-app/crdt": "workspace:*",
+    "@actual-app/semantic-core": "workspace:*",
     "@actual-app/web": "workspace:*",
     "akahu": "^2.5.1",
     "argon2": "^0.44.0",

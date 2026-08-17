@@ -22,6 +22,9 @@
       "path": "../crdt"
     },
     {
+      "path": "../semantic-core"
+    },
+    {
       "path": "../desktop-client"
     }
   ],
