@@ -187,6 +187,11 @@ API` contains the expiry correction and first route integration.
   knowledge, devices, change sets, entity changes, and durable receipts. Text
   identifiers deliberately preserve opaque stock identities rather than
   assuming every admitted identifier is a UUID.
+- **Catalog extension:** `0002_catalog_command_ledger.sql` separates catalog
+  device knowledge, ordered catalog change sets, complete entity changes, and
+  exact command receipts from the per-plan budget ledger. No API currently
+  advances these tables; the atomic lifecycle command writer remains gated on
+  canonical plan bootstrap storage.
 - **Boundary:** This is the canonical storage foundation, not yet the live
   authority for budgeting entities. No inferred account, transfer, schedule,
   or target policy is encoded in this migration.
@@ -217,8 +222,8 @@ Mount semantic catalog API`.
   disposable PostgreSQL 17, with exactly one change set and receipt after
   replay.
 - **Commit/PR:** `6e50cfc`.
-- **Status:** implemented; acknowledgment delivery and pruning policy remain
-  pending.
+- **Status:** implemented for budget commands and catalog schema; the catalog
+  command writer, acknowledgment delivery, and pruning policy remain pending.
 
 ### ADD-003 — YNAB protocol gateway
 

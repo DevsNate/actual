@@ -84,7 +84,8 @@ the service, and project its result.
 
 The implementation sequence is:
 
-1. add principal/device-scoped catalog knowledge and command receipts;
+1. add principal/device-scoped catalog knowledge and command receipts
+   (**schema implemented; atomic command writer pending**);
 2. add canonical plan metadata and evidence-backed bootstrap entities;
 3. implement atomic create, rename, and delete domain commands;
 4. expose the native React command API;

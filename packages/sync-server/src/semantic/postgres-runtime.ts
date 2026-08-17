@@ -2,6 +2,7 @@ import {
   migrateSemanticDatabase,
   PostgresSemanticStore,
 } from '@actual-app/semantic-postgres';
+import { semanticCatalogCommandMigration } from '@actual-app/semantic-postgres/catalog-command-migration';
 import { semanticFoundationMigration } from '@actual-app/semantic-postgres/foundation-migration';
 import { Pool } from 'pg';
 
@@ -13,7 +14,10 @@ export async function createPostgresSemanticCatalogHandlers(
 ) {
   const pool = new Pool({ connectionString: databaseUrl });
   try {
-    await migrateSemanticDatabase(pool, [semanticFoundationMigration]);
+    await migrateSemanticDatabase(pool, [
+      semanticFoundationMigration,
+      semanticCatalogCommandMigration,
+    ]);
   } catch (error) {
     await pool.end();
     throw error;

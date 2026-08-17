@@ -8,6 +8,8 @@ Actual's CRDT messages, and budgeting-policy implementations.
 
 - plan and budget-version identities;
 - principal memberships and catalog knowledge;
+- principal/device catalog knowledge plus ordered catalog change and receipt
+  schema;
 - per-plan and per-device knowledge;
 - ordered change sets with schema versions and affected entity identities;
 - explicit tombstones;
@@ -18,6 +20,10 @@ Actual's CRDT messages, and budgeting-policy implementations.
 device knowledge, and commits the change set, knowledge advancement, and exact
 response receipt in one database transaction. An identical retry replays the
 receipt. A different payload using the same key fails closed.
+
+The catalog ledger migration is intentionally schema-only for now. No route
+may advance it until the atomic plan lifecycle writer can commit catalog facts
+and the complete canonical budget bootstrap together.
 
 ## Deliberate exclusions
 

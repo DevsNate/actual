@@ -224,4 +224,28 @@ describe('semantic foundation migration', () => {
     );
     expect(migration).toContain('REFERENCES semantic_change_sets');
   });
+
+  test('defines a separate ordered catalog command ledger', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0002_catalog_command_ledger.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('semantic_catalog_devices');
+    expect(migration).toContain('semantic_catalog_change_sets');
+    expect(migration).toContain('semantic_catalog_entity_changes');
+    expect(migration).toContain('semantic_catalog_command_receipts');
+    expect(migration).toContain('UNIQUE (principal_id, server_knowledge)');
+    expect(migration).toContain(
+      'PRIMARY KEY (principal_id, device_id, idempotency_key)',
+    );
+    expect(migration).toContain(
+      'REFERENCES semantic_catalog_change_sets(principal_id, server_knowledge)',
+    );
+  });
 });
