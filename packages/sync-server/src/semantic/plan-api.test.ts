@@ -9,6 +9,7 @@ import express from 'express';
 import request from 'supertest';
 
 import { createSemanticPlanHandlers } from './plan-api';
+import { createPlanCreationService } from './plan-creation-service';
 
 const principal: AuthenticatedPrincipal = {
   id: 'principal-1',
@@ -137,15 +138,18 @@ function createApp(
     }),
   };
   const app = express();
+  const planCreationService = createPlanCreationService({
+    catalogReader,
+    planCreator,
+    allocateId: () => `id-${++nextId}`,
+    now: () => new Date('2026-08-16T12:00:00.000Z'),
+  });
   app.use(
     '/semantic/v1',
     createSemanticPlanHandlers({
-      catalogReader,
-      planCreator,
+      planCreationService,
       planReader,
       resolvePrincipal: resolvePrincipal ?? (() => principal),
-      allocateId: () => `id-${++nextId}`,
-      now: () => new Date('2026-08-16T12:00:00.000Z'),
     }),
   );
   return app;

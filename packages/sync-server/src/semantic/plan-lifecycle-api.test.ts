@@ -8,6 +8,7 @@ import express from 'express';
 import request from 'supertest';
 
 import { createSemanticPlanLifecycleHandlers } from './plan-lifecycle-api';
+import { createPlanLifecycleService } from './plan-lifecycle-service';
 
 const principal: AuthenticatedPrincipal = {
   id: 'principal-1',
@@ -41,12 +42,15 @@ test('translates rename and delete into scoped lifecycle commands', async () => 
   };
   const app = express();
   let id = 0;
+  const planLifecycleService = createPlanLifecycleService({
+    planLifecycleWriter: writer,
+    allocateId: () => `change-${++id}`,
+  });
   app.use(
     '/semantic/v1',
     createSemanticPlanLifecycleHandlers({
-      planLifecycleWriter: writer,
+      planLifecycleService,
       resolvePrincipal: () => principal,
-      allocateId: () => `change-${++id}`,
     }),
   );
 
@@ -87,7 +91,9 @@ test('rejects incomplete requests before calling storage', async () => {
   app.use(
     '/semantic/v1',
     createSemanticPlanLifecycleHandlers({
-      planLifecycleWriter: writer,
+      planLifecycleService: createPlanLifecycleService({
+        planLifecycleWriter: writer,
+      }),
       resolvePrincipal: () => principal,
     }),
   );

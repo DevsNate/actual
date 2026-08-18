@@ -36,6 +36,7 @@ v26.8.1. The baseline commit is
 | ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
 | ADD-007    | Local semantic development stack         | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
 | ADD-008    | Semantic plan client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
+| ADD-009    | Shared plan command application services | Add                | implemented    | One orchestration path for React and stock routes |
 
 ## Detailed entries
 
@@ -370,3 +371,19 @@ Copy this block for a new architectural delta:
   API tests.
 - **Status:** implemented through the isolated Redux catalog/snapshot state;
   manager presentation and budget-screen projection remain pending.
+
+### ADD-009 — Shared plan command application services
+
+- **Disposition:** Add.
+- **Location:** `packages/sync-server/src/semantic/plan-creation-service.ts`
+  and `plan-lifecycle-service.ts`.
+- **Fork behavior:** Semantic HTTP and future stock-compatible adapters call
+  the same plan creation, rename, and delete orchestration. Identity allocation,
+  PLAN-001 bootstrap construction, knowledge expectations, payload digests,
+  and stored responses are not transport concerns.
+- **Reason:** Duplicating command assembly in two routers would create behavior
+  drift even if both write to the same PostgreSQL tables.
+- **Verification:** Existing route command-shape tests, runtime PostgreSQL
+  integration tests, lint, and strict typechecks.
+- **Status:** implemented; stock transport adapter awaits an admitted
+  non-secret request-context header fixture after Chrome reconnects.

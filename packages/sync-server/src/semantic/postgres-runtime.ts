@@ -12,7 +12,9 @@ import { Pool } from 'pg';
 
 import { createSemanticCatalogHandlers } from './catalog-api';
 import { createSemanticPlanHandlers } from './plan-api';
+import { createPlanCreationService } from './plan-creation-service';
 import { createSemanticPlanLifecycleHandlers } from './plan-lifecycle-api';
+import { createPlanLifecycleService } from './plan-lifecycle-service';
 import { resolveActualPrincipal } from './session-principal-adapter';
 
 export async function createPostgresSemanticCatalogHandlers(
@@ -34,21 +36,27 @@ export async function createPostgresSemanticCatalogHandlers(
   const store = new PostgresSemanticStore(pool);
   const lifecycleStore = new PostgresPlanLifecycleStore(pool);
   const planReader = new PostgresPlanReader(pool);
+  const planCreationService = createPlanCreationService({
+    catalogReader: store,
+    planCreator: store,
+  });
+  const planLifecycleService = createPlanLifecycleService({
+    planLifecycleWriter: lifecycleStore,
+  });
   const handlers = createSemanticCatalogHandlers({
     catalogReader: store,
     resolvePrincipal: resolveActualPrincipal,
   });
   handlers.use(
     createSemanticPlanHandlers({
-      catalogReader: store,
-      planCreator: store,
+      planCreationService,
       planReader,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );
   handlers.use(
     createSemanticPlanLifecycleHandlers({
-      planLifecycleWriter: lifecycleStore,
+      planLifecycleService,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );

@@ -1,37 +1,22 @@
-import { createHash, randomUUID } from 'node:crypto';
-
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 import type {
   AuthenticatedPrincipal,
-  CatalogReader,
-  CreatePlanCommand,
-  PlanCreator,
   PlanReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
 
 import { authenticateSemanticRequest } from './catalog-api';
+import type { PlanCreationService } from './plan-creation-service';
 
 export type SemanticPlanApiDependencies = {
-  catalogReader: CatalogReader;
-  planCreator: PlanCreator;
+  planCreationService: PlanCreationService;
   planReader: PlanReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
-  allocateId(): string;
-  now(): Date;
-};
-
-const defaults = {
-  allocateId: randomUUID,
-  now: () => new Date(),
 };
 
 export function createSemanticPlanHandlers(
-  dependencies: Omit<SemanticPlanApiDependencies, 'allocateId' | 'now'> &
-    Partial<Pick<SemanticPlanApiDependencies, 'allocateId' | 'now'>>,
+  dependencies: SemanticPlanApiDependencies,
 ): express.Router {
-  const resolved = { ...defaults, ...dependencies };
   const handlers = express.Router();
   handlers.use(express.json({ limit: '64kb' }));
 
@@ -39,7 +24,7 @@ export function createSemanticPlanHandlers(
     const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
-      resolved,
+      dependencies,
     );
     if (!principal) {
       return;
@@ -53,7 +38,7 @@ export function createSemanticPlanHandlers(
       return;
     }
     try {
-      const plan = await resolved.planReader.readPlan(principal.id, planId);
+      const plan = await dependencies.planReader.readPlan(principal.id, planId);
       if (!plan) {
         response.status(404).send({
           status: 'error',
@@ -75,7 +60,7 @@ export function createSemanticPlanHandlers(
     const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
-      resolved,
+      dependencies,
     );
     if (!principal) {
       return;
@@ -93,50 +78,14 @@ export function createSemanticPlanHandlers(
     }
 
     try {
-      const catalog = await resolved.catalogReader.readCatalog(principal.id);
-      const planId = resolved.allocateId();
-      const budgetVersionId = resolved.allocateId();
-      const membershipId = resolved.allocateId();
-      const now = resolved.now();
-      const responseBody = {
-        budget_id: planId,
-        budget_version_id: budgetVersionId,
-      };
-      const payloadDigest = digestPlanRequest(principal.id, body);
-      const entities = buildStockPlanBootstrap({
-        planId,
-        budgetVersionId,
-        principalId: principal.id,
-        name: body.name,
-        currencyFormat: body.currencyFormat,
-        dateFormat: body.dateFormat,
-        createdOn: now.toISOString().slice(0, 10),
-        createdAtMilliseconds: now.getTime(),
-        allocateId: () => resolved.allocateId(),
-      });
-      const command: CreatePlanCommand = {
-        catalogChangeSetId: resolved.allocateId(),
-        budgetChangeSetId: resolved.allocateId(),
-        planId,
-        budgetVersionId,
-        membershipId,
+      const result = await dependencies.planCreationService.createPlan({
         principalId: principal.id,
         originDeviceId,
-        expectedCatalogServerKnowledge:
-          catalog.knowledge.currentServerKnowledge,
-        startingCatalogDeviceKnowledge: 0,
-        endingCatalogDeviceKnowledge: 0,
-        schemaVersion: 1,
         idempotencyKey,
-        payloadDigest,
         name: body.name,
-        permissions: 1,
         currencyFormat: body.currencyFormat,
         dateFormat: body.dateFormat,
-        entities,
-        response: responseBody,
-      };
-      const result = await resolved.planCreator.createPlan(command);
+      });
       response.status(result.replayed ? 200 : 201).send({
         status: 'ok',
         data: {
@@ -196,19 +145,6 @@ function parseCreatePlanBody(value: unknown): CreatePlanBody | null {
     currencyFormat,
     dateFormat,
   };
-}
-
-function digestPlanRequest(principalId: string, body: CreatePlanBody): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        principalId,
-        name: body.name,
-        currencyFormat: body.currencyFormat,
-        dateFormat: body.dateFormat,
-      }),
-    )
-    .digest('hex');
 }
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {

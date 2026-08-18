@@ -84,6 +84,12 @@ atomic persistence, knowledge advancement, and exact receipt replay. HTTP and
 compatibility adapters only authenticate, translate admitted envelopes, call
 the service, and project its result.
 
+Plan creation and lifecycle orchestration live in reusable sync-server
+application services. The semantic React API is now one adapter over those
+services; the YNAB gateway will be another. Neither adapter may independently
+construct bootstrap entities, allocate canonical identities, or calculate
+receipt digests.
+
 The implementation sequence is:
 
 1. add principal/device-scoped catalog knowledge and command receipts
