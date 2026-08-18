@@ -40,7 +40,7 @@ function fixture() {
         command = value;
         return {
           replayed: false,
-          serverKnowledge: 3,
+          serverKnowledge: 4,
           endingDeviceKnowledge: 0,
           response: value.response,
         };
@@ -75,6 +75,7 @@ describe('account creation service', () => {
     expect(command).toMatchObject({
       planId: input.planId,
       expectedServerKnowledge: 2,
+      serverKnowledgeAdvance: 2,
       startingDeviceKnowledge: 0,
       endingDeviceKnowledge: 0,
       idempotencyKey: 'account-create-1',

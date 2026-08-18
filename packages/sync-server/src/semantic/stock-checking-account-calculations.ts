@@ -47,6 +47,7 @@ export function projectStockCheckingAccountCalculations(
     ...snapshot,
     entities: snapshot.entities.filter(
       entity =>
+        !entity.isTombstone &&
         entity.entityKind !== 'be_accounts' &&
         entity.entityKind !== 'be_transactions' &&
         !(
@@ -93,6 +94,45 @@ export function projectStockCheckingAccountCalculations(
         available_to_budget: totalAmount,
       }),
     ),
+    be_monthly_subcategory_budget_calculations:
+      base.be_monthly_subcategory_budget_calculations.map(row => {
+        const sourceId = String(row.entities_monthly_subcategory_budget_id);
+        const source = exactlyOne(
+          snapshot.entities.filter(
+            entity =>
+              entity.entityKind === 'be_monthly_subcategory_budgets' &&
+              entity.entityId === sourceId,
+          ),
+          'be_monthly_subcategory_budgets',
+        );
+        if (source.payload.subCategoryId !== immediateIncomeCategory.entityId) {
+          return row;
+        }
+        if (source.payload.monthlyBudgetId === monthlyBudgets[0].entityId) {
+          return {
+            ...row,
+            cash_outflows: totalAmount,
+            positive_cash_outflows: totalAmount,
+            balance: totalAmount,
+            budgeted_cash_outflows: totalAmount,
+            goal_overall_outflows: totalAmount,
+          };
+        }
+        if (source.payload.monthlyBudgetId === monthlyBudgets[1].entityId) {
+          return {
+            ...row,
+            balance: totalAmount,
+            spent_previous_month: totalAmount,
+            balance_previous_month: totalAmount,
+            budgeted_average: 0,
+            spent_average: totalAmount,
+            payment_average: 0,
+          };
+        }
+        throw new Error(
+          'Immediate Income calculation references another month',
+        );
+      }),
     be_account_calculations: groups.map(group => ({
       id: `ac/${group.account.entityId}`,
       entities_account_id: group.account.entityId,

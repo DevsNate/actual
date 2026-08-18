@@ -446,3 +446,52 @@ Copy this block for a new architectural delta:
   integration.
 - **Status:** implemented for the canonical command, semantic adapter, and
   YNAB-shaped direct-import adapter over retained Actual session authority.
+
+### ADD-011 — Explicit source and derived knowledge advancement
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/plan.ts` and
+  `packages/semantic-postgres/src/store.ts`.
+- **Observed stock behavior:** Source-only edits such as account/payee rename
+  advance budget server knowledge once. Mutations that also change calculated
+  rows advance twice. The same distinction is demonstrated by ACCOUNT-004,
+  split create/category/delete, category create/delete, target status/delete,
+  transfer changes, and temporary-transaction deletion.
+- **Fork behavior:** Every canonical plan change command explicitly declares a
+  supported knowledge advance of `1` or `2`. PostgreSQL validates the value and
+  stores the final knowledge and exact receipt atomically. Account creation uses
+  `2`; opened-budget and account-rename deltas use `1`.
+- **Reason:** A hard-coded `+1` made projected values correct but made the stock
+  cursor contract wrong whenever server-derived calculations changed.
+- **Evidence:** ACCOUNT-003 (`36 -> 37`), ACCOUNT-004 (`37 -> 39`), and the
+  already-admitted split/category/target/transfer/payee fixtures.
+- **Migration/rollback:** The range is deliberately limited to the two observed
+  cases. Incremental delivery of individual derived revisions remains a later
+  transport slice; bootstrap always projects terminal current state.
+- **Verification:** Storage unit tests cover both advances and exact receipt
+  replay. Disposable PostgreSQL tests cover account creation at `+2`, rename at
+  `+1`, bootstrap readback, and the retained plan lifecycle.
+- **Status:** implemented.
+
+### ADD-012 — Evidence-backed pristine Checking deletion
+
+- **Disposition:** Add.
+- **Location:**
+  `packages/sync-server/src/semantic/stock-pristine-account-delete.ts`.
+- **Observed stock behavior:** ACCOUNT-004 `Delete Account` sends complete
+  tombstones for a pristine Checking account, its bound transfer payee, and its
+  only Starting Balance transaction group. The server returns terminal account
+  calculations and recalculated budget/Immediate Income rows at `+2` knowledge.
+- **Fork behavior:** A dedicated parser requires that exact current three-row
+  relationship and rejects any extra transaction or divergent field. It emits
+  source tombstones and a calculation delta derived by comparing current and
+  terminal canonical projections. It never handles close/reopen.
+- **Reason:** Deletion cannot safely share generic account mutation or transfer
+  cascade code; the captured cardinality and terminal response are narrower.
+- **Evidence:** `analysis/evidence/stock-captures/account-004/`.
+- **Migration/rollback:** Other account deletion/closure shapes remain
+  unsupported and fail closed.
+- **Verification:** Focused negative/positive parser tests, calculation tests,
+  strict typecheck, and disposable PostgreSQL create -> rename -> delete
+  integration with exact knowledge and remaining-balance assertions.
+- **Status:** implemented.

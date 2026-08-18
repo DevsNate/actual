@@ -59,6 +59,7 @@ function changeSet(
     startingDeviceKnowledge: 0,
     endingDeviceKnowledge: 1,
     expectedServerKnowledge: 0,
+    serverKnowledgeAdvance: 1,
     schemaVersion: 1,
     idempotencyKey: 'request-1',
     payloadDigest: digest,
@@ -174,6 +175,36 @@ describe('PostgresSemanticStore', () => {
     );
     expect(statements.at(-1)).toBe('COMMIT');
     expect(database.released).toBe(true);
+  });
+
+  test('admits the captured source plus derived-calculation knowledge advance', async () => {
+    const database = new ScriptedDatabase();
+    database.enqueue([]); // BEGIN
+    database.enqueue([]); // idempotency lock
+    database.enqueue([]); // no receipt
+    database.enqueue([{ server_knowledge: '37' }]);
+    database.enqueue([]); // ensure device
+    database.enqueue([{ server_knowledge_of_device: '0' }]);
+
+    const store = new PostgresSemanticStore(database.pool);
+    await expect(
+      store.commitChangeSet(
+        changeSet({
+          expectedServerKnowledge: 37,
+          serverKnowledgeAdvance: 2,
+        }),
+      ),
+    ).resolves.toEqual({
+      replayed: false,
+      serverKnowledge: 39,
+      endingDeviceKnowledge: 1,
+      response: { accepted: true },
+    });
+    expect(
+      database.queries.find(query =>
+        query.text.includes('UPDATE semantic_plans'),
+      )?.values,
+    ).toEqual(['plan-1', 39]);
   });
 
   test('commits an ordered catalog command and receipt atomically', async () => {

@@ -36,6 +36,11 @@ later requests use distinct command keys and identities. A browser-root
 bootstrap with three controlled accounts proves one independent group per
 request and admits repeated unlinked Checking creation.
 
+Because creation changes both source rows and server-derived calculations, its
+canonical command advances server knowledge by two. This follows the same
+captured rule as split/category/target mutations; it is distinct from the
+source-only account rename, which advances once.
+
 ## Rename command
 
 Stock rename uses schema-44 `syncBudgetData` rather than the dedicated creation
@@ -50,6 +55,21 @@ The parser therefore admits only that exact two-row shape against current
 canonical state. Missing, extra, partial, tombstoned, mismatched, or concurrently
 edited rows fail closed. The shared PostgreSQL command commits both names
 atomically and exact replay remains receipt-owned.
+
+## Pristine deletion command
+
+`ACCOUNT-004` is a distinct `Delete Account` operation, not close/reopen. It is
+admitted only when a Checking account contains exactly its captured Starting
+Balance. The client sends complete tombstones for the account, bound transfer
+payee, and Starting Balance transaction group. A dedicated parser validates all
+three current rows and their system payee/category relationships before
+committing them atomically.
+
+The response advances source plus derived knowledge (`+2`), tombstones the
+removed account's calculation identities, and returns only changed budget and
+Immediate Income calculations. Remaining account balances continue to project
+normally. Any extra transaction, split, transfer, partial row, field divergence,
+or different lifecycle shape fails closed.
 
 ## Calculation projection
 
@@ -90,4 +110,5 @@ Disposable PostgreSQL integration proves repeated direct-import requests,
 three canonical entities per request, independent account calculations,
 additive budget calculations, exact semantic replay without duplicates, and
 stock bootstrap readback. It also proves complete-row account/payee rename,
-knowledge acknowledgement, and renamed bootstrap readback.
+knowledge acknowledgement, renamed bootstrap readback, strict pristine delete,
+terminal calculation rows, and the remaining-account Ready-to-Assign total.

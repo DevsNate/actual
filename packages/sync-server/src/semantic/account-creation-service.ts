@@ -107,6 +107,7 @@ export function createAccountCreationService(
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 0,
         expectedServerKnowledge: snapshot.serverKnowledge,
+        serverKnowledgeAdvance: 2,
         schemaVersion: 1,
         idempotencyKey: input.idempotencyKey,
         payloadDigest: digest(input),

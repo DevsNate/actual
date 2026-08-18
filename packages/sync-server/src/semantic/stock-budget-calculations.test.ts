@@ -185,6 +185,28 @@ describe('stock checking-account calculations', () => {
         available_to_budget: 123450,
       }),
     ]);
+    expect(
+      result.be_monthly_subcategory_budget_calculations.filter(row =>
+        String(row.entities_monthly_subcategory_budget_id).endsWith(
+          immediateIncome.entityId,
+        ),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        cash_outflows: 123450,
+        positive_cash_outflows: 123450,
+        balance: 123450,
+        budgeted_cash_outflows: 123450,
+        goal_overall_outflows: 123450,
+      }),
+      expect.objectContaining({
+        cash_outflows: 0,
+        balance: 123450,
+        spent_previous_month: 123450,
+        balance_previous_month: 123450,
+        spent_average: 123450,
+      }),
+    ]);
 
     for (const [suffix, amount] of [
       ['2', 234560],
@@ -254,6 +276,28 @@ describe('stock checking-account calculations', () => {
       expect.objectContaining({
         immediate_income: 0,
         available_to_budget: 703680,
+      }),
+    ]);
+    expect(
+      multiple.be_monthly_subcategory_budget_calculations.filter(row =>
+        String(row.entities_monthly_subcategory_budget_id).endsWith(
+          immediateIncome.entityId,
+        ),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        cash_outflows: 703680,
+        positive_cash_outflows: 703680,
+        balance: 703680,
+        budgeted_cash_outflows: 703680,
+        goal_overall_outflows: 703680,
+      }),
+      expect.objectContaining({
+        cash_outflows: 0,
+        balance: 703680,
+        spent_previous_month: 703680,
+        balance_previous_month: 703680,
+        spent_average: 703680,
       }),
     ]);
   });

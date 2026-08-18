@@ -14,6 +14,7 @@ export type PlanChangeSetCommand = {
   startingDeviceKnowledge: number;
   endingDeviceKnowledge: number;
   expectedServerKnowledge: number;
+  serverKnowledgeAdvance: 1 | 2;
   schemaVersion: number;
   idempotencyKey: string;
   payloadDigest: string;

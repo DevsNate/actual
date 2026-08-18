@@ -413,7 +413,7 @@ integrationTest('semantic catalog runtime integration', () => {
         account_type: 'Checking',
         balance_millicents: 123450,
         budget_id: createdPlanId,
-        budget_server_knowledge: 3,
+        budget_server_knowledge: 4,
         replayed: false,
       },
     });
@@ -466,7 +466,7 @@ integrationTest('semantic catalog runtime integration', () => {
       })
       .expect(200);
     expect(stockBootstrap.body).toMatchObject({
-      current_server_knowledge: 3,
+      current_server_knowledge: 4,
       changed_entities: {
         be_accounts: [
           {
@@ -526,7 +526,7 @@ integrationTest('semantic catalog runtime integration', () => {
       budget_id: createdPlanId,
       name: 'Semantic Renamed Plan',
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 4,
+      budget_server_knowledge: 5,
       replayed: false,
     });
 
@@ -539,7 +539,7 @@ integrationTest('semantic catalog runtime integration', () => {
       .expect(200);
     expect(replay.body.data).toMatchObject({
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 4,
+      budget_server_knowledge: 5,
       replayed: true,
     });
     await request(testApp)
@@ -584,7 +584,7 @@ integrationTest('semantic catalog runtime integration', () => {
     expect(materialized.body.data).toMatchObject({
       planId: createdPlanId,
       name: 'Semantic Renamed Plan',
-      serverKnowledge: 4,
+      serverKnowledge: 5,
     });
     expect(materialized.body.data.entities).toHaveLength(63);
 
@@ -641,7 +641,7 @@ integrationTest('semantic catalog runtime integration', () => {
     expect(retained.rows[0]).toEqual({
       plan_tombstone: false,
       entity_count: '63',
-      budget_knowledge: '4',
+      budget_knowledge: '5',
     });
     await request(testApp)
       .get(`/semantic/v1/plans/${createdPlanId}`)
@@ -831,5 +831,79 @@ integrationTest('semantic catalog runtime integration', () => {
           row.entities_account_id === created.body.id,
       ),
     ).toMatchObject({ name: 'Transfer : Account Renamed 3' });
+
+    const renamedAccountRow =
+      renamedBootstrap.body.changed_entities.be_accounts.find(
+        (row: { id: string }) => row.id === created.body.id,
+      );
+    const renamedPayeeRow =
+      renamedBootstrap.body.changed_entities.be_payees.find(
+        (row: { entities_account_id: string }) =>
+          row.entities_account_id === created.body.id,
+      );
+    const startingBalanceRow =
+      renamedBootstrap.body.changed_entities.be_transactions.find(
+        (row: { entities_account_id: string }) =>
+          row.entities_account_id === created.body.id,
+      );
+    const deleted = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-pristine-account-delete')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: directVersionId,
+          sync_type: 'delta',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 2,
+          ending_device_knowledge: 5,
+          device_knowledge_of_server: renamed.body.current_server_knowledge,
+          changed_entities: {
+            be_accounts: [{ ...renamedAccountRow, is_tombstone: true }],
+            be_payees: [{ ...renamedPayeeRow, is_tombstone: true }],
+            be_transaction_groups: [
+              {
+                id: startingBalanceRow.id,
+                be_transaction: {
+                  ...startingBalanceRow,
+                  is_tombstone: true,
+                },
+                be_subtransactions: null,
+              },
+            ],
+          },
+        }),
+      })
+      .expect(200);
+    expect(deleted.body).toMatchObject({
+      current_server_knowledge: renamed.body.current_server_knowledge + 2,
+      server_knowledge_of_device: 5,
+      changed_entities: {
+        be_account_calculations: [
+          {
+            id: `ac/${created.body.id}`,
+            is_tombstone: true,
+            cleared_balance: 0,
+            transaction_count: 0,
+          },
+        ],
+        be_monthly_budget_calculations: [
+          expect.objectContaining({
+            immediate_income: 234560,
+            available_to_budget: 234560,
+          }),
+          expect.objectContaining({
+            immediate_income: 0,
+            available_to_budget: 234560,
+          }),
+        ],
+      },
+    });
   });
 });

@@ -250,6 +250,7 @@ describe('stock budget gateway', () => {
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 2,
         expectedServerKnowledge: 29,
+        serverKnowledgeAdvance: 1,
         schemaVersion: 44,
         idempotencyKey: 'request-1',
         payloadDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),

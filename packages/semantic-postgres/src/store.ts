@@ -194,6 +194,7 @@ export class PostgresSemanticStore {
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 0,
         expectedServerKnowledge: 0,
+        serverKnowledgeAdvance: 1,
         schemaVersion: command.schemaVersion,
         idempotencyKey: command.idempotencyKey,
         payloadDigest: command.payloadDigest,
@@ -402,7 +403,8 @@ export class PostgresSemanticStore {
         );
       }
 
-      const nextServerKnowledge = currentServerKnowledge + 1;
+      const nextServerKnowledge =
+        currentServerKnowledge + input.serverKnowledgeAdvance;
       await insertChangeSet(client, input, nextServerKnowledge);
       await insertEntityChanges(client, input);
       await upsertPlanEntities(client, input, nextServerKnowledge);
@@ -1009,6 +1011,8 @@ function validateChangeSet(input: CommitChangeSetInput): void {
     !input.idempotencyKey ||
     !validKnowledge ||
     input.endingDeviceKnowledge < input.startingDeviceKnowledge ||
+    (input.serverKnowledgeAdvance !== 1 &&
+      input.serverKnowledgeAdvance !== 2) ||
     !Number.isSafeInteger(input.schemaVersion) ||
     input.schemaVersion <= 0 ||
     !validDigest ||

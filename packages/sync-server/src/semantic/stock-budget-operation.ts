@@ -24,6 +24,7 @@ import type {
   StockOperationContext,
   StockOperationResponse,
 } from './stock-operation';
+import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
 
 export type StockBudgetChangeWriter = PlanChangeWriter;
 
@@ -90,12 +91,20 @@ export async function handleStockBudgetSync(
     );
   }
 
+  const openedBudgetChanges = parseOpenedBudgetDelta(
+    syncRequest.changedEntities,
+    snapshot,
+    context.principal.id,
+  );
+  const accountRenameChanges = openedBudgetChanges
+    ? null
+    : parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
+  const accountDelete =
+    openedBudgetChanges || accountRenameChanges
+      ? null
+      : parseStockPristineAccountDelete(syncRequest.changedEntities, snapshot);
   const changes =
-    parseOpenedBudgetDelta(
-      syncRequest.changedEntities,
-      snapshot,
-      context.principal.id,
-    ) ?? parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
+    openedBudgetChanges ?? accountRenameChanges ?? accountDelete?.changes;
   if (!changes) {
     return operationError(501, 'unsupported_budget_delta');
   }
@@ -106,11 +115,13 @@ export async function handleStockBudgetSync(
     return operationError(400, 'invalid_budget_knowledge_range');
   }
 
-  const nextServerKnowledge = syncRequest.deviceKnowledgeOfServer + 1;
+  const serverKnowledgeAdvance = accountDelete ? 2 : 1;
+  const nextServerKnowledge =
+    syncRequest.deviceKnowledgeOfServer + serverKnowledgeAdvance;
   const response = successResponse(
     nextServerKnowledge,
     syncRequest.endingDeviceKnowledge,
-    buildStockBudgetEmptyDelta(snapshot),
+    accountDelete?.changedEntities ?? buildStockBudgetEmptyDelta(snapshot),
   );
   const committed = await dependencies.changeWriter.commitChangeSet({
     changeSetId: `stock-budget:${snapshot.planId}:${context.clientRequestId}`,
@@ -119,6 +130,7 @@ export async function handleStockBudgetSync(
     startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
     endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
     expectedServerKnowledge: syncRequest.deviceKnowledgeOfServer,
+    serverKnowledgeAdvance,
     schemaVersion: STOCK_BUDGET_SCHEMA_VERSION,
     idempotencyKey: context.clientRequestId,
     payloadDigest: createHash('sha256')

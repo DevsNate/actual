@@ -23,6 +23,12 @@ device knowledge, and commits the change set, knowledge advancement, and exact
 response receipt in one database transaction. An identical retry replays the
 receipt. A different payload using the same key fails closed.
 
+The command explicitly declares whether the admitted operation advances one
+source revision or a second server-derived-calculation revision. The current
+boundary accepts only `1` or `2`; callers cannot infer arbitrary knowledge
+jumps. This records stock's demonstrated source-only versus source-plus-derived
+protocol while calculated rows remain a separate projection module.
+
 `createPlan` commits the plan, owner membership, catalog change, complete
 canonical budget bootstrap, both knowledge ledgers, materialized entity
 snapshots, and exact receipts in one PostgreSQL transaction. The authenticated
