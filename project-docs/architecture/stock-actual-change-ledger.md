@@ -433,13 +433,16 @@ Copy this block for a new architectural delta:
   writer. A retained Actual-session route is a thin adapter. Stock source and
   calculated projections remain separate modules.
 - **Evidence:** `analysis/evidence/stock-captures/account-002/`. The dedicated
-  endpoint and terminal bootstrap are admitted. The intermediate worker delta
-  remains pending browser-level page+`csw.js` recapture and is not inferred.
+  endpoint and terminal bootstrap are admitted. Two browser-root page+worker
+  recaptures confirm the page POST/HTTP 201 contract and observe no worker
+  network request; the final instrumented commit observes no worker message.
 - **Migration/rollback:** The command supports only the first unlinked Checking
-  account with a nonnegative starting balance. Other types, linked accounts,
-  additional accounts, and lifecycle mutations fail closed.
+  account with a nonnegative starting balance. Stock is now proven to accept
+  later account-create invocations, but additional accounts still fail closed
+  until their complete calculation projection is captured. Other types,
+  linked accounts, and lifecycle mutations also fail closed.
 - **Verification:** Focused route/service/projection tests plus disposable
   PostgreSQL atomicity, receipt replay, entity-count, and stock-bootstrap
   integration.
-- **Status:** implemented for the canonical command and semantic adapter;
-  YNAB direct-import transport adapter deferred pending worker/auth evidence.
+- **Status:** implemented for the canonical command, semantic adapter, and
+  YNAB-shaped direct-import adapter over retained Actual session authority.

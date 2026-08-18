@@ -65,6 +65,7 @@ integrationTest('semantic catalog runtime integration', () => {
     const app = express();
     app.use('/semantic/v1', runtime.handlers);
     app.use('/api/v1', runtime.stockHandlers);
+    app.use('/api', runtime.stockAccountHandlers);
     testApp = app;
   });
 
@@ -646,5 +647,58 @@ integrationTest('semantic catalog runtime integration', () => {
       .get(`/semantic/v1/plans/${createdPlanId}`)
       .set('x-actual-token', token)
       .expect(404, { status: 'error', reason: 'plan-not-found' });
+  });
+
+  test('serves the captured direct-import account route through PostgreSQL', async () => {
+    const plan = await request(testApp)
+      .post('/semantic/v1/plans')
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'stock-account-plan')
+      .send({
+        name: 'Stock Account Route Plan',
+        currency_format: {
+          iso_code: 'USD',
+          decimal_digits: 2,
+          currency_symbol: '$',
+        },
+        date_format: { format: 'MM/DD/YYYY' },
+      })
+      .expect(201);
+    const directPlanId = plan.body.data.budget_id as string;
+
+    const created = await request(testApp)
+      .post(`/api/direct_import/budgets/${directPlanId}/accounts`)
+      .set('authorization', `Token ${token}`)
+      .set('x-ynab-api-version', '2026-01-01')
+      .send({
+        name: 'Account Capture 3',
+        type: 'Checking',
+        balance: 345670,
+        starting_balance_date: '2026-08-17',
+        debt_interest_rates: '{"2026-08-01":0}',
+        debt_minimum_payments: '{"2026-08-01":0}',
+        debt_escrow_amounts: null,
+        paired_sub_category: null,
+        is_migrating_to_debt_account: false,
+      })
+      .expect(201);
+    expect(created.body).toMatchObject({
+      account_name: 'Account Capture 3',
+      account_type: 'Checking',
+      balance_millicents: 345670,
+      budget_id: directPlanId,
+    });
+
+    const persisted = await seedPool!.query<{ count: string }>(
+      `SELECT count(*)
+       FROM semantic_plan_entities
+       WHERE plan_id = $1
+         AND ((entity_kind = 'be_accounts' AND entity_id = $2)
+           OR (entity_kind = 'be_payees' AND payload->>'accountId' = $2)
+           OR (entity_kind = 'be_transactions' AND payload->>'accountId' = $2))`,
+      [directPlanId, created.body.id],
+    );
+    expect(persisted.rows[0]?.count).toBe('3');
   });
 });

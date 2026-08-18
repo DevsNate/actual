@@ -28,7 +28,7 @@ export function createSemanticAccountHandlers(
     const planId = request.params.planId?.trim() ?? '';
     const originDeviceId = request.get('x-semantic-device-id')?.trim() ?? '';
     const idempotencyKey = request.get('idempotency-key')?.trim() ?? '';
-    const body = parseBody(request.body);
+    const body = parseStockCheckingAccountBody(request.body);
     if (!planId || !originDeviceId || !idempotencyKey || !body) {
       response.status(400).send({
         status: 'error',
@@ -79,13 +79,15 @@ export function createSemanticAccountHandlers(
   return handlers;
 }
 
-type AccountBody = {
+export type StockCheckingAccountBody = {
   name: string;
   balance: number;
   startingBalanceDate: string;
 };
 
-function parseBody(value: unknown): AccountBody | null {
+export function parseStockCheckingAccountBody(
+  value: unknown,
+): StockCheckingAccountBody | null {
   if (!isRecord(value)) {
     return null;
   }

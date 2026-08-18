@@ -12,10 +12,11 @@ The governing fixture is
 
 The stock web invocation uses a dedicated account endpoint. Its request and
 acknowledgement are admitted, and a clean stock budget bootstrap proves the
-terminal entity group and calculations. The worker's intermediate
-`syncBudgetData` envelope remains a recapture gate. It must be captured through
-browser-level CDP with both the page and `csw.js` worker attached; it must not
-be reconstructed from the terminal state.
+terminal entity group and calculations. Two later browser-root captures had
+the page and `csw.js` worker attached before commit. Both repeated the same
+page POST and HTTP 201 acknowledgement while the worker emitted no network
+request; the final instrumented commit also emitted no worker message. There
+is no observed second `syncBudgetData` upload for this operation.
 
 ## Atomic command
 
@@ -30,8 +31,10 @@ one live Immediate Income system category. It creates in one change set:
 
 Canonical identities are deterministic from plan plus idempotency key. The
 receipt owns exact replay. Reusing a key with another payload fails, and an
-existing unrelated live account is unsupported until a multi-account fixture
-is admitted.
+existing unrelated live account remains unsupported until the multi-account
+calculation projection is admitted. The browser-root repetitions prove that
+stock accepts later account-create invocations, but they do not yet provide a
+terminal multi-account calculation fixture.
 
 ## Calculation projection
 
@@ -50,13 +53,16 @@ types, transfer fields, or divergent system relationships fail closed.
 ## Transport boundary
 
 `POST /semantic/v1/plans/:planId/accounts` is the retained Actual-session
-adapter over the shared command. It validates the captured request surface and
-does not construct entities itself. A YNAB-compatible direct-import adapter is
-deferred until its stock authentication and worker coordination envelope are
-captured under browser-level CDP.
+semantic adapter over the shared command. The stock-shaped adapter is mounted
+at `POST /api/direct_import/budgets/:planId/accounts`; it accepts the captured
+`Authorization: Token` scheme and API-version header, delegates authentication
+to Actual's retained session authority, validates the same admitted JSON, and
+returns the exact flat HTTP 201 acknowledgement. Neither transport constructs
+entities itself.
 
 ## Verification
 
-Focused request, command, projection, and calculation tests pass. Disposable
-PostgreSQL integration proves one knowledge advance, three canonical entities,
-one receipt, exact replay without duplicates, and stock bootstrap readback.
+Focused request, command, gateway, projection, and calculation tests pass.
+Disposable PostgreSQL integration proves the direct-import route, one
+knowledge advance, three canonical entities, one receipt, exact semantic
+replay without duplicates, and stock bootstrap readback.
