@@ -281,14 +281,22 @@ evidence-backed plan creation`.
   `mbc/` and `mcbc/` identities. Any state requiring nonzero formulas fails
   closed. The shared compatibility dispatcher now routes admitted bootstrap
   and backfill requests without duplicating authentication.
+- **First write extension:** BUDGET-001 also admits the exact first
+  client-authored delta: one prior-month monthly-budget row and one
+  `opened_budget` onboarding event. The compatibility operation validates the
+  complete row shapes, commits both canonical entities and both knowledge
+  counters atomically through the existing PostgreSQL receipt ledger, returns
+  the captured empty acknowledgement surface, and replays the stored response
+  without duplicate rows. Internal bootstrap-role metadata keeps month
+  boundaries stable and is omitted from the stock projection.
 - **Verification:** Source projection fixtures, strict TypeScript checks,
   repository lint, production sync-server build, and disposable PostgreSQL 17
   authorization/readback integration.
 - **Status:** migrating; read-only `syncCatalogData` membership projection is
-  implemented. Read-only pristine-plan `syncBudgetData` bootstrap and backfill
-  are also routed. Initial user, family, budget deltas/writes, nonzero
-  calculations, and catalog-write operations remain explicit unsupported
-  boundaries.
+  implemented. Pristine-plan `syncBudgetData` bootstrap/backfill and the exact
+  BUDGET-001 `opened_budget` write are routed. Initial user, family, all other
+  budget deltas/writes, nonzero calculations, and catalog-write operations
+  remain explicit unsupported boundaries.
 
 ### ADD-004 — Web semantic API
 

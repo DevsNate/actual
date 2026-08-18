@@ -77,7 +77,7 @@ membership projection at `/api/v1/catalog`:
 - unknown operations, catalog writes, malformed knowledge ranges, and
   knowledge from the future fail closed.
 
-The same endpoint now dispatches read-only `syncBudgetData` without duplicating
+The same endpoint now dispatches `syncBudgetData` without duplicating
 authentication or request-context validation. Catalog and budget operations,
 source projection, and calculated projection remain separate modules. The
 budget slice:
@@ -87,9 +87,13 @@ budget slice:
 - accepts only schema 44 bootstrap and backfill requests from knowledge zero;
 - returns all source tables from the canonical 58-entity snapshot;
 - returns the exact BUDGET-001 pristine-plan calculated defaults and month
-  boundaries; and
-- rejects writes, deltas, non-pristine formulas, malformed knowledge, and
-  unauthorized budget versions.
+  boundaries;
+- atomically ingests only the captured prior-month plus `opened_budget`
+  onboarding delta through the canonical knowledge and receipt ledger;
+- replays the exact stored response without duplicating entities and
+  acknowledges an empty current delta without another write; and
+- rejects every other write, non-pristine formula, malformed knowledge, and
+  unauthorized budget version.
 
 For an older catalog knowledge value, this first implementation sends a
 coalesced complete snapshot of the fork-owned membership records rather than
@@ -101,7 +105,8 @@ their exact stock error envelopes remain a separate admitted slice.
 
 - initial user bootstrap and session issuance;
 - family projection;
-- budget delta projection or write ingestion;
+- budget delta projection or write ingestion beyond the exact admitted
+  `opened_budget` onboarding delta;
 - nonzero account, transaction, transfer, target, and schedule calculations;
 - catalog rename/delete ingestion;
 - stock error-envelope compatibility; or

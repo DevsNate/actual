@@ -7,6 +7,7 @@ import type {
 import express from 'express';
 
 import { handleStockBudgetSync } from './stock-budget-operation';
+import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { handleStockCatalogSync } from './stock-catalog-operation';
 import { operationError, STOCK_API_VERSION } from './stock-operation';
 import type { StockOperationResponse } from './stock-operation';
@@ -14,6 +15,7 @@ import type { StockOperationResponse } from './stock-operation';
 export type StockCatalogGatewayDependencies = {
   catalogReader: CatalogReader;
   planReader: BudgetVersionPlanReader;
+  changeWriter: StockBudgetChangeWriter;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
@@ -52,12 +54,20 @@ export function createStockCatalogGateway(
     }
 
     try {
-      const context = { principal, requestData };
+      const context = {
+        principal,
+        requestData,
+        clientRequestId,
+        deviceId: request.get('x-ynab-device-id')!,
+      };
       const result =
         operation === 'syncCatalogData'
           ? await handleStockCatalogSync(context, dependencies.catalogReader)
           : operation === 'syncBudgetData'
-            ? await handleStockBudgetSync(context, dependencies.planReader)
+            ? await handleStockBudgetSync(context, {
+                planReader: dependencies.planReader,
+                changeWriter: dependencies.changeWriter,
+              })
             : operationError(501, 'unsupported_operation');
       send(response, result);
     } catch (error) {

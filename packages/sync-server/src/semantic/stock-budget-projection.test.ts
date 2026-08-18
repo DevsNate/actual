@@ -165,6 +165,51 @@ describe('stock budget source projection', () => {
     });
   });
 
+  test('retains an opened-budget prior month without moving month boundaries', () => {
+    const result = projectStockBudgetSource({
+      planId: 'plan-1',
+      budgetVersionId: 'version-1',
+      name: 'Plan',
+      serverKnowledge: 2,
+      currencyFormat: {},
+      dateFormat: {},
+      entities: [
+        {
+          entityKind: 'be_budget',
+          entityId: 'version-1',
+          isTombstone: false,
+          payload: { budgetId: 'plan-1' },
+        },
+        ...['2026-08-01', '2026-09-01'].map(month => ({
+          entityKind: 'be_monthly_budgets',
+          entityId: `mb/${month.slice(0, 7)}/version-1`,
+          isTombstone: false,
+          payload: { budgetVersionId: 'version-1', month, note: '' },
+        })),
+        {
+          entityKind: 'be_monthly_budgets',
+          entityId: 'mb/2026-07/version-1',
+          isTombstone: false,
+          payload: {
+            budgetVersionId: 'version-1',
+            bootstrapRole: 'opened-budget-prior-month',
+            month: '2026-07-01',
+            note: '',
+          },
+        },
+      ],
+    });
+
+    expect(result.firstMonth).toBe('2026-08-01');
+    expect(result.lastMonth).toBe('2026-08-01');
+    expect(result.changedEntities.be_monthly_budgets).toContainEqual({
+      id: 'mb/2026-07/version-1',
+      is_tombstone: false,
+      month: '2026-07-01',
+      note: '',
+    });
+  });
+
   test('fails closed on ambiguous or malformed entity projections', () => {
     expect(() =>
       projectStockBudgetSource({

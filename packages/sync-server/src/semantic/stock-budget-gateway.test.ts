@@ -7,6 +7,7 @@ import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
+import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
 const principal: AuthenticatedPrincipal = {
@@ -39,7 +40,10 @@ function createSnapshot() {
   };
 }
 
-function application(planReader: BudgetVersionPlanReader) {
+function application(
+  planReader: BudgetVersionPlanReader,
+  changeWriter: StockBudgetChangeWriter = { commitChangeSet: vi.fn() },
+) {
   const result = express();
   const catalogReader: CatalogReader = { readCatalog: vi.fn() };
   result.use(
@@ -47,6 +51,7 @@ function application(planReader: BudgetVersionPlanReader) {
     createStockCatalogGateway({
       catalogReader,
       planReader,
+      changeWriter,
       resolvePrincipal: () => principal,
     }),
   );
@@ -75,8 +80,9 @@ function stockRequest(
   planReader: BudgetVersionPlanReader,
   syncType: string,
   overrides = {},
+  changeWriter?: StockBudgetChangeWriter,
 ) {
-  return request(application(planReader))
+  return request(application(planReader, changeWriter))
     .post('/api/v1/catalog')
     .set('x-session-token', 'session')
     .set('x-ynab-api-version', '2026-01-01')
@@ -167,11 +173,118 @@ describe('stock budget gateway', () => {
     await stockRequest(planReader, 'bootstrap').expect(403, {
       error: { id: 'user_does_not_have_read_permissions' },
     });
-    await stockRequest(planReader, 'delta').expect(501, {
-      error: { id: 'unsupported_budget_sync_type' },
-    });
-    await stockRequest(planReader, 'bootstrap', {
+    const liveReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+    };
+    await stockRequest(liveReader, 'bootstrap', {
       changed_entities: { be_transactions: [{}] },
     }).expect(400, { error: { id: 'invalid_budget_request' } });
+    await stockRequest(liveReader, 'unknown').expect(501, {
+      error: { id: 'unsupported_budget_sync_type' },
+    });
+  });
+
+  test('commits the admitted opened-budget delta atomically', async () => {
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      commitChangeSet: vi.fn().mockImplementation(input =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 30,
+          endingDeviceKnowledge: 2,
+          response: input.response,
+        }),
+      ),
+    };
+    const timestamp = '2026-08-17T01:02:03.456Z';
+
+    const response = await stockRequest(
+      planReader,
+      'delta',
+      {
+        starting_device_knowledge: 0,
+        ending_device_knowledge: 2,
+        device_knowledge_of_server: 29,
+        changed_entities: {
+          be_monthly_budgets: [
+            {
+              id: 'mb/2026-07/version-1',
+              is_tombstone: false,
+              month: '2026-07-01',
+              note: '',
+            },
+          ],
+          be_onboarding_events: [
+            {
+              id: '11111111-1111-4111-8111-111111111111',
+              is_tombstone: false,
+              event_name: 'opened_budget',
+              user_id: 'user-1',
+              created_at: timestamp,
+              updated_at: timestamp,
+            },
+          ],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 30,
+      server_knowledge_of_device: 2,
+      changed_entities: {
+        be_budget: null,
+        be_expected_income: null,
+        first_month: '2026-08-01',
+        last_month: '2026-08-01',
+      },
+    });
+    expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changeSetId: 'stock-budget:plan-1:request-1',
+        planId: 'plan-1',
+        originDeviceId: 'device-1',
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 29,
+        schemaVersion: 44,
+        idempotencyKey: 'request-1',
+        payloadDigest: expect.stringMatching(/^[0-9a-f]{64}$/u),
+        changes: [
+          expect.objectContaining({
+            entityKind: 'be_monthly_budgets',
+            entityId: 'mb/2026-07/version-1',
+          }),
+          expect.objectContaining({
+            entityKind: 'be_onboarding_events',
+            entityId: '11111111-1111-4111-8111-111111111111',
+          }),
+        ],
+      }),
+    );
+  });
+
+  test('acknowledges an empty current delta without another write', async () => {
+    const snapshot = { ...createSnapshot(), serverKnowledge: 30 };
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      commitChangeSet: vi.fn(),
+    };
+
+    await stockRequest(
+      planReader,
+      'delta',
+      {
+        starting_device_knowledge: 2,
+        ending_device_knowledge: 2,
+        device_knowledge_of_server: 30,
+      },
+      changeWriter,
+    ).expect(200);
+    expect(changeWriter.commitChangeSet).not.toHaveBeenCalled();
   });
 });

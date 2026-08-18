@@ -7,6 +7,7 @@ import { AuthenticationError } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
+import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
 const principal: AuthenticatedPrincipal = {
@@ -22,11 +23,17 @@ function app(
   planReader: BudgetVersionPlanReader = {
     readPlanByBudgetVersion: vi.fn(),
   },
+  changeWriter: StockBudgetChangeWriter = { commitChangeSet: vi.fn() },
 ) {
   const result = express();
   result.use(
     '/api/v1',
-    createStockCatalogGateway({ catalogReader, planReader, resolvePrincipal }),
+    createStockCatalogGateway({
+      catalogReader,
+      planReader,
+      changeWriter,
+      resolvePrincipal,
+    }),
   );
   return result;
 }

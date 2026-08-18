@@ -14,6 +14,8 @@ integrationTest('semantic catalog runtime integration', () => {
   const token = 'semantic-integration-session';
   const planId = 'semantic-integration-plan';
   let createdPlanId = '';
+  let createdVersionId = '';
+  let createdCurrentMonth = '';
   let closeRuntime: (() => Promise<void>) | undefined;
   let seedPool: Pool | undefined;
 
@@ -181,7 +183,7 @@ integrationTest('semantic catalog runtime integration', () => {
       },
     });
     createdPlanId = response.body.data.budget_id as string;
-    const createdVersionId = response.body.data.budget_version_id as string;
+    createdVersionId = response.body.data.budget_version_id as string;
     expect(createdPlanId).toBeTruthy();
     expect(createdVersionId).toBeTruthy();
 
@@ -245,6 +247,8 @@ integrationTest('semantic catalog runtime integration', () => {
       stockBootstrap.body.changed_entities
         .be_monthly_subcategory_budget_calculations,
     ).toHaveLength(28);
+    createdCurrentMonth = stockBootstrap.body.changed_entities
+      .first_month as string;
 
     const replay = await request(testApp)
       .post('/semantic/v1/plans')
@@ -270,6 +274,115 @@ integrationTest('semantic catalog runtime integration', () => {
     });
   });
 
+  test('atomically ingests and replays the admitted opened-budget delta', async () => {
+    const priorMonth = new Date(
+      `${createdCurrentMonth.slice(0, 7)}-01T00:00:00.000Z`,
+    );
+    priorMonth.setUTCMonth(priorMonth.getUTCMonth() - 1);
+    const priorMonthString = priorMonth.toISOString().slice(0, 10);
+    const requestData = JSON.stringify({
+      budget_version_id: createdVersionId,
+      sync_type: 'delta',
+      calculated_entities_included: false,
+      schema_version: 44,
+      schema_version_of_knowledge: 44,
+      starting_device_knowledge: 0,
+      ending_device_knowledge: 2,
+      device_knowledge_of_server: 1,
+      changed_entities: {
+        be_monthly_budgets: [
+          {
+            id: `mb/${priorMonthString.slice(0, 7)}/${createdVersionId}`,
+            is_tombstone: false,
+            month: priorMonthString,
+            note: '',
+          },
+        ],
+        be_onboarding_events: [
+          {
+            id: '11111111-1111-4111-8111-111111111111',
+            is_tombstone: false,
+            event_name: 'opened_budget',
+            user_id: userId,
+            created_at: '2026-08-17T01:02:03.456Z',
+            updated_at: '2026-08-17T01:02:03.456Z',
+          },
+        ],
+      },
+    });
+    const sendDelta = () =>
+      request(testApp)
+        .post('/api/v1/catalog')
+        .set('x-session-token', token)
+        .set('x-ynab-api-version', '2026-01-01')
+        .set('x-ynab-client-request-id', 'stock-opened-budget-delta')
+        .set('x-ynab-device-id', 'stock-web-device')
+        .type('form')
+        .send({ operation_name: 'syncBudgetData', request_data: requestData });
+
+    const first = await sendDelta().expect(200);
+    expect(first.body).toMatchObject({
+      current_server_knowledge: 2,
+      server_knowledge_of_device: 2,
+      changed_entities: {
+        be_budget: null,
+        be_expected_income: null,
+        first_month: createdCurrentMonth,
+        last_month: createdCurrentMonth,
+      },
+    });
+    const replay = await sendDelta().expect(200);
+    expect(replay.body).toEqual(first.body);
+
+    const counts = await seedPool!.query<{
+      entity_count: string;
+      change_sets: string;
+      receipts: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_change_sets WHERE plan_id = $1) AS change_sets,
+         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS receipts`,
+      [createdPlanId],
+    );
+    expect(counts.rows[0]).toEqual({
+      entity_count: '60',
+      change_sets: '2',
+      receipts: '2',
+    });
+
+    const emptyDelta = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-empty-budget-delta')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: createdVersionId,
+          sync_type: 'delta',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 2,
+          ending_device_knowledge: 2,
+          device_knowledge_of_server: 2,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+    expect(emptyDelta.body).toMatchObject({
+      current_server_knowledge: 2,
+      server_knowledge_of_device: 2,
+      changed_entities: {
+        first_month: createdCurrentMonth,
+        last_month: createdCurrentMonth,
+      },
+    });
+  });
+
   test('renames both projections and tombstones only catalog membership', async () => {
     const rename = await request(testApp)
       .patch(`/semantic/v1/plans/${createdPlanId}`)
@@ -282,7 +395,7 @@ integrationTest('semantic catalog runtime integration', () => {
       budget_id: createdPlanId,
       name: 'Semantic Renamed Plan',
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 2,
+      budget_server_knowledge: 3,
       replayed: false,
     });
 
@@ -295,7 +408,7 @@ integrationTest('semantic catalog runtime integration', () => {
       .expect(200);
     expect(replay.body.data).toMatchObject({
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 2,
+      budget_server_knowledge: 3,
       replayed: true,
     });
     await request(testApp)
@@ -331,7 +444,7 @@ integrationTest('semantic catalog runtime integration', () => {
       plan_name: 'Semantic Renamed Plan',
       budget_name: 'Semantic Renamed Plan',
       catalog_changes: '2',
-      budget_changes: '2',
+      budget_changes: '3',
     });
     const materialized = await request(testApp)
       .get(`/semantic/v1/plans/${createdPlanId}`)
@@ -340,9 +453,9 @@ integrationTest('semantic catalog runtime integration', () => {
     expect(materialized.body.data).toMatchObject({
       planId: createdPlanId,
       name: 'Semantic Renamed Plan',
-      serverKnowledge: 2,
+      serverKnowledge: 3,
     });
-    expect(materialized.body.data.entities).toHaveLength(58);
+    expect(materialized.body.data.entities).toHaveLength(60);
 
     await request(testApp)
       .delete(`/semantic/v1/plans/${createdPlanId}`)
@@ -396,8 +509,8 @@ integrationTest('semantic catalog runtime integration', () => {
     );
     expect(retained.rows[0]).toEqual({
       plan_tombstone: false,
-      entity_count: '58',
-      budget_knowledge: '2',
+      entity_count: '60',
+      budget_knowledge: '3',
     });
     await request(testApp)
       .get(`/semantic/v1/plans/${createdPlanId}`)

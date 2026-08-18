@@ -41,6 +41,32 @@ const backfillArrayTables = [
   'be_transactions',
 ] as const;
 
+const deltaArrayTables = [
+  'be_account_calculations',
+  'be_account_mappings',
+  'be_accounts',
+  'be_master_categories',
+  'be_money_movement_groups',
+  'be_money_movements',
+  'be_monthly_account_calculations',
+  'be_monthly_budget_calculations',
+  'be_monthly_budgets',
+  'be_monthly_subcategory_budget_calculations',
+  'be_monthly_subcategory_budgets',
+  'be_onboarding_events',
+  'be_onboarding_targets',
+  'be_payee_locations',
+  'be_payee_rename_conditions',
+  'be_payees',
+  'be_scheduled_subtransactions',
+  'be_scheduled_transactions',
+  'be_settings',
+  'be_subcategories',
+  'be_subtransactions',
+  'be_transaction_images',
+  'be_transactions',
+] as const;
+
 export function buildStockBudgetBootstrap(
   snapshot: PlanSnapshot,
 ): Readonly<Record<string, unknown>> {
@@ -81,6 +107,22 @@ export function buildStockBudgetBackfill(
   }
   return {
     ...Object.fromEntries(backfillArrayTables.map(table => [table, []])),
+    first_month: source.firstMonth,
+    last_month: source.lastMonth,
+  };
+}
+
+export function buildStockBudgetEmptyDelta(
+  snapshot: PlanSnapshot,
+): Readonly<Record<string, unknown>> {
+  const source = projectStockBudgetSource(snapshot);
+  if (!source.firstMonth || !source.lastMonth) {
+    throw new Error('Stock budget delta requires a current month');
+  }
+  return {
+    ...Object.fromEntries(deltaArrayTables.map(table => [table, []])),
+    be_budget: null,
+    be_expected_income: null,
     first_month: source.firstMonth,
     last_month: source.lastMonth,
   };

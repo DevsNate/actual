@@ -1,8 +1,15 @@
-import type { BudgetVersionPlanReader } from '@actual-app/semantic-core';
+import { createHash } from 'node:crypto';
+
+import type {
+  BudgetVersionPlanReader,
+  PlanEntity,
+  PlanSnapshot,
+} from '@actual-app/semantic-core';
 
 import {
   buildStockBudgetBackfill,
   buildStockBudgetBootstrap,
+  buildStockBudgetEmptyDelta,
 } from './stock-budget-bootstrap';
 import {
   isRecord,
@@ -16,22 +23,44 @@ import type {
   StockOperationResponse,
 } from './stock-operation';
 
+type StockBudgetChangeSet = {
+  changeSetId: string;
+  planId: string;
+  originDeviceId: string;
+  startingDeviceKnowledge: number;
+  endingDeviceKnowledge: number;
+  expectedServerKnowledge: number;
+  schemaVersion: number;
+  idempotencyKey: string;
+  payloadDigest: string;
+  changes: readonly PlanEntity[];
+  response: Readonly<Record<string, unknown>>;
+};
+
+export type StockBudgetChangeWriter = {
+  commitChangeSet(input: StockBudgetChangeSet): Promise<{
+    replayed: boolean;
+    serverKnowledge: number;
+    endingDeviceKnowledge: number;
+    response: Readonly<Record<string, unknown>>;
+  }>;
+};
+
+type StockBudgetSyncDependencies = {
+  planReader: BudgetVersionPlanReader;
+  changeWriter: StockBudgetChangeWriter;
+};
+
 export async function handleStockBudgetSync(
   context: StockOperationContext,
-  planReader: BudgetVersionPlanReader,
+  dependencies: StockBudgetSyncDependencies,
 ): Promise<StockOperationResponse> {
   const syncRequest = parseBudgetSyncRequest(context.requestData);
   if (!syncRequest) {
     return operationError(400, 'invalid_budget_request');
   }
-  if (!['bootstrap', 'backfill'].includes(syncRequest.syncType)) {
-    return operationError(501, 'unsupported_budget_sync_type');
-  }
-  if (syncRequest.deviceKnowledgeOfServer !== 0) {
-    return operationError(409, 'budget_knowledge_mismatch');
-  }
 
-  const snapshot = await planReader.readPlanByBudgetVersion(
+  const snapshot = await dependencies.planReader.readPlanByBudgetVersion(
     context.principal.id,
     syncRequest.budgetVersionId,
   );
@@ -39,28 +68,93 @@ export async function handleStockBudgetSync(
     return operationError(403, 'user_does_not_have_read_permissions');
   }
 
-  const changedEntities =
-    syncRequest.syncType === 'bootstrap'
-      ? buildStockBudgetBootstrap(snapshot)
-      : buildStockBudgetBackfill(snapshot);
-  return {
-    status: 200,
-    body: {
-      error: null,
-      schema_version_of_response: STOCK_BUDGET_SCHEMA_VERSION,
-      schema_version_of_server: STOCK_BUDGET_SCHEMA_VERSION,
-      server_knowledge_of_device: syncRequest.endingDeviceKnowledge,
-      current_server_knowledge: snapshot.serverKnowledge,
-      changed_entities: changedEntities,
-    },
-  };
+  if (syncRequest.syncType === 'bootstrap') {
+    if (Object.keys(syncRequest.changedEntities).length !== 0) {
+      return operationError(400, 'invalid_budget_request');
+    }
+    if (syncRequest.deviceKnowledgeOfServer !== 0) {
+      return operationError(409, 'budget_knowledge_mismatch');
+    }
+    return successResponse(
+      snapshot.serverKnowledge,
+      syncRequest.endingDeviceKnowledge,
+      buildStockBudgetBootstrap(snapshot),
+    );
+  }
+  if (syncRequest.syncType === 'backfill') {
+    if (Object.keys(syncRequest.changedEntities).length !== 0) {
+      return operationError(400, 'invalid_budget_request');
+    }
+    if (syncRequest.deviceKnowledgeOfServer !== 0) {
+      return operationError(409, 'budget_knowledge_mismatch');
+    }
+    return successResponse(
+      snapshot.serverKnowledge,
+      syncRequest.endingDeviceKnowledge,
+      buildStockBudgetBackfill(snapshot),
+    );
+  }
+  if (syncRequest.syncType !== 'delta') {
+    return operationError(501, 'unsupported_budget_sync_type');
+  }
+
+  if (Object.keys(syncRequest.changedEntities).length === 0) {
+    if (syncRequest.deviceKnowledgeOfServer !== snapshot.serverKnowledge) {
+      return operationError(409, 'budget_knowledge_mismatch');
+    }
+    return successResponse(
+      snapshot.serverKnowledge,
+      syncRequest.endingDeviceKnowledge,
+      buildStockBudgetEmptyDelta(snapshot),
+    );
+  }
+
+  const changes = parseOpenedBudgetDelta(
+    syncRequest.changedEntities,
+    snapshot,
+    context.principal.id,
+  );
+  if (!changes) {
+    return operationError(501, 'unsupported_budget_delta');
+  }
+  if (
+    syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge !==
+    changes.length
+  ) {
+    return operationError(400, 'invalid_budget_knowledge_range');
+  }
+
+  const nextServerKnowledge = syncRequest.deviceKnowledgeOfServer + 1;
+  const response = successResponse(
+    nextServerKnowledge,
+    syncRequest.endingDeviceKnowledge,
+    buildStockBudgetEmptyDelta(snapshot),
+  );
+  const committed = await dependencies.changeWriter.commitChangeSet({
+    changeSetId: `stock-budget:${snapshot.planId}:${context.clientRequestId}`,
+    planId: snapshot.planId,
+    originDeviceId: context.deviceId,
+    startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
+    endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
+    expectedServerKnowledge: syncRequest.deviceKnowledgeOfServer,
+    schemaVersion: STOCK_BUDGET_SCHEMA_VERSION,
+    idempotencyKey: context.clientRequestId,
+    payloadDigest: createHash('sha256')
+      .update(context.requestData)
+      .digest('hex'),
+    changes,
+    response: response.body,
+  });
+  return { status: 200, body: committed.response };
 }
 
 type BudgetSyncRequest = {
   budgetVersionId: string;
   syncType: string;
-  deviceKnowledgeOfServer: number;
+  startingDeviceKnowledge: number;
   endingDeviceKnowledge: number;
+  deviceKnowledgeOfServer: number;
+  changedEntities: Record<string, unknown>;
 };
 
 function parseBudgetSyncRequest(value: string): BudgetSyncRequest | null {
@@ -87,10 +181,9 @@ function parseBudgetSyncRequest(value: string): BudgetSyncRequest | null {
     startingDeviceKnowledge === null ||
     endingDeviceKnowledge === null ||
     deviceKnowledgeOfServer === null ||
-    startingDeviceKnowledge !== endingDeviceKnowledge ||
+    startingDeviceKnowledge > endingDeviceKnowledge ||
     parsed.calculated_entities_included !== false ||
     !isRecord(parsed.changed_entities) ||
-    Object.keys(parsed.changed_entities).length !== 0 ||
     typeof parsed.budget_version_id !== 'string' ||
     !parsed.budget_version_id ||
     typeof parsed.sync_type !== 'string'
@@ -100,7 +193,172 @@ function parseBudgetSyncRequest(value: string): BudgetSyncRequest | null {
   return {
     budgetVersionId: parsed.budget_version_id,
     syncType: parsed.sync_type,
-    deviceKnowledgeOfServer,
+    startingDeviceKnowledge,
     endingDeviceKnowledge,
+    deviceKnowledgeOfServer,
+    changedEntities: parsed.changed_entities,
   };
+}
+
+function parseOpenedBudgetDelta(
+  changedEntities: Record<string, unknown>,
+  snapshot: PlanSnapshot,
+  principalId: string,
+): readonly PlanEntity[] | null {
+  if (
+    !hasExactKeys(changedEntities, [
+      'be_monthly_budgets',
+      'be_onboarding_events',
+    ])
+  ) {
+    return null;
+  }
+  const monthlyRows = changedEntities.be_monthly_budgets;
+  const eventRows = changedEntities.be_onboarding_events;
+  if (
+    !Array.isArray(monthlyRows) ||
+    monthlyRows.length !== 1 ||
+    !Array.isArray(eventRows) ||
+    eventRows.length !== 1 ||
+    !isRecord(monthlyRows[0]) ||
+    !isRecord(eventRows[0])
+  ) {
+    return null;
+  }
+
+  const monthRow = monthlyRows[0];
+  const eventRow = eventRows[0];
+  const currentMonth = currentBootstrapMonth(snapshot);
+  const priorMonth = previousMonth(currentMonth);
+  const expectedMonthId = `mb/${priorMonth.slice(0, 7)}/${snapshot.budgetVersionId}`;
+  if (
+    !hasExactKeys(monthRow, ['id', 'is_tombstone', 'month', 'note']) ||
+    monthRow.id !== expectedMonthId ||
+    monthRow.is_tombstone !== false ||
+    monthRow.month !== priorMonth ||
+    monthRow.note !== ''
+  ) {
+    return null;
+  }
+  if (
+    !hasExactKeys(eventRow, [
+      'created_at',
+      'event_name',
+      'id',
+      'is_tombstone',
+      'updated_at',
+      'user_id',
+    ]) ||
+    !uuid(eventRow.id) ||
+    eventRow.event_name !== 'opened_budget' ||
+    eventRow.user_id !== principalId ||
+    eventRow.is_tombstone !== false ||
+    !isoTimestamp(eventRow.created_at) ||
+    eventRow.updated_at !== eventRow.created_at
+  ) {
+    return null;
+  }
+
+  return [
+    {
+      entityKind: 'be_monthly_budgets',
+      entityId: expectedMonthId,
+      isTombstone: false,
+      payload: {
+        budgetVersionId: snapshot.budgetVersionId,
+        bootstrapRole: 'opened-budget-prior-month',
+        month: priorMonth,
+        note: '',
+        deviceKnowledge: null,
+      },
+    },
+    {
+      entityKind: 'be_onboarding_events',
+      entityId: eventRow.id,
+      isTombstone: false,
+      payload: {
+        budgetVersionId: snapshot.budgetVersionId,
+        eventName: 'opened_budget',
+        userId: principalId,
+        createdAt: eventRow.created_at,
+        updatedAt: eventRow.updated_at,
+        deviceKnowledge: null,
+        lastUpdatedByDeviceId: null,
+        serverKnowledge: snapshot.serverKnowledge + 1,
+      },
+    },
+  ];
+}
+
+function successResponse(
+  serverKnowledge: number,
+  deviceKnowledge: number,
+  changedEntities: Readonly<Record<string, unknown>>,
+): StockOperationResponse {
+  return {
+    status: 200,
+    body: {
+      error: null,
+      schema_version_of_response: STOCK_BUDGET_SCHEMA_VERSION,
+      schema_version_of_server: STOCK_BUDGET_SCHEMA_VERSION,
+      server_knowledge_of_device: deviceKnowledge,
+      current_server_knowledge: serverKnowledge,
+      changed_entities: changedEntities,
+    },
+  };
+}
+
+function currentBootstrapMonth(snapshot: PlanSnapshot): string {
+  const months = snapshot.entities
+    .filter(
+      entity =>
+        entity.entityKind === 'be_monthly_budgets' &&
+        entity.payload.bootstrapRole !== 'opened-budget-prior-month',
+    )
+    .map(entity => entity.payload.month)
+    .filter((month): month is string => typeof month === 'string')
+    .sort();
+  if (!months[0]) {
+    throw new Error('Opened-budget delta requires a current month');
+  }
+  return months[0];
+}
+
+function previousMonth(month: string): string {
+  const match = /^(\d{4})-(\d{2})-01$/u.exec(month);
+  if (!match) {
+    throw new Error('Opened-budget delta requires an ISO month');
+  }
+  return new Date(Date.UTC(Number(match[1]), Number(match[2]) - 2, 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function isoTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
+}
+
+function uuid(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu.test(
+      value,
+    )
+  );
+}
+
+function hasExactKeys(
+  value: Record<string, unknown>,
+  keys: readonly string[],
+): boolean {
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index])
+  );
 }

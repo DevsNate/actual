@@ -33,8 +33,13 @@ export function projectStockBudgetSource(
     changedEntities[entityKind] = entityKind === 'be_budget' ? rows[0] : rows;
   }
 
-  const months = (grouped.get('be_monthly_budgets') ?? [])
-    .map(row => row.month)
+  const months = snapshot.entities
+    .filter(
+      entity =>
+        entity.entityKind === 'be_monthly_budgets' &&
+        entity.payload.bootstrapRole !== 'opened-budget-prior-month',
+    )
+    .map(entity => entity.payload.month)
     .filter((month): month is string => typeof month === 'string')
     .sort();
   const bootstrapMonth = months[0] ?? null;
@@ -70,7 +75,11 @@ const payloadRules: Readonly<
 > = {
   be_budget: rule(['budgetVersionId', 'deviceKnowledge']),
   be_master_categories: rule(['budgetVersionId', 'deviceKnowledge']),
-  be_monthly_budgets: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_monthly_budgets: rule([
+    'budgetVersionId',
+    'bootstrapRole',
+    'deviceKnowledge',
+  ]),
   be_monthly_subcategory_budgets: rule(
     ['budgetVersionId', 'deviceKnowledge', 'month'],
     {
