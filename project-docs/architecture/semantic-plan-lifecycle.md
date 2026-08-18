@@ -104,8 +104,12 @@ The React application does not call semantic HTTP endpoints or read session
 tokens. `desktop-client/src/semantic-plans/api.ts` sends typed commands through
 the existing Actual worker message bus. The loot-core semantic plan app owns
 authentication headers, a durable device identity, and HTTP envelope parsing.
+Canonical catalog and authorized plan snapshots live in their own Redux slice;
+they are never merged into legacy `budgetfiles` state.
 
 This boundary is intentionally separate from the legacy `create-budget`,
 `delete-budget`, and local SQLite lifecycle. The canonical plan snapshot must
 first gain an explicit client projection/materialization contract; silently
 calling both lifecycles would create two authorities and mismatched plan IDs.
+The next presentation layer may render catalog membership immediately, but it
+must not claim that a canonical plan is a downloaded Actual SQLite file.

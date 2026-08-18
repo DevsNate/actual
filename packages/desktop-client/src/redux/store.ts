@@ -36,6 +36,10 @@ import {
   reducer as prefsSliceReducer,
 } from '#prefs/prefsSlice';
 import {
+  name as semanticPlansSliceName,
+  reducer as semanticPlansSliceReducer,
+} from '#semantic-plans/semanticPlansSlice';
+import {
   name as transactionsSliceName,
   reducer as transactionsSliceReducer,
 } from '#transactions/transactionsSlice';
@@ -52,6 +56,7 @@ const rootReducer = combineReducers({
   [modalsSliceName]: modalsSliceReducer,
   [notificationsSliceName]: notificationsSliceReducer,
   [prefsSliceName]: prefsSliceReducer,
+  [semanticPlansSliceName]: semanticPlansSliceReducer,
   [transactionsSliceName]: transactionsSliceReducer,
   [usersSliceName]: usersSliceReducer,
 });

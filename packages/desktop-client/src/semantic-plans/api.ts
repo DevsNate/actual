@@ -8,43 +8,62 @@ import type {
 } from '@actual-app/core/server/semantic-plans/types';
 import { v4 as uuidv4 } from 'uuid';
 
-export function readSemanticCatalog(): Promise<SemanticCatalogSnapshot> {
-  return send('semantic-plan-catalog');
+export function createSemanticPlanApi({
+  sendCommand = send,
+  allocateCommandId = uuidv4,
+}: {
+  sendCommand?: typeof send;
+  allocateCommandId?: () => string;
+} = {}) {
+  return {
+    readCatalog(): Promise<SemanticCatalogSnapshot> {
+      return sendCommand('semantic-plan-catalog');
+    },
+
+    readPlan(planId: string): Promise<SemanticPlanSnapshot> {
+      return sendCommand('semantic-plan-read', { planId });
+    },
+
+    createPlan(
+      name: string,
+      formats: SemanticPlanFormats,
+    ): Promise<SemanticCreatePlanResult> {
+      return sendCommand('semantic-plan-create', {
+        name,
+        formats,
+        idempotencyKey: allocateCommandId(),
+      });
+    },
+
+    renamePlan(
+      planId: string,
+      name: string,
+    ): Promise<SemanticPlanLifecycleResult> {
+      return sendCommand('semantic-plan-rename', {
+        planId,
+        name,
+        idempotencyKey: allocateCommandId(),
+      });
+    },
+
+    deletePlan(planId: string): Promise<SemanticPlanLifecycleResult> {
+      return sendCommand('semantic-plan-delete', {
+        planId,
+        idempotencyKey: allocateCommandId(),
+      });
+    },
+  };
 }
 
-export function readSemanticPlan(
-  planId: string,
-): Promise<SemanticPlanSnapshot> {
-  return send('semantic-plan-read', { planId });
-}
-
-export function createSemanticPlan(
+const semanticPlanApi = createSemanticPlanApi();
+export const readSemanticCatalog = () => semanticPlanApi.readCatalog();
+export const readSemanticPlan = (planId: string) =>
+  semanticPlanApi.readPlan(planId);
+export const createSemanticPlan = (
   name: string,
   formats: SemanticPlanFormats,
-): Promise<SemanticCreatePlanResult> {
-  return send('semantic-plan-create', {
-    name,
-    formats,
-    idempotencyKey: uuidv4(),
-  });
-}
-
-export function renameSemanticPlan(
-  planId: string,
-  name: string,
-): Promise<SemanticPlanLifecycleResult> {
-  return send('semantic-plan-rename', {
-    planId,
-    name,
-    idempotencyKey: uuidv4(),
-  });
-}
-
-export function deleteSemanticPlan(
-  planId: string,
-): Promise<SemanticPlanLifecycleResult> {
-  return send('semantic-plan-delete', {
-    planId,
-    idempotencyKey: uuidv4(),
-  });
-}
+) => semanticPlanApi.createPlan(name, formats);
+export const renameSemanticPlan = (planId: string, name: string) =>
+  semanticPlanApi.renamePlan(planId, name);
+export const deleteSemanticPlan = (planId: string) =>
+  semanticPlanApi.deletePlan(planId);

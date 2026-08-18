@@ -368,4 +368,5 @@ Copy this block for a new architectural delta:
   authority.
 - **Verification:** Core and web typechecks plus focused HTTP, identity, and UI
   API tests.
-- **Status:** implemented; UI state integration pending materialization.
+- **Status:** implemented through the isolated Redux catalog/snapshot state;
+  manager presentation and budget-screen projection remain pending.

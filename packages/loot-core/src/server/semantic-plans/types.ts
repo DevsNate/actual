@@ -13,7 +13,7 @@ export type SemanticCatalogSnapshot = {
     principalId: string;
     currentServerKnowledge: number;
   };
-  memberships: readonly SemanticPlanMembership[];
+  memberships: SemanticPlanMembership[];
 };
 
 export type SemanticPlanEntity = {
@@ -30,7 +30,7 @@ export type SemanticPlanSnapshot = {
   serverKnowledge: number;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
-  entities: readonly SemanticPlanEntity[];
+  entities: SemanticPlanEntity[];
 };
 
 export type SemanticCreatePlanResult = {
