@@ -24,12 +24,24 @@ Their purpose is to make the current fork understandable before any later extrac
 Read these roughly in order:
 
 1. `baseline-and-scope.md` — exact baseline, audit boundary, and classification vocabulary.
-2. `custom-commit-inventory.md` — chronological audit of all 25 custom commits.
-3. `custom-file-inventory.md` — complete baseline-to-`main` custom file surface grouped by subsystem and future disposition.
-4. `responsibility-map.md` — current runtime/layer ownership and the main representation-boundary problem.
-5. `promotion-policy.md` — evidence, dependency, persistence, replay, and provenance gates for promotion into a future final repository.
-6. `repository-boundaries.md` — authority split among the research corpus, `DevsNate/actual` compatibility laboratory, and future final product.
-7. `final-product-seed.md` — practical first/second promotion tranches, what stays behind, and what requires redesign before promotion.
+2. `product-objective.md` — explicit end-state requirement: lightly modified stock iOS compatibility plus 100% observable visual/functional parity with the supported stock YNAB web version/capture horizon.
+3. `custom-commit-inventory.md` — chronological audit of all 25 custom commits.
+4. `custom-file-inventory.md` — complete baseline-to-`main` custom file surface grouped by subsystem and future disposition.
+5. `responsibility-map.md` — current runtime/layer ownership and the main representation-boundary problem.
+6. `promotion-policy.md` — evidence, dependency, persistence, replay, and provenance gates for promotion into a future final repository.
+7. `repository-boundaries.md` — authority split among the research corpus, `DevsNate/actual` compatibility laboratory, and future final product.
+8. `final-product-seed.md` — practical first/second promotion tranches, what stays behind, and what requires redesign before promotion.
+
+## Product target clarification
+
+The final product target is not merely a YNAB-compatible server or a YNAB-inspired web application.
+
+For the supported stock version/capture horizon, the intended observable end state is:
+
+- a lightly modified stock YNAB iOS application communicating with the reconstructed server without a heavy client-side rewrite; and
+- a literal 1:1 recreation of the stock YNAB web application visually and functionally.
+
+`product-objective.md` defines the parity dimensions and the distinction between external fidelity and internal implementation freedom. This clarification is recorded here as a reference requirement; it should be promoted into the governing architecture records when this reference work is deliberately reviewed/merged.
 
 ## Audit status
 
