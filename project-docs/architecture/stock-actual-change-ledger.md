@@ -35,6 +35,7 @@ v26.8.1. The baseline commit is
 | ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests  |
 | ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
 | ADD-007    | Local semantic development stack         | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
+| ADD-008    | Semantic plan client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
 
 ## Detailed entries
 
@@ -350,3 +351,21 @@ Copy this block for a new architectural delta:
 - **Status:** proposed | implemented | migrating | retired | deferred.
 - **Commit/PR:**
 ```
+
+### ADD-008 — Semantic plan client bridge
+
+- **Disposition:** Add.
+- **Location:** `packages/loot-core/src/server/semantic-plans` and
+  `packages/desktop-client/src/semantic-plans`.
+- **Fork behavior:** Typed catalog, read, create, rename, and delete commands
+  cross the existing worker message bus. Loot-core alone owns the retained
+  login token, durable semantic device identity, and HTTP envelope parsing.
+- **Reason:** React must not read credentials or become a second transport
+  implementation.
+- **Migration/rollback:** The stock local SQLite budget lifecycle is not yet
+  redirected. A projection or materialization boundary is required before a
+  canonical plan can be opened by the legacy Actual UI without creating dual
+  authority.
+- **Verification:** Core and web typechecks plus focused HTTP, identity, and UI
+  API tests.
+- **Status:** implemented; UI state integration pending materialization.

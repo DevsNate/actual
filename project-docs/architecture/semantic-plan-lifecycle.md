@@ -97,3 +97,15 @@ The implementation sequence is:
 5. project the same commands through admitted YNAB-shaped endpoints; and
 6. add physical cross-client acceptance fixtures without weakening the
    canonical invariants.
+
+## Client boundary
+
+The React application does not call semantic HTTP endpoints or read session
+tokens. `desktop-client/src/semantic-plans/api.ts` sends typed commands through
+the existing Actual worker message bus. The loot-core semantic plan app owns
+authentication headers, a durable device identity, and HTTP envelope parsing.
+
+This boundary is intentionally separate from the legacy `create-budget`,
+`delete-budget`, and local SQLite lifecycle. The canonical plan snapshot must
+first gain an explicit client projection/materialization contract; silently
+calling both lifecycles would create two authorities and mismatched plan IDs.

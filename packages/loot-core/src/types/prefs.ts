@@ -144,6 +144,7 @@ export type GlobalPrefsJson = Partial<{
   'server-url'?: string;
   'did-bootstrap'?: boolean;
   'user-token'?: string;
+  'semantic-device-id'?: string;
   'floating-sidebar'?: string; // "true" or "false"
   'max-months'?: string; // e.g. "2" or "3"
   'category-expanded-state'?: string; // "0" or "1" or "2"
