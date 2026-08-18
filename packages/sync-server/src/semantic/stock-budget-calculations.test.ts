@@ -127,9 +127,10 @@ describe('stock checking-account calculations', () => {
           name: 'Transfer : Account Capture 1',
           enabled: true,
           autoFillSubCategoryEnabled: true,
+          autoFillAmount: 0,
           autoFillAmountEnabled: false,
           autoFillMemoEnabled: false,
-          renameOnImportEnabled: false,
+          renameOnImportEnabled: true,
         },
       },
       {
@@ -210,9 +211,10 @@ describe('stock checking-account calculations', () => {
             name: `Transfer : Account Capture ${suffix}`,
             enabled: true,
             autoFillSubCategoryEnabled: true,
+            autoFillAmount: 0,
             autoFillAmountEnabled: false,
             autoFillMemoEnabled: false,
-            renameOnImportEnabled: false,
+            renameOnImportEnabled: true,
           },
         },
         {

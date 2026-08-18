@@ -17,7 +17,7 @@ export function projectStockBudgetSource(
       );
     }
     const rows = grouped.get(entity.entityKind) ?? [];
-    rows.push(projectEntity(entity));
+    rows.push(projectStockEntity(entity));
     grouped.set(entity.entityKind, rows);
   }
 
@@ -50,7 +50,9 @@ export function projectStockBudgetSource(
   };
 }
 
-function projectEntity(entity: PlanEntity): Readonly<Record<string, unknown>> {
+export function projectStockEntity(
+  entity: PlanEntity,
+): Readonly<Record<string, unknown>> {
   const payload = projectPayload(entity.entityKind, entity.payload);
   if ('id' in payload || 'is_tombstone' in payload) {
     throw new Error(

@@ -160,9 +160,10 @@ function checkingAccountGroup(
     transferPayee.payload.enabled !== true ||
     transferPayee.payload.name !== `Transfer : ${accountName}` ||
     transferPayee.payload.autoFillSubCategoryEnabled !== true ||
+    transferPayee.payload.autoFillAmount !== 0 ||
     transferPayee.payload.autoFillAmountEnabled !== false ||
     transferPayee.payload.autoFillMemoEnabled !== false ||
-    transferPayee.payload.renameOnImportEnabled !== false ||
+    transferPayee.payload.renameOnImportEnabled !== true ||
     transaction.isTombstone ||
     transaction.payload.payeeId !== startingBalancePayee.entityId ||
     transaction.payload.subCategoryId !== immediateIncomeCategory.entityId ||

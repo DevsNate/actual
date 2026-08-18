@@ -7,6 +7,7 @@ import type {
   PlanSnapshot,
 } from '@actual-app/semantic-core';
 
+import { parseStockAccountRenameDelta } from './stock-account-rename';
 import {
   buildStockBudgetBackfill,
   buildStockBudgetBootstrap,
@@ -89,11 +90,12 @@ export async function handleStockBudgetSync(
     );
   }
 
-  const changes = parseOpenedBudgetDelta(
-    syncRequest.changedEntities,
-    snapshot,
-    context.principal.id,
-  );
+  const changes =
+    parseOpenedBudgetDelta(
+      syncRequest.changedEntities,
+      snapshot,
+      context.principal.id,
+    ) ?? parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
   if (!changes) {
     return operationError(501, 'unsupported_budget_delta');
   }

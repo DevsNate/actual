@@ -96,11 +96,14 @@ describe('account creation service', () => {
       accountType: 'Checking',
       onBudget: true,
       isClosed: false,
+      sortableIndex: 0,
     });
     expect(transferPayee?.payload).toMatchObject({
       name: 'Transfer : Account Capture 1',
       enabled: true,
       autoFillSubCategoryEnabled: true,
+      autoFillAmount: 0,
+      renameOnImportEnabled: true,
     });
     expect(startingBalance?.payload).toMatchObject({
       accountId: account?.entityId,
@@ -122,13 +125,19 @@ describe('account creation service', () => {
       entityKind: 'be_accounts',
       entityId: 'existing-account',
       isTombstone: false,
-      payload: {},
+      payload: { sortableIndex: 0 },
     });
     await expect(
       first.service.createCheckingAccount(input),
     ).resolves.toMatchObject({
       response: { account_name: 'Account Capture 1' },
     });
+    expect(
+      first
+        .getCommand()
+        ?.changes.find(entity => entity.entityKind === 'be_accounts')?.payload
+        .sortableIndex,
+    ).toBe(1);
 
     const second = fixture();
     second.snapshot.entities.push(

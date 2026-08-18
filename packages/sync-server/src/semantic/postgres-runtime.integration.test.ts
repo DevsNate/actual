@@ -758,5 +758,78 @@ integrationTest('semantic catalog runtime integration', () => {
         available_to_budget: 580230,
       }),
     ]);
+
+    const accountRow = bootstrap.body.changed_entities.be_accounts.find(
+      (row: { id: string }) => row.id === created.body.id,
+    );
+    const payeeRow = bootstrap.body.changed_entities.be_payees.find(
+      (row: { entities_account_id: string }) =>
+        row.entities_account_id === created.body.id,
+    );
+    expect(accountRow).toBeDefined();
+    expect(payeeRow).toBeDefined();
+    const renamed = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-account-rename')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: directVersionId,
+          sync_type: 'delta',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 0,
+          ending_device_knowledge: 2,
+          device_knowledge_of_server: bootstrap.body.current_server_knowledge,
+          changed_entities: {
+            be_accounts: [{ ...accountRow, account_name: 'Account Renamed 3' }],
+            be_payees: [{ ...payeeRow, name: 'Transfer : Account Renamed 3' }],
+          },
+        }),
+      })
+      .expect(200);
+    expect(renamed.body).toMatchObject({
+      current_server_knowledge: bootstrap.body.current_server_knowledge + 1,
+      server_knowledge_of_device: 2,
+    });
+
+    const renamedBootstrap = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-account-rename-bootstrap')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: directVersionId,
+          sync_type: 'bootstrap',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 2,
+          ending_device_knowledge: 2,
+          device_knowledge_of_server: 0,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+    expect(
+      renamedBootstrap.body.changed_entities.be_accounts.find(
+        (row: { id: string }) => row.id === created.body.id,
+      ),
+    ).toMatchObject({ account_name: 'Account Renamed 3' });
+    expect(
+      renamedBootstrap.body.changed_entities.be_payees.find(
+        (row: { entities_account_id: string }) =>
+          row.entities_account_id === created.body.id,
+      ),
+    ).toMatchObject({ name: 'Transfer : Account Renamed 3' });
   });
 });

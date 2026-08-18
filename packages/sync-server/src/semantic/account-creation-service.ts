@@ -51,6 +51,16 @@ export function createAccountCreationService(
         throw new AccountCreationError('plan-not-found');
       }
 
+      const existingAccounts = snapshot.entities.filter(
+        entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
+      );
+      const replayAccount = existingAccounts.find(
+        entity => entity.payload.creationCommandKey === input.idempotencyKey,
+      );
+      const sortableIndex = replayAccount
+        ? requireSortableIndex(replayAccount.payload.sortableIndex)
+        : nextSortableIndex(existingAccounts);
+
       const startingBalancePayee = exactlyOne(
         snapshot.entities,
         entity =>
@@ -101,7 +111,12 @@ export function createAccountCreationService(
         idempotencyKey: input.idempotencyKey,
         payloadDigest: digest(input),
         changes: [
-          accountEntity(snapshot.budgetVersionId, accountId, input),
+          accountEntity(
+            snapshot.budgetVersionId,
+            accountId,
+            sortableIndex,
+            input,
+          ),
           transferPayeeEntity(
             snapshot.budgetVersionId,
             transferPayeeId,
@@ -126,6 +141,7 @@ export function createAccountCreationService(
 function accountEntity(
   budgetVersionId: string,
   accountId: string,
+  sortableIndex: number,
   input: CreateCheckingAccountInput,
 ): PlanEntity {
   return {
@@ -141,23 +157,17 @@ function accountEntity(
       isClosed: false,
       onBudget: true,
       isFavorite: false,
-      sortableIndex: 0,
+      sortableIndex,
       sortableFavoriteIndex: 0,
       debtStartDate: null,
       debtAssetValues: null,
       lastReconciledAt: null,
       debtEscrowAmounts: null,
       debtInterestRates: null,
-      directImportStatus: null,
       debtMinimumPayments: null,
       debtOriginalBalance: null,
-      directImportBalance: null,
       lastPaymentPayeeId: null,
-      directImportAccountName: null,
-      directImportAggregatedAt: null,
       debtMigratedFromAccountId: null,
-      directImportInstitutionName: null,
-      directImportAvailableBalance: null,
     },
   };
 }
@@ -181,13 +191,34 @@ function transferPayeeEntity(
       autoFillSubCategoryId: null,
       autoFillUserDefinedSubCategoryId: null,
       autoFillMemo: null,
-      autoFillAmount: null,
+      autoFillAmount: 0,
       autoFillSubCategoryEnabled: true,
       autoFillAmountEnabled: false,
       autoFillMemoEnabled: false,
-      renameOnImportEnabled: false,
+      renameOnImportEnabled: true,
     },
   };
+}
+
+function nextSortableIndex(accounts: readonly PlanEntity[]): number {
+  if (accounts.length === 0) {
+    return 0;
+  }
+  const indexes = accounts.map(account =>
+    requireSortableIndex(account.payload.sortableIndex),
+  );
+  const next = Math.max(...indexes) + 1;
+  if (!Number.isSafeInteger(next)) {
+    throw new AccountCreationError('invalid-account-sort-order');
+  }
+  return next;
+}
+
+function requireSortableIndex(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new AccountCreationError('invalid-account-sort-order');
+  }
+  return Number(value);
 }
 
 function startingBalanceEntity(

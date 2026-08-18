@@ -8,6 +8,7 @@ import express from 'express';
 import request from 'supertest';
 
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
+import { projectStockEntity } from './stock-budget-projection';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
 const principal: AuthenticatedPrincipal = {
@@ -286,5 +287,123 @@ describe('stock budget gateway', () => {
       changeWriter,
     ).expect(200);
     expect(changeWriter.commitChangeSet).not.toHaveBeenCalled();
+  });
+
+  test('commits the captured account and bound transfer-payee rename', async () => {
+    const baseSnapshot = createSnapshot();
+    const account = {
+      entityKind: 'be_accounts' as const,
+      entityId: 'account-3',
+      isTombstone: false,
+      payload: {
+        budgetVersionId: 'version-1',
+        creationCommandKey: 'create-3',
+        accountName: 'Account Capture 3',
+        accountType: 'Checking',
+        note: null,
+        lastPaymentPayeeId: null,
+        isClosed: false,
+        sortableIndex: 2,
+        isFavorite: false,
+        sortableFavoriteIndex: 0,
+        onBudget: true,
+        lastReconciledAt: null,
+        debtStartDate: null,
+        debtOriginalBalance: null,
+        debtInterestRates: null,
+        debtMinimumPayments: null,
+        debtAssetValues: null,
+        debtEscrowAmounts: null,
+        debtMigratedFromAccountId: null,
+      },
+    };
+    const payee = {
+      entityKind: 'be_payees' as const,
+      entityId: 'payee-3',
+      isTombstone: false,
+      payload: {
+        budgetVersionId: 'version-1',
+        accountId: 'account-3',
+        enabled: true,
+        autoFillSubCategoryId: null,
+        autoFillUserDefinedSubCategoryId: null,
+        autoFillMemo: null,
+        autoFillAmount: 0,
+        autoFillSubCategoryEnabled: true,
+        autoFillMemoEnabled: false,
+        autoFillAmountEnabled: false,
+        renameOnImportEnabled: true,
+        name: 'Transfer : Account Capture 3',
+        internalName: null,
+      },
+    };
+    const snapshot = {
+      ...baseSnapshot,
+      serverKnowledge: 36,
+      entities: [...baseSnapshot.entities, account, payee],
+    };
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      commitChangeSet: vi.fn().mockImplementation(input =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 37,
+          endingDeviceKnowledge: 2,
+          response: input.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      planReader,
+      'delta',
+      {
+        starting_device_knowledge: 0,
+        ending_device_knowledge: 2,
+        device_knowledge_of_server: 36,
+        changed_entities: {
+          be_accounts: [
+            {
+              ...projectStockEntity(account),
+              account_name: 'Account Renamed 3',
+            },
+          ],
+          be_payees: [
+            {
+              ...projectStockEntity(payee),
+              name: 'Transfer : Account Renamed 3',
+            },
+          ],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 37,
+      server_knowledge_of_device: 2,
+    });
+    expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        changes: [
+          expect.objectContaining({
+            entityKind: 'be_accounts',
+            entityId: 'account-3',
+            payload: expect.objectContaining({
+              accountName: 'Account Renamed 3',
+            }),
+          }),
+          expect.objectContaining({
+            entityKind: 'be_payees',
+            entityId: 'payee-3',
+            payload: expect.objectContaining({
+              name: 'Transfer : Account Renamed 3',
+            }),
+          }),
+        ],
+      }),
+    );
   });
 });

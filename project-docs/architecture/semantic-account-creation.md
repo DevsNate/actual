@@ -1,8 +1,9 @@
 # Semantic account creation
 
 This record translates the admitted `ACCOUNT-002` unlinked Checking-account
-capture into one canonical application command. It does not generalize account
-types, linked accounts, account close/reopen, or arbitrary transaction writes.
+capture and `ACCOUNT-003` rename capture into canonical application commands.
+It does not generalize account types, linked accounts, account close/reopen, or
+arbitrary transaction writes.
 
 ## Evidence boundary
 
@@ -34,6 +35,21 @@ receipt owns exact replay. Reusing a key with another payload fails, and an
 later requests use distinct command keys and identities. A browser-root
 bootstrap with three controlled accounts proves one independent group per
 request and admits repeated unlinked Checking creation.
+
+## Rename command
+
+Stock rename uses schema-44 `syncBudgetData` rather than the dedicated creation
+route. One delta contains exactly one complete account row and its complete
+bound transfer-payee row. Only `account_name` and the payee's exact
+`Transfer : {account name}` value differ. Both identities, the account order,
+balance-bearing transactions, and every unrelated field remain stable. The
+acknowledgement advances device knowledge by two and server knowledge once but
+does not echo either source row.
+
+The parser therefore admits only that exact two-row shape against current
+canonical state. Missing, extra, partial, tombstoned, mismatched, or concurrently
+edited rows fail closed. The shared PostgreSQL command commits both names
+atomically and exact replay remains receipt-owned.
 
 ## Calculation projection
 
@@ -68,8 +84,10 @@ entities itself.
 
 ## Verification
 
-Focused request, command, gateway, projection, and calculation tests pass.
+Focused request, command, rename-parser, gateway, projection, and calculation
+tests pass.
 Disposable PostgreSQL integration proves repeated direct-import requests,
 three canonical entities per request, independent account calculations,
 additive budget calculations, exact semantic replay without duplicates, and
-stock bootstrap readback.
+stock bootstrap readback. It also proves complete-row account/payee rename,
+knowledge acknowledgement, and renamed bootstrap readback.
