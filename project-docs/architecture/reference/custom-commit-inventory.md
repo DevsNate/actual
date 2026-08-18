@@ -20,17 +20,17 @@ Classification is provisional until the complete file/dependency audit is finish
 | 12 | `3cb1dde` | Add semantic plan client bridge | Reviewed | ACTUAL-ADAPTER | Adds Actual `loot-core` worker methods, retained-token HTTP transport, durable semantic device identity, and desktop-client wrapper functions. Its purpose is to let inherited Actual client architecture invoke the semantic API without exposing credentials to React. |
 | 13 | `29643bf` | Add canonical plan client state | Reviewed | ACTUAL-ADAPTER / TRANSITIONAL | Adds the semantic plan Redux slice and wires it into the inherited desktop-client store. The state concepts may inform a final UI, but this implementation is explicitly bound to Actual's Redux/worker architecture. |
 | 14 | `d03f283` | Share plan command application services | Reviewed | MIXED: CANONICAL-CANDIDATE + YNAB-COMPATIBILITY | Extracts plan creation and lifecycle command construction from HTTP handlers into reusable services so native web and stock routes can share orchestration. This is a strong application-service boundary, but plan creation still calls the stock PLAN-001 bootstrap builder and therefore is not representation-neutral yet. |
-| 15 | `cb53504` | Add stock catalog compatibility gateway | Pending | — | — |
-| 16 | `6dd70a7` | Add stock budget source projection | Pending | — | — |
-| 17 | `2da22b9` | Add fresh budget calculation projection | Pending | — | — |
-| 18 | `15deeb2` | Add stock budget bootstrap gateway | Pending | — | — |
-| 19 | `a1867c1` | Ingest stock opened budget delta | Pending | — | — |
-| 20 | `67b806c` | Add evidence-backed checking account creation | Pending | — | — |
-| 21 | `04d4adc` | Add stock account creation adapter | Pending | — | — |
-| 22 | `6b26a5c` | Add captured multi-account calculations | Pending | — | — |
-| 23 | `59e60f2` | Add captured account rename delta | Pending | — | — |
-| 24 | `d6d21b5` | Add stock derived knowledge and pristine account delete | Pending | — | — |
-| 25 | `3e45c9b` | Clarify stock derivation knowledge revisions | Pending | — | — |
+| 15 | `cb53504` | Add stock catalog compatibility gateway | Reviewed | YNAB-COMPATIBILITY | Mounts the first stock-shaped gateway, implements admitted `syncCatalogData` schema/version/header/envelope behavior, and projects canonical memberships as `ce_user_budgets`. Also adds membership metadata needed by the projection. Unsupported writes/operations fail closed. |
+| 16 | `6dd70a7` | Add stock budget source projection | Reviewed | MIXED: CANONICAL-CANDIDATE + YNAB-COMPATIBILITY | Extends the authorized plan reader to resolve by budget-version identity, which is a reusable storage/read concept. Adds a pure stock projector that converts canonical snapshots into `be_*` wire tables, snake-cases payloads, preserves unknown fields, and rejects ambiguous/colliding projections. |
+| 17 | `2da22b9` | Add fresh budget calculation projection | Reviewed | YNAB-COMPATIBILITY | Adds evidence-derived pristine-plan calculated rows with captured zero/null defaults and deterministic `mb/→mbc/` and `mcb/→mcbc/` identities. Explicitly fails closed when non-pristine state would require inferred formulas. |
+| 18 | `15deeb2` | Add stock budget bootstrap gateway | Reviewed | YNAB-COMPATIBILITY | Routes admitted stock `syncBudgetData` bootstrap/backfill schema 44 surfaces, corrects additional PLAN-001 source fields, and composes source plus calculated projectors. Writes/deltas and unauthorized or unsupported states still fail closed at this point. |
+| 19 | `a1867c1` | Ingest stock opened budget delta | Reviewed | YNAB-COMPATIBILITY over CANONICAL write primitive | Adds the first admitted stock budget write: exact `opened_budget` plus prior-month delta, knowledge validation, atomic `PlanChangeWriter` commit, exact replay, and empty-delta response. The change-writer primitive is reusable; the parser/response shape is stock-specific. |
+| 20 | `67b806c` | Add evidence-backed checking account creation | Reviewed | MIXED: CANONICAL-CONCEPT + YNAB-COMPATIBILITY + ACTUAL-ADAPTER | Generalizes plan change-set contracts and introduces a shared checking-account application service plus semantic HTTP route. The atomic semantic—account + transfer-payee relation + opening balance—is a durable concept, but the service directly constructs `be_accounts`, `be_payees`, and `be_transactions` with captured stock defaults. |
+| 21 | `04d4adc` | Add stock account creation adapter | Reviewed | YNAB-COMPATIBILITY | Mounts the captured Token-authenticated direct-import account endpoint over the shared account service. Reuses the exact checking-account body parser and returns the stock acknowledgement while leaving persistence/orchestration in the shared service. |
+| 22 | `6b26a5c` | Add captured multi-account calculations | Reviewed | YNAB-COMPATIBILITY | Extends account creation/calculation support from one to multiple admitted Checking accounts. Projects captured account/monthly-account calculations and aggregates Starting Balance Immediate Income; still explicitly assumes exactly one live Starting Balance transaction per Checking account. |
+| 23 | `59e60f2` | Add captured account rename delta | Reviewed | YNAB-COMPATIBILITY with application-service correction | Refines captured account/payee defaults and sortable indexing, then adds a fail-closed parser for the exact complete `be_accounts` + bound transfer `be_payees` rename delta. Unrelated/concurrent field changes are rejected. |
+| 24 | `d6d21b5` | Add stock derived knowledge and pristine account delete | Reviewed | MIXED: CANONICAL-CONCEPT + YNAB-COMPATIBILITY | Generalizes plan change commands with explicit `serverKnowledgeAdvance: 1 | 2`, then admits pristine account delete with source tombstones and derived calculation projections. The bounded knowledge-advance mechanism is a reusable sync concept; delete parsing/calculations are stock behavior. |
+| 25 | `3e45c9b` | Clarify stock derivation knowledge revisions | Reviewed | CANONICAL-CONCEPT / evidence clarification | Documentation-only correction: `+2` means an operation triggers a second server-derivation revision, not necessarily that calculated rows are nonempty. ACCOUNT-005 reopen demonstrates a derivation revision whose terminal calculated delta may be empty. |
 
 ## Findings from commits 1–6
 
@@ -43,3 +43,24 @@ That chronology matters for later promotion analysis: the storage/ledger concept
 The second sequence first makes the semantic stack reproducible locally, then completes catalog command persistence before admitting the first substantial YNAB-derived domain payload: PLAN-001 bootstrap. Plan creation/lifecycle/read functionality is then exposed to the retained Actual client through worker/HTTP/Redux adapters.
 
 Commit 14 is architecturally important because it removes semantic command construction from transport handlers and introduces shared application services. However, `createPlanCreationService` still invokes `buildStockPlanBootstrap`, so the application-service boundary is cleaner than the representation boundary. A future final product should preserve the shared-command principle without assuming the current `be_*` bootstrap model is the canonical internal domain model.
+
+## Findings from commits 15–19
+
+This sequence establishes the explicit YNAB compatibility layer. Catalog projection, budget source projection, pristine calculations, bootstrap/backfill, and the first admitted stock write all live at a stock-shaped boundary. The reusable pieces underneath are the authorized reader and atomic plan change writer; schema/envelope parsing, `ce_*`/`be_*` serialization, exact table surfaces, and calculation wire rows are compatibility responsibilities.
+
+## Findings from commits 20–25
+
+Account work repeats the intended architecture: a shared service performs one atomic semantic operation, while stock HTTP/sync adapters translate captured contracts around it. The current account service is not yet representation-neutral because its canonical snapshots are still stored as YNAB `be_*` entities. Multi-account calculation, rename, and pristine delete are intentionally narrow evidence-backed compatibility slices rather than general account behavior.
+
+Commit 24 introduces an especially important reusable concept: a semantic change command explicitly declares whether the operation advances only the source revision or also a second server-derivation revision. Commit 25 corrects the interpretation so the second revision is tied to a derivation pass, not to the existence of a nonempty calculated-row delta.
+
+## Chronological conclusion
+
+The fork evolved in four stages:
+
+1. **semantic foundation** — framework-independent contracts, PostgreSQL knowledge/receipt primitives, and unknown-field-preserving entity storage;
+2. **Actual integration** — feature-gated server runtime, retained authentication adapter, worker bridge, and Redux client state;
+3. **YNAB compatibility** — explicit stock gateways, wire projections, exact parsers, calculation projections, and fail-closed unsupported boundaries; and
+4. **shared semantic operations** — plan/account application services reused by native and stock transports, although some current services still construct YNAB-shaped entities internally.
+
+This history supports treating `DevsNate/actual` as a compatibility/reconstruction host while separately evaluating which semantic concepts and implementations are suitable for later promotion into a clean final product.
