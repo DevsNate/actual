@@ -238,6 +238,16 @@ integrationTest('semantic catalog runtime integration', () => {
       catalog_changes: '2',
       budget_changes: '2',
     });
+    const materialized = await request(testApp)
+      .get(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .expect(200);
+    expect(materialized.body.data).toMatchObject({
+      planId: createdPlanId,
+      name: 'Semantic Renamed Plan',
+      serverKnowledge: 2,
+    });
+    expect(materialized.body.data.entities).toHaveLength(58);
 
     await request(testApp)
       .delete(`/semantic/v1/plans/${createdPlanId}`)
@@ -294,5 +304,9 @@ integrationTest('semantic catalog runtime integration', () => {
       entity_count: '58',
       budget_knowledge: '2',
     });
+    await request(testApp)
+      .get(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .expect(404, { status: 'error', reason: 'plan-not-found' });
   });
 });

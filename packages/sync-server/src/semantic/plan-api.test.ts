@@ -3,6 +3,7 @@ import type {
   CatalogReader,
   CreatePlanCommand,
   PlanCreator,
+  PlanReader,
 } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
@@ -17,6 +18,27 @@ const principal: AuthenticatedPrincipal = {
 };
 
 describe('semantic plan API', () => {
+  test('reads only an authenticated principal plan snapshot', async () => {
+    const planCreator: PlanCreator = { createPlan: vi.fn() };
+    const planReader: PlanReader = {
+      readPlan: vi.fn().mockResolvedValue({
+        planId: 'plan-1',
+        budgetVersionId: 'version-1',
+        name: 'Plan',
+        serverKnowledge: 2,
+        currencyFormat: { iso_code: 'USD' },
+        dateFormat: { format: 'MM/DD/YYYY' },
+        entities: [],
+      }),
+    };
+    const app = createApp(planCreator, undefined, planReader);
+    await request(app)
+      .get('/semantic/v1/plans/plan-1')
+      .set('x-actual-token', 'actual-session')
+      .expect(200);
+    expect(planReader.readPlan).toHaveBeenCalledWith('principal-1', 'plan-1');
+  });
+
   test('creates the complete PLAN-001 bootstrap for the authenticated principal', async () => {
     let command: CreatePlanCommand | undefined;
     const planCreator: PlanCreator = {
@@ -99,8 +121,10 @@ describe('semantic plan API', () => {
 
 function createApp(
   planCreator: PlanCreator,
-  resolvePrincipal: (sessionToken: string) => AuthenticatedPrincipal = () =>
-    principal,
+  resolvePrincipal:
+    | ((sessionToken: string) => AuthenticatedPrincipal)
+    | undefined = () => principal,
+  planReader: PlanReader = { readPlan: vi.fn().mockResolvedValue(null) },
 ): express.Express {
   let nextId = 0;
   const catalogReader: CatalogReader = {
@@ -118,7 +142,8 @@ function createApp(
     createSemanticPlanHandlers({
       catalogReader,
       planCreator,
-      resolvePrincipal,
+      planReader,
+      resolvePrincipal: resolvePrincipal ?? (() => principal),
       allocateId: () => `id-${++nextId}`,
       now: () => new Date('2026-08-16T12:00:00.000Z'),
     }),

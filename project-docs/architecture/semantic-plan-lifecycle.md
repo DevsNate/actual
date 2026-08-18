@@ -93,7 +93,7 @@ The implementation sequence is:
 3. implement atomic create, rename, and delete domain commands
    (**implemented**);
 4. expose the native React command API (**create, rename, and delete endpoints
-   implemented; UI wiring pending**);
+   plus the authorized plan-read boundary implemented; UI wiring pending**);
 5. project the same commands through admitted YNAB-shaped endpoints; and
 6. add physical cross-client acceptance fixtures without weakening the
    canonical invariants.

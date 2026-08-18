@@ -6,6 +6,7 @@ import type {
   CatalogReader,
   CreatePlanCommand,
   PlanCreator,
+  PlanReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
@@ -15,6 +16,7 @@ import { authenticateSemanticRequest } from './catalog-api';
 export type SemanticPlanApiDependencies = {
   catalogReader: CatalogReader;
   planCreator: PlanCreator;
+  planReader: PlanReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
   allocateId(): string;
   now(): Date;
@@ -32,6 +34,42 @@ export function createSemanticPlanHandlers(
   const resolved = { ...defaults, ...dependencies };
   const handlers = express.Router();
   handlers.use(express.json({ limit: '64kb' }));
+
+  handlers.get('/plans/:planId', async (request, response) => {
+    const principal = authenticateSemanticRequest(
+      request.get('x-actual-token'),
+      response,
+      resolved,
+    );
+    if (!principal) {
+      return;
+    }
+    const planId = request.params.planId?.trim() ?? '';
+    if (!planId) {
+      response.status(400).send({
+        status: 'error',
+        reason: 'invalid-plan-read-request',
+      });
+      return;
+    }
+    try {
+      const plan = await resolved.planReader.readPlan(principal.id, planId);
+      if (!plan) {
+        response.status(404).send({
+          status: 'error',
+          reason: 'plan-not-found',
+        });
+        return;
+      }
+      response.status(200).send({ status: 'ok', data: plan });
+    } catch (error) {
+      console.error('Semantic plan read failed', error);
+      response.status(500).send({
+        status: 'error',
+        reason: 'semantic-plan-read-unavailable',
+      });
+    }
+  });
 
   handlers.post('/plans', async (request, response) => {
     const principal = authenticateSemanticRequest(

@@ -39,3 +39,20 @@ export type CreatePlanResult = {
 export type PlanCreator = {
   createPlan(command: CreatePlanCommand): Promise<CreatePlanResult>;
 };
+
+export type PlanSnapshot = {
+  planId: string;
+  budgetVersionId: string;
+  name: string;
+  serverKnowledge: number;
+  currencyFormat: Readonly<Record<string, unknown>>;
+  dateFormat: Readonly<Record<string, unknown>>;
+  entities: readonly PlanEntity[];
+};
+
+export type PlanReader = {
+  readPlan(
+    principalId: PrincipalId,
+    planId: string,
+  ): Promise<PlanSnapshot | null>;
+};
