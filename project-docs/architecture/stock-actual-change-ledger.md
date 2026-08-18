@@ -453,8 +453,9 @@ Copy this block for a new architectural delta:
 - **Location:** `packages/semantic-core/src/plan.ts` and
   `packages/semantic-postgres/src/store.ts`.
 - **Observed stock behavior:** Source-only edits such as account/payee rename
-  advance budget server knowledge once. Mutations that also change calculated
-  rows advance twice. The same distinction is demonstrated by ACCOUNT-004,
+  advance budget server knowledge once. Operations that trigger a server
+  derivation pass advance twice. The derived delta may be empty, as ACCOUNT-005
+  reopen demonstrates. The same distinction appears in ACCOUNT-004,
   split create/category/delete, category create/delete, target status/delete,
   transfer changes, and temporary-transaction deletion.
 - **Fork behavior:** Every canonical plan change command explicitly declares a

@@ -24,10 +24,11 @@ response receipt in one database transaction. An identical retry replays the
 receipt. A different payload using the same key fails closed.
 
 The command explicitly declares whether the admitted operation advances one
-source revision or a second server-derived-calculation revision. The current
-boundary accepts only `1` or `2`; callers cannot infer arbitrary knowledge
-jumps. This records stock's demonstrated source-only versus source-plus-derived
-protocol while calculated rows remain a separate projection module.
+source revision or also triggers a second server-derivation revision. The
+current boundary accepts only `1` or `2`; callers cannot infer arbitrary
+knowledge jumps. A derivation pass may advance knowledge even when its terminal
+calculation delta is empty, as demonstrated by account reopen. Calculated rows
+remain a separate projection module.
 
 `createPlan` commits the plan, owner membership, catalog change, complete
 canonical budget bootstrap, both knowledge ledgers, materialized entity
