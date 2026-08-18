@@ -10,6 +10,8 @@ import { semanticCatalogSchemaVersionMigration } from '@actual-app/semantic-post
 import { semanticFoundationMigration } from '@actual-app/semantic-postgres/foundation-migration';
 import { Pool } from 'pg';
 
+import { createSemanticAccountHandlers } from './account-api';
+import { createAccountCreationService } from './account-creation-service';
 import { createSemanticCatalogHandlers } from './catalog-api';
 import { createSemanticPlanHandlers } from './plan-api';
 import { createPlanCreationService } from './plan-creation-service';
@@ -41,6 +43,10 @@ export async function createPostgresSemanticCatalogHandlers(
     catalogReader: store,
     planCreator: store,
   });
+  const accountCreationService = createAccountCreationService({
+    planReader,
+    changeWriter: store,
+  });
   const planLifecycleService = createPlanLifecycleService({
     planLifecycleWriter: lifecycleStore,
   });
@@ -52,6 +58,12 @@ export async function createPostgresSemanticCatalogHandlers(
     createSemanticPlanHandlers({
       planCreationService,
       planReader,
+      resolvePrincipal: resolveActualPrincipal,
+    }),
+  );
+  handlers.use(
+    createSemanticAccountHandlers({
+      accountCreationService,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );

@@ -16,6 +16,7 @@ integrationTest('semantic catalog runtime integration', () => {
   let createdPlanId = '';
   let createdVersionId = '';
   let createdCurrentMonth = '';
+  let createdAccountId = '';
   let closeRuntime: (() => Promise<void>) | undefined;
   let seedPool: Pool | undefined;
 
@@ -383,6 +384,135 @@ integrationTest('semantic catalog runtime integration', () => {
     });
   });
 
+  test('creates and replays the admitted unlinked Checking account group', async () => {
+    const body = {
+      name: 'Account Capture 1',
+      type: 'Checking',
+      balance: 123450,
+      starting_balance_date: '2026-08-17',
+      debt_interest_rates: '{"2026-08-01":0}',
+      debt_minimum_payments: '{"2026-08-01":0}',
+      debt_escrow_amounts: null,
+      paired_sub_category: null,
+      is_migrating_to_debt_account: false,
+    };
+    const createAccount = () =>
+      request(testApp)
+        .post(`/semantic/v1/plans/${createdPlanId}/accounts`)
+        .set('x-actual-token', token)
+        .set('x-semantic-device-id', 'semantic-web-device')
+        .set('idempotency-key', 'semantic-account-create')
+        .send(body);
+
+    const first = await createAccount().expect(201);
+    expect(first.body).toMatchObject({
+      status: 'ok',
+      data: {
+        account_name: 'Account Capture 1',
+        account_type: 'Checking',
+        balance_millicents: 123450,
+        budget_id: createdPlanId,
+        budget_server_knowledge: 3,
+        replayed: false,
+      },
+    });
+    createdAccountId = first.body.data.id as string;
+    expect(createdAccountId).toMatch(/^[0-9a-f-]{36}$/u);
+
+    const replay = await createAccount().expect(200);
+    expect(replay.body.data).toEqual({
+      ...first.body.data,
+      replayed: true,
+    });
+
+    const counts = await seedPool!.query<{
+      entity_count: string;
+      change_sets: string;
+      receipts: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_change_sets WHERE plan_id = $1) AS change_sets,
+         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS receipts`,
+      [createdPlanId],
+    );
+    expect(counts.rows[0]).toEqual({
+      entity_count: '63',
+      change_sets: '3',
+      receipts: '3',
+    });
+
+    const stockBootstrap = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-account-bootstrap')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: createdVersionId,
+          sync_type: 'bootstrap',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 0,
+          ending_device_knowledge: 0,
+          device_knowledge_of_server: 0,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+    expect(stockBootstrap.body).toMatchObject({
+      current_server_knowledge: 3,
+      changed_entities: {
+        be_accounts: [
+          {
+            id: createdAccountId,
+            account_name: 'Account Capture 1',
+            account_type: 'Checking',
+            on_budget: true,
+            is_closed: false,
+          },
+        ],
+        be_account_calculations: [
+          {
+            id: `ac/${createdAccountId}`,
+            cleared_balance: 123450,
+            transaction_count: 1,
+          },
+        ],
+      },
+    });
+    expect(stockBootstrap.body.changed_entities.be_transactions).toEqual([
+      expect.objectContaining({
+        entities_account_id: createdAccountId,
+        amount: 123450,
+        cash_amount: 123450,
+        credit_amount: 0,
+        date: '2026-08-17',
+        cleared: 'Cleared',
+        accepted: true,
+      }),
+    ]);
+    expect(
+      stockBootstrap.body.changed_entities.be_monthly_account_calculations,
+    ).toHaveLength(2);
+    expect(
+      stockBootstrap.body.changed_entities.be_monthly_budget_calculations,
+    ).toEqual([
+      expect.objectContaining({
+        immediate_income: 123450,
+        available_to_budget: 123450,
+      }),
+      expect.objectContaining({
+        immediate_income: 0,
+        available_to_budget: 123450,
+      }),
+    ]);
+  });
+
   test('renames both projections and tombstones only catalog membership', async () => {
     const rename = await request(testApp)
       .patch(`/semantic/v1/plans/${createdPlanId}`)
@@ -395,7 +525,7 @@ integrationTest('semantic catalog runtime integration', () => {
       budget_id: createdPlanId,
       name: 'Semantic Renamed Plan',
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 3,
+      budget_server_knowledge: 4,
       replayed: false,
     });
 
@@ -408,7 +538,7 @@ integrationTest('semantic catalog runtime integration', () => {
       .expect(200);
     expect(replay.body.data).toMatchObject({
       catalog_server_knowledge: 3,
-      budget_server_knowledge: 3,
+      budget_server_knowledge: 4,
       replayed: true,
     });
     await request(testApp)
@@ -444,7 +574,7 @@ integrationTest('semantic catalog runtime integration', () => {
       plan_name: 'Semantic Renamed Plan',
       budget_name: 'Semantic Renamed Plan',
       catalog_changes: '2',
-      budget_changes: '3',
+      budget_changes: '4',
     });
     const materialized = await request(testApp)
       .get(`/semantic/v1/plans/${createdPlanId}`)
@@ -453,9 +583,9 @@ integrationTest('semantic catalog runtime integration', () => {
     expect(materialized.body.data).toMatchObject({
       planId: createdPlanId,
       name: 'Semantic Renamed Plan',
-      serverKnowledge: 3,
+      serverKnowledge: 4,
     });
-    expect(materialized.body.data.entities).toHaveLength(60);
+    expect(materialized.body.data.entities).toHaveLength(63);
 
     await request(testApp)
       .delete(`/semantic/v1/plans/${createdPlanId}`)
@@ -509,8 +639,8 @@ integrationTest('semantic catalog runtime integration', () => {
     );
     expect(retained.rows[0]).toEqual({
       plan_tombstone: false,
-      entity_count: '60',
-      budget_knowledge: '3',
+      entity_count: '63',
+      budget_knowledge: '4',
     });
     await request(testApp)
       .get(`/semantic/v1/plans/${createdPlanId}`)

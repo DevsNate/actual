@@ -73,6 +73,7 @@ const payloadRules: Readonly<
     }
   >
 > = {
+  be_accounts: rule(['budgetVersionId', 'creationCommandKey']),
   be_budget: rule(['budgetVersionId', 'deviceKnowledge']),
   be_master_categories: rule(['budgetVersionId', 'deviceKnowledge']),
   be_monthly_budgets: rule([
@@ -101,6 +102,12 @@ const payloadRules: Readonly<
       masterCategoryId: 'entities_master_category_id',
     },
   ),
+  be_transactions: rule(['budgetVersionId'], {
+    accountId: 'entities_account_id',
+    payeeId: 'entities_payee_id',
+    subCategoryId: 'entities_subcategory_id',
+    scheduledTransactionId: 'entities_scheduled_transaction_id',
+  }),
 };
 
 function projectPayload(

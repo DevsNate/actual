@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 
 import type {
   BudgetVersionPlanReader,
-  PlanEntity,
+  PlanChangeSetCommand,
+  PlanChangeWriter,
   PlanSnapshot,
 } from '@actual-app/semantic-core';
 
@@ -23,28 +24,7 @@ import type {
   StockOperationResponse,
 } from './stock-operation';
 
-type StockBudgetChangeSet = {
-  changeSetId: string;
-  planId: string;
-  originDeviceId: string;
-  startingDeviceKnowledge: number;
-  endingDeviceKnowledge: number;
-  expectedServerKnowledge: number;
-  schemaVersion: number;
-  idempotencyKey: string;
-  payloadDigest: string;
-  changes: readonly PlanEntity[];
-  response: Readonly<Record<string, unknown>>;
-};
-
-export type StockBudgetChangeWriter = {
-  commitChangeSet(input: StockBudgetChangeSet): Promise<{
-    replayed: boolean;
-    serverKnowledge: number;
-    endingDeviceKnowledge: number;
-    response: Readonly<Record<string, unknown>>;
-  }>;
-};
+export type StockBudgetChangeWriter = PlanChangeWriter;
 
 type StockBudgetSyncDependencies = {
   planReader: BudgetVersionPlanReader;
@@ -204,7 +184,7 @@ function parseOpenedBudgetDelta(
   changedEntities: Record<string, unknown>,
   snapshot: PlanSnapshot,
   principalId: string,
-): readonly PlanEntity[] | null {
+): PlanChangeSetCommand['changes'] | null {
   if (
     !hasExactKeys(changedEntities, [
       'be_monthly_budgets',

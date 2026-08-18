@@ -1,6 +1,6 @@
 import type { PlanSnapshot } from '@actual-app/semantic-core';
 
-import { projectStockFreshPlanCalculations } from './stock-budget-calculations';
+import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
 import { projectStockBudgetSource } from './stock-budget-projection';
 
 const bootstrapArrayTables = [
@@ -74,7 +74,7 @@ export function buildStockBudgetBootstrap(
   if (!source.firstMonth || !source.lastMonth) {
     throw new Error('Stock budget bootstrap requires a current month');
   }
-  const calculations = projectStockFreshPlanCalculations(snapshot);
+  const calculations = projectStockBudgetCalculations(snapshot);
   const allowedSourceTables = new Set<string>([
     'be_budget',
     ...bootstrapArrayTables,

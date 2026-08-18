@@ -3,7 +3,9 @@ import type {
   CatalogCommandResult,
   CreatePlanCommand,
   CreatePlanResult,
-  PlanId,
+  PlanChangeSetCommand,
+  PlanChangeSetResult,
+  PlanEntity,
 } from '@actual-app/semantic-core';
 
 export type {
@@ -11,38 +13,18 @@ export type {
   CatalogCommandResult,
   CreatePlanCommand,
   CreatePlanResult,
+  PlanChangeSetCommand,
+  PlanChangeSetResult,
 };
 
-export type EntityChangeInput = {
-  entityKind: string;
-  entityId: string;
-  isTombstone: boolean;
-  payload: Readonly<Record<string, unknown>>;
-};
+export type CommitChangeSetInput = PlanChangeSetCommand;
 
-export type CommitChangeSetInput = {
-  changeSetId: string;
-  planId: PlanId;
-  originDeviceId: string;
-  startingDeviceKnowledge: number;
-  endingDeviceKnowledge: number;
-  expectedServerKnowledge: number;
-  schemaVersion: number;
-  idempotencyKey: string;
-  payloadDigest: string;
-  changes: readonly EntityChangeInput[];
-  response: Readonly<Record<string, unknown>>;
-};
+export type CommitChangeSetResult = PlanChangeSetResult;
 
-export type CommitChangeSetResult = {
-  replayed: boolean;
-  serverKnowledge: number;
-  endingDeviceKnowledge: number;
-  response: Readonly<Record<string, unknown>>;
-};
+export type EntityChangeInput = PlanEntity;
 
 export type SeedPlanInput = {
-  planId: PlanId;
+  planId: string;
   budgetVersionId: string;
   membershipId: string;
   principalId: string;

@@ -7,6 +7,31 @@ export type PlanEntity = {
   payload: Readonly<Record<string, unknown>>;
 };
 
+export type PlanChangeSetCommand = {
+  changeSetId: string;
+  planId: string;
+  originDeviceId: string;
+  startingDeviceKnowledge: number;
+  endingDeviceKnowledge: number;
+  expectedServerKnowledge: number;
+  schemaVersion: number;
+  idempotencyKey: string;
+  payloadDigest: string;
+  changes: readonly PlanEntity[];
+  response: Readonly<Record<string, unknown>>;
+};
+
+export type PlanChangeSetResult = {
+  replayed: boolean;
+  serverKnowledge: number;
+  endingDeviceKnowledge: number;
+  response: Readonly<Record<string, unknown>>;
+};
+
+export type PlanChangeWriter = {
+  commitChangeSet(command: PlanChangeSetCommand): Promise<PlanChangeSetResult>;
+};
+
 export type CreatePlanCommand = {
   catalogChangeSetId: string;
   budgetChangeSetId: string;

@@ -210,6 +210,64 @@ describe('stock budget source projection', () => {
     });
   });
 
+  test('projects account and transaction relationships without canonical metadata', () => {
+    const result = projectStockBudgetSource({
+      planId: 'plan-1',
+      budgetVersionId: 'version-1',
+      name: 'Plan',
+      serverKnowledge: 3,
+      currencyFormat: {},
+      dateFormat: {},
+      entities: [
+        {
+          entityKind: 'be_budget',
+          entityId: 'version-1',
+          isTombstone: false,
+          payload: { budgetId: 'plan-1' },
+        },
+        {
+          entityKind: 'be_accounts',
+          entityId: 'account-1',
+          isTombstone: false,
+          payload: {
+            budgetVersionId: 'version-1',
+            creationCommandKey: 'private-command-key',
+            accountName: 'Account Capture 1',
+          },
+        },
+        {
+          entityKind: 'be_transactions',
+          entityId: 'transaction-1',
+          isTombstone: false,
+          payload: {
+            budgetVersionId: 'version-1',
+            accountId: 'account-1',
+            payeeId: 'payee-1',
+            subCategoryId: 'category-1',
+            scheduledTransactionId: null,
+          },
+        },
+      ],
+    });
+    expect(result.changedEntities.be_accounts).toEqual([
+      {
+        id: 'account-1',
+        is_tombstone: false,
+        account_name: 'Account Capture 1',
+      },
+    ]);
+    expect(result.changedEntities.be_transactions).toEqual([
+      {
+        id: 'transaction-1',
+        is_tombstone: false,
+        entities_account_id: 'account-1',
+        entities_payee_id: 'payee-1',
+        entities_subcategory_id: 'category-1',
+        entities_scheduled_transaction_id: null,
+      },
+    ]);
+  });
+
   test('fails closed on ambiguous or malformed entity projections', () => {
     expect(() =>
       projectStockBudgetSource({

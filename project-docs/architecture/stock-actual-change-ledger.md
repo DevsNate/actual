@@ -418,3 +418,28 @@ Copy this block for a new architectural delta:
 - **Status:** implemented and consumed by the first stock catalog adapter; all
   later transport slices must continue to call these services rather than
   rebuilding command orchestration.
+
+### ADD-010 — Evidence-backed Checking account creation
+
+- **Disposition:** Add.
+- **Location:** `packages/sync-server/src/semantic/account-creation-service.ts`,
+  `account-api.ts`, and the stock account source/calculation projectors.
+- **Observed stock behavior:** `ACCOUNT-002` creates one open on-budget
+  Checking account, one enabled account-bound transfer payee, one cleared
+  Starting Balance in Immediate Income, and the exact captured account,
+  monthly-account, and Ready-to-Assign calculations.
+- **Fork behavior:** One application command validates and commits the three
+  authoritative source entities atomically through the shared plan-change
+  writer. A retained Actual-session route is a thin adapter. Stock source and
+  calculated projections remain separate modules.
+- **Evidence:** `analysis/evidence/stock-captures/account-002/`. The dedicated
+  endpoint and terminal bootstrap are admitted. The intermediate worker delta
+  remains pending browser-level page+`csw.js` recapture and is not inferred.
+- **Migration/rollback:** The command supports only the first unlinked Checking
+  account with a nonnegative starting balance. Other types, linked accounts,
+  additional accounts, and lifecycle mutations fail closed.
+- **Verification:** Focused route/service/projection tests plus disposable
+  PostgreSQL atomicity, receipt replay, entity-count, and stock-bootstrap
+  integration.
+- **Status:** implemented for the canonical command and semantic adapter;
+  YNAB direct-import transport adapter deferred pending worker/auth evidence.

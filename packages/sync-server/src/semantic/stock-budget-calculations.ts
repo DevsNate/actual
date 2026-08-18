@@ -26,6 +26,8 @@ export function projectStockFreshPlanCalculations(
   const monthlyBudgets = entitiesOfKind(
     snapshot.entities,
     'be_monthly_budgets',
+  ).filter(
+    entity => entity.payload.bootstrapRole !== 'opened-budget-prior-month',
   );
   const monthlyCategoryBudgets = entitiesOfKind(
     snapshot.entities,

@@ -1,20 +1,23 @@
 import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 
 import { projectStockFreshPlanCalculations } from './stock-budget-calculations';
+import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
 
 function createSnapshot() {
   let sequence = 0;
-  const entities = buildStockPlanBootstrap({
-    planId: 'plan-1',
-    budgetVersionId: 'version-1',
-    principalId: 'user-1',
-    name: 'Plan',
-    currencyFormat: {},
-    dateFormat: {},
-    createdOn: '2026-08-17',
-    createdAtMilliseconds: Date.UTC(2026, 7, 17),
-    allocateId: label => `${label}:${sequence++}`,
-  });
+  const entities = [
+    ...buildStockPlanBootstrap({
+      planId: 'plan-1',
+      budgetVersionId: 'version-1',
+      principalId: 'user-1',
+      name: 'Plan',
+      currencyFormat: {},
+      dateFormat: {},
+      createdOn: '2026-08-17',
+      createdAtMilliseconds: Date.UTC(2026, 7, 17),
+      allocateId: label => `${label}:${sequence++}`,
+    }),
+  ];
   return {
     planId: 'plan-1',
     budgetVersionId: 'version-1',
@@ -91,5 +94,95 @@ describe('stock fresh-plan calculations', () => {
         ],
       }),
     ).toThrow('do not support be_transactions');
+  });
+});
+
+describe('stock checking-account calculations', () => {
+  test('projects the admitted starting-balance and rolling-balance rows', () => {
+    const snapshot = createSnapshot();
+    const startingPayee = snapshot.entities.find(
+      entity => entity.payload.internalName === 'StartingBalancePayee',
+    )!;
+    const immediateIncome = snapshot.entities.find(
+      entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
+    )!;
+    snapshot.entities.push(
+      {
+        entityKind: 'be_accounts',
+        entityId: 'account-1',
+        isTombstone: false,
+        payload: {
+          accountName: 'Account Capture 1',
+          accountType: 'Checking',
+          onBudget: true,
+          isClosed: false,
+        },
+      },
+      {
+        entityKind: 'be_payees',
+        entityId: 'transfer-payee-1',
+        isTombstone: false,
+        payload: {
+          accountId: 'account-1',
+          name: 'Transfer : Account Capture 1',
+          enabled: true,
+          autoFillSubCategoryEnabled: true,
+          autoFillAmountEnabled: false,
+          autoFillMemoEnabled: false,
+          renameOnImportEnabled: false,
+        },
+      },
+      {
+        entityKind: 'be_transactions',
+        entityId: 'starting-balance-1',
+        isTombstone: false,
+        payload: {
+          accountId: 'account-1',
+          payeeId: startingPayee.entityId,
+          subCategoryId: immediateIncome.entityId,
+          date: '2026-08-17',
+          amount: 123450,
+          cashAmount: 123450,
+          creditAmount: 0,
+          memo: null,
+          cleared: 'Cleared',
+          accepted: true,
+          transferAccountId: null,
+          transferTransactionId: null,
+          transferSubtransactionId: null,
+        },
+      },
+    );
+
+    const result = projectStockCheckingAccountCalculations(snapshot);
+    expect(result.be_account_calculations).toEqual([
+      expect.objectContaining({
+        id: 'ac/account-1',
+        cleared_balance: 123450,
+        uncleared_balance: 0,
+        transaction_count: 1,
+      }),
+    ]);
+    expect(result.be_monthly_account_calculations).toHaveLength(2);
+    expect(result.be_monthly_account_calculations[0]).toMatchObject({
+      cleared_balance: 123450,
+      rolling_balance: 123450,
+      transaction_count: 1,
+    });
+    expect(result.be_monthly_account_calculations[1]).toMatchObject({
+      cleared_balance: 0,
+      rolling_balance: 123450,
+      transaction_count: 0,
+    });
+    expect(result.be_monthly_budget_calculations).toEqual([
+      expect.objectContaining({
+        immediate_income: 123450,
+        available_to_budget: 123450,
+      }),
+      expect.objectContaining({
+        immediate_income: 0,
+        available_to_budget: 123450,
+      }),
+    ]);
   });
 });
