@@ -276,8 +276,10 @@ evidence-backed plan creation`.
   stock budget projector converts the 58 admitted PLAN-001 source entities to
   their complete `be_*` wire tables without losing unknown fields. Projection
   rejects malformed entity kinds and identity/key collisions. Calculated rows
-  are deliberately excluded until their captured schemas and derivations are
-  admitted; consequently `syncBudgetData` is not mounted yet.
+  are produced by a separate BUDGET-001 projector only for pristine plans: it
+  emits the exact captured zero/null bootstrap defaults and deterministic
+  `mbc/` and `mcbc/` identities. Any state requiring nonzero formulas fails
+  closed; consequently `syncBudgetData` is not mounted yet.
 - **Verification:** Source projection fixtures, strict TypeScript checks,
   repository lint, production sync-server build, and disposable PostgreSQL 17
   authorization/readback integration.
