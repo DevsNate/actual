@@ -250,7 +250,10 @@ export class PostgresSemanticStore {
     const result = await this.pool.query<CatalogRow>(
       `SELECT COALESCE(k.server_knowledge, 0) AS catalog_server_knowledge,
               m.membership_id, m.plan_id, p.budget_version_id,
-              m.principal_id, p.name, m.permissions,
+              m.principal_id,
+              CASE WHEN m.is_tombstone OR p.is_tombstone
+                   THEN 'Unknown' ELSE p.name END AS name,
+              m.permissions,
               CASE WHEN m.membership_id IS NULL THEN NULL
                    ELSE (m.is_tombstone OR p.is_tombstone)
               END AS is_tombstone

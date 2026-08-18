@@ -1,5 +1,6 @@
 import {
   migrateSemanticDatabase,
+  PostgresPlanLifecycleStore,
   PostgresSemanticStore,
 } from '@actual-app/semantic-postgres';
 import { semanticCanonicalPlanMigration } from '@actual-app/semantic-postgres/canonical-plan-migration';
@@ -10,6 +11,7 @@ import { Pool } from 'pg';
 
 import { createSemanticCatalogHandlers } from './catalog-api';
 import { createSemanticPlanHandlers } from './plan-api';
+import { createSemanticPlanLifecycleHandlers } from './plan-lifecycle-api';
 import { resolveActualPrincipal } from './session-principal-adapter';
 
 export async function createPostgresSemanticCatalogHandlers(
@@ -29,6 +31,7 @@ export async function createPostgresSemanticCatalogHandlers(
   }
 
   const store = new PostgresSemanticStore(pool);
+  const lifecycleStore = new PostgresPlanLifecycleStore(pool);
   const handlers = createSemanticCatalogHandlers({
     catalogReader: store,
     resolvePrincipal: resolveActualPrincipal,
@@ -37,6 +40,12 @@ export async function createPostgresSemanticCatalogHandlers(
     createSemanticPlanHandlers({
       catalogReader: store,
       planCreator: store,
+      resolvePrincipal: resolveActualPrincipal,
+    }),
+  );
+  handlers.use(
+    createSemanticPlanLifecycleHandlers({
+      planLifecycleWriter: lifecycleStore,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );

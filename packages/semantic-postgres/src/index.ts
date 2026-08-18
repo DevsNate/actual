@@ -2,6 +2,7 @@ export { SemanticStoreError } from './errors';
 export { migrateSemanticDatabase } from './migrate';
 export type { SemanticMigration } from './migrate';
 export { PostgresSemanticStore } from './store';
+export { PostgresPlanLifecycleStore } from './plan-lifecycle-store';
 export type {
   CatalogCommand,
   CatalogCommandResult,

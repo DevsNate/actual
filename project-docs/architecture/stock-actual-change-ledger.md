@@ -285,8 +285,13 @@ evidence-backed plan creation`.
   row. See `semantic-catalog-api.md`.
 - **Commit/PR:** `[AI] Mount semantic catalog API`; create is included in `[AI]
 Add evidence-backed plan creation`.
-- **Status:** implemented for catalog reads and plan creation; rename, delete,
-  activation/materialization UI, and stock compatibility projection remain
+- **Lifecycle extension:** `PostgresPlanLifecycleStore` and the thin lifecycle
+  HTTP router implement evidence-backed rename and delete without adding those
+  policies to the general command store. Rename advances catalog and budget
+  knowledge atomically. Delete advances only catalog knowledge, emits the
+  complete `Unknown` membership tombstone, and retains the plan/entity cache.
+- **Status:** implemented for catalog reads and plan create/rename/delete;
+  activation/materialization UI and stock compatibility projection remain
   pending.
 
 ### ADD-005 — Compatibility fixture suite

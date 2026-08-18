@@ -45,7 +45,7 @@ export function createSemanticCatalogHandlers(
 export function authenticateSemanticRequest(
   sessionToken: string | undefined,
   response: express.Response,
-  dependencies: SemanticCatalogApiDependencies,
+  dependencies: Pick<SemanticCatalogApiDependencies, 'resolvePrincipal'>,
 ): AuthenticatedPrincipal | null {
   try {
     return dependencies.resolvePrincipal(sessionToken ?? '');

@@ -90,10 +90,10 @@ The implementation sequence is:
    (**implemented**);
 2. add canonical plan metadata and an unknown-field-preserving entity store
    (**implemented with the admitted PLAN-001 bootstrap**);
-3. implement atomic create, rename, and delete domain commands (**create
-   implemented; rename and delete pending**);
-4. expose the native React command API (**create endpoint implemented; UI
-   wiring pending**);
+3. implement atomic create, rename, and delete domain commands
+   (**implemented**);
+4. expose the native React command API (**create, rename, and delete endpoints
+   implemented; UI wiring pending**);
 5. project the same commands through admitted YNAB-shaped endpoints; and
 6. add physical cross-client acceptance fixtures without weakening the
    canonical invariants.

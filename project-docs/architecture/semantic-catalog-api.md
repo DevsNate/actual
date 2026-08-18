@@ -50,11 +50,26 @@ Creation stores the authenticated owner's membership and the evidence-backed
 PLAN-001 bootstrap atomically. An identical retry returns the original plan
 and budget-version identities; conflicting reuse returns `409`.
 
+```http
+PATCH /semantic/v1/plans/:planId
+DELETE /semantic/v1/plans/:planId
+X-Actual-Token: <retained Actual session token>
+X-Semantic-Device-Id: <stable caller device identity>
+Idempotency-Key: <stable request identity>
+```
+
+Rename atomically updates the complete catalog membership and `be_budget`
+projections while preserving formats and identities. Delete writes the
+captured complete `Unknown` membership tombstone but deliberately retains the
+budget row and all canonical entity snapshots; it neither selects a
+replacement nor erases client caches.
+
 ## Deliberate boundary
 
-This slice does not rename, delete, or select plans. It does not change `/sync`,
-the stock file catalog, encrypted budget files, or CRDT behavior. The routes
-are an internal web semantic API, not yet a claim about stock YNAB endpoints.
+This slice does not select or locally materialize plans. It does not change
+`/sync`, the stock file catalog, encrypted budget files, or CRDT behavior. The
+routes are an internal web semantic API, not yet a claim about stock YNAB
+endpoints.
 
 The atomic command boundary and the distinction between membership,
 materialization, and selection are defined in

@@ -13,6 +13,7 @@ integrationTest('semantic catalog runtime integration', () => {
   const userId = 'semantic-integration-user';
   const token = 'semantic-integration-session';
   const planId = 'semantic-integration-plan';
+  let createdPlanId = '';
   let closeRuntime: (() => Promise<void>) | undefined;
   let seedPool: Pool | undefined;
 
@@ -128,7 +129,7 @@ integrationTest('semantic catalog runtime integration', () => {
         replayed: false,
       },
     });
-    const createdPlanId = response.body.data.budget_id as string;
+    createdPlanId = response.body.data.budget_id as string;
     const createdVersionId = response.body.data.budget_version_id as string;
     expect(createdPlanId).toBeTruthy();
     expect(createdVersionId).toBeTruthy();
@@ -171,6 +172,127 @@ integrationTest('semantic catalog runtime integration', () => {
       catalog_server_knowledge: 2,
       budget_server_knowledge: 1,
       replayed: true,
+    });
+  });
+
+  test('renames both projections and tombstones only catalog membership', async () => {
+    const rename = await request(testApp)
+      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-rename-request')
+      .send({ name: 'Semantic Renamed Plan' })
+      .expect(200);
+    expect(rename.body.data).toMatchObject({
+      budget_id: createdPlanId,
+      name: 'Semantic Renamed Plan',
+      catalog_server_knowledge: 3,
+      budget_server_knowledge: 2,
+      replayed: false,
+    });
+
+    const replay = await request(testApp)
+      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-rename-request')
+      .send({ name: 'Semantic Renamed Plan' })
+      .expect(200);
+    expect(replay.body.data).toMatchObject({
+      catalog_server_knowledge: 3,
+      budget_server_knowledge: 2,
+      replayed: true,
+    });
+    await request(testApp)
+      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-rename-request')
+      .send({ name: 'Conflicting Name' })
+      .expect(409, {
+        status: 'error',
+        reason: 'IDEMPOTENCY_CONFLICT',
+      });
+
+    const renamed = await seedPool!.query<{
+      plan_name: string;
+      budget_name: string;
+      catalog_changes: string;
+      budget_changes: string;
+    }>(
+      `SELECT p.name AS plan_name,
+              e.payload->>'budgetName' AS budget_name,
+              (SELECT count(*) FROM semantic_catalog_change_sets
+               WHERE principal_id = $2) AS catalog_changes,
+              (SELECT count(*) FROM semantic_change_sets
+               WHERE plan_id = $1) AS budget_changes
+       FROM semantic_plans p
+       JOIN semantic_plan_entities e
+         ON e.plan_id = p.plan_id AND e.entity_kind = 'be_budget'
+       WHERE p.plan_id = $1`,
+      [createdPlanId, userId],
+    );
+    expect(renamed.rows[0]).toEqual({
+      plan_name: 'Semantic Renamed Plan',
+      budget_name: 'Semantic Renamed Plan',
+      catalog_changes: '2',
+      budget_changes: '2',
+    });
+
+    await request(testApp)
+      .delete(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-delete-request')
+      .expect(200, {
+        status: 'ok',
+        data: {
+          budget_id: createdPlanId,
+          deleted: true,
+          catalog_server_knowledge: 4,
+          budget_server_knowledge: null,
+          replayed: false,
+        },
+      });
+    const deleteReplay = await request(testApp)
+      .delete(`/semantic/v1/plans/${createdPlanId}`)
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-delete-request')
+      .expect(200);
+    expect(deleteReplay.body.data).toMatchObject({
+      catalog_server_knowledge: 4,
+      budget_server_knowledge: null,
+      replayed: true,
+    });
+
+    const catalog = await request(testApp)
+      .get('/semantic/v1/catalog')
+      .set('x-actual-token', token)
+      .expect(200);
+    expect(
+      catalog.body.data.memberships.find(
+        (membership: { planId: string }) => membership.planId === createdPlanId,
+      ),
+    ).toMatchObject({
+      name: 'Unknown',
+      isTombstone: true,
+    });
+    const retained = await seedPool!.query<{
+      plan_tombstone: boolean;
+      entity_count: string;
+      budget_knowledge: string;
+    }>(
+      `SELECT p.is_tombstone AS plan_tombstone,
+              (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+              p.server_knowledge AS budget_knowledge
+       FROM semantic_plans p WHERE p.plan_id = $1`,
+      [createdPlanId],
+    );
+    expect(retained.rows[0]).toEqual({
+      plan_tombstone: false,
+      entity_count: '58',
+      budget_knowledge: '2',
     });
   });
 });
