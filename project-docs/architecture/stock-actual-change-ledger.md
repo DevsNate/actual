@@ -279,14 +279,16 @@ evidence-backed plan creation`.
   are produced by a separate BUDGET-001 projector only for pristine plans: it
   emits the exact captured zero/null bootstrap defaults and deterministic
   `mbc/` and `mcbc/` identities. Any state requiring nonzero formulas fails
-  closed; consequently `syncBudgetData` is not mounted yet.
+  closed. The shared compatibility dispatcher now routes admitted bootstrap
+  and backfill requests without duplicating authentication.
 - **Verification:** Source projection fixtures, strict TypeScript checks,
   repository lint, production sync-server build, and disposable PostgreSQL 17
   authorization/readback integration.
 - **Status:** migrating; read-only `syncCatalogData` membership projection is
-  implemented, and budget source projection is implemented but not routed.
-  Initial user, family, calculated budget rows, budget transport, and
-  catalog-write operations remain explicit unsupported boundaries.
+  implemented. Read-only pristine-plan `syncBudgetData` bootstrap and backfill
+  are also routed. Initial user, family, budget deltas/writes, nonzero
+  calculations, and catalog-write operations remain explicit unsupported
+  boundaries.
 
 ### ADD-004 — Web semantic API
 

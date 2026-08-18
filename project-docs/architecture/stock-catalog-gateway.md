@@ -56,9 +56,9 @@ The observed successful catalog response contains `error`,
 - `last_modified_at`
 
 The same reload independently confirmed the request/response field shapes for
-`getInitialUserData`, `syncFamilyData`, and `syncBudgetData`. Those operations
-remain evidence for later adapters; this slice does not claim to implement
-them.
+`getInitialUserData`, `syncFamilyData`, and `syncBudgetData`. A later isolated
+fresh-plan capture admitted the exact budget bootstrap/backfill table surface,
+zero/null calculated defaults, and deterministic calculation identities.
 
 ## Implemented slice
 
@@ -77,6 +77,20 @@ membership projection at `/api/v1/catalog`:
 - unknown operations, catalog writes, malformed knowledge ranges, and
   knowledge from the future fail closed.
 
+The same endpoint now dispatches read-only `syncBudgetData` without duplicating
+authentication or request-context validation. Catalog and budget operations,
+source projection, and calculated projection remain separate modules. The
+budget slice:
+
+- authorizes the opaque budget-version identity through the canonical
+  principal-scoped plan reader;
+- accepts only schema 44 bootstrap and backfill requests from knowledge zero;
+- returns all source tables from the canonical 58-entity snapshot;
+- returns the exact BUDGET-001 pristine-plan calculated defaults and month
+  boundaries; and
+- rejects writes, deltas, non-pristine formulas, malformed knowledge, and
+  unauthorized budget versions.
+
 For an older catalog knowledge value, this first implementation sends a
 coalesced complete snapshot of the fork-owned membership records rather than
 reconstructing every intermediate wire delta. Complete entity replacement is
@@ -87,7 +101,8 @@ their exact stock error envelopes remain a separate admitted slice.
 
 - initial user bootstrap and session issuance;
 - family projection;
-- budget bootstrap/backfill/delta projection;
+- budget delta projection or write ingestion;
+- nonzero account, transaction, transfer, target, and schedule calculations;
 - catalog rename/delete ingestion;
 - stock error-envelope compatibility; or
 - Castle, analytics, experiments, telemetry, billing, or help services.

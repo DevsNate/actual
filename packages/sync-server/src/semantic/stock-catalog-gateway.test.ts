@@ -1,5 +1,6 @@
 import type {
   AuthenticatedPrincipal,
+  BudgetVersionPlanReader,
   CatalogReader,
 } from '@actual-app/semantic-core';
 import { AuthenticationError } from '@actual-app/semantic-core';
@@ -18,11 +19,14 @@ const principal: AuthenticatedPrincipal = {
 function app(
   catalogReader: CatalogReader,
   resolvePrincipal: (token: string) => AuthenticatedPrincipal = () => principal,
+  planReader: BudgetVersionPlanReader = {
+    readPlanByBudgetVersion: vi.fn(),
+  },
 ) {
   const result = express();
   result.use(
     '/api/v1',
-    createStockCatalogGateway({ catalogReader, resolvePrincipal }),
+    createStockCatalogGateway({ catalogReader, planReader, resolvePrincipal }),
   );
   return result;
 }

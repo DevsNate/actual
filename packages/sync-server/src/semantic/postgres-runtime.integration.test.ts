@@ -202,6 +202,50 @@ integrationTest('semantic catalog runtime integration', () => {
       budget_receipts: '1',
     });
 
+    const stockBootstrap = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-budget-bootstrap')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: createdVersionId,
+          sync_type: 'bootstrap',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 0,
+          ending_device_knowledge: 0,
+          device_knowledge_of_server: 0,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+    expect(stockBootstrap.body).toMatchObject({
+      error: null,
+      schema_version_of_response: 44,
+      schema_version_of_server: 44,
+      current_server_knowledge: 1,
+      changed_entities: {
+        be_budget: {
+          id: createdVersionId,
+          budget_name: 'Semantic Created Plan',
+        },
+        first_month: expect.any(String),
+        last_month: expect.any(String),
+      },
+    });
+    expect(
+      stockBootstrap.body.changed_entities.be_monthly_budget_calculations,
+    ).toHaveLength(2);
+    expect(
+      stockBootstrap.body.changed_entities
+        .be_monthly_subcategory_budget_calculations,
+    ).toHaveLength(28);
+
     const replay = await request(testApp)
       .post('/semantic/v1/plans')
       .set('x-actual-token', token)

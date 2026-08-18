@@ -37,15 +37,16 @@ export function projectStockBudgetSource(
     .map(row => row.month)
     .filter((month): month is string => typeof month === 'string')
     .sort();
+  const bootstrapMonth = months[0] ?? null;
   return {
     changedEntities,
-    firstMonth: months[0] ?? null,
-    lastMonth: months.at(-1) ?? null,
+    firstMonth: bootstrapMonth,
+    lastMonth: bootstrapMonth,
   };
 }
 
 function projectEntity(entity: PlanEntity): Readonly<Record<string, unknown>> {
-  const payload = snakeCaseRecord(entity.payload);
+  const payload = projectPayload(entity.entityKind, entity.payload);
   if ('id' in payload || 'is_tombstone' in payload) {
     throw new Error(
       'Canonical entity payload collides with stock identity fields',
@@ -56,6 +57,70 @@ function projectEntity(entity: PlanEntity): Readonly<Record<string, unknown>> {
     id: entity.entityId,
     is_tombstone: entity.isTombstone,
   };
+}
+
+const payloadRules: Readonly<
+  Record<
+    string,
+    {
+      omit: ReadonlySet<string>;
+      rename?: Readonly<Record<string, string>>;
+    }
+  >
+> = {
+  be_budget: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_master_categories: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_monthly_budgets: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_monthly_subcategory_budgets: rule(
+    ['budgetVersionId', 'deviceKnowledge', 'month'],
+    {
+      monthlyBudgetId: 'entities_monthly_budget_id',
+      subCategoryId: 'entities_subcategory_id',
+    },
+  ),
+  be_onboarding_events: rule(['budgetVersionId']),
+  be_payees: rule(['budgetVersionId', 'deviceKnowledge'], {
+    accountId: 'entities_account_id',
+    autoFillSubCategoryEnabled: 'auto_fill_subcategory_enabled',
+    autoFillSubCategoryId: 'auto_fill_subcategory_id',
+  }),
+  be_settings: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_subcategories: rule(
+    ['budgetVersionId', 'deviceKnowledge', 'pinnedGoalIndex', 'pinnedIndex'],
+    {
+      accountId: 'entities_account_id',
+      masterCategoryId: 'entities_master_category_id',
+    },
+  ),
+};
+
+function projectPayload(
+  entityKind: string,
+  payload: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const rule = payloadRules[entityKind];
+  if (!rule) {
+    return snakeCaseRecord(payload);
+  }
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(payload)) {
+    if (rule.omit.has(key)) {
+      continue;
+    }
+    const projectedKey = rule.rename?.[key] ?? snakeCase(key);
+    if (projectedKey in result) {
+      throw new Error(`Stock field projection collision: ${projectedKey}`);
+    }
+    result[projectedKey] = projectValue(value);
+  }
+  return result;
+}
+
+function rule(
+  omitted: readonly string[],
+  rename?: Readonly<Record<string, string>>,
+) {
+  return { omit: new Set(omitted), rename };
 }
 
 function snakeCaseRecord(

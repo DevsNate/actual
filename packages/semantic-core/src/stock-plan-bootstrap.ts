@@ -320,6 +320,7 @@ export function buildStockPlanBootstrap(
         accountId: null,
         enabled: false,
         autoFillSubCategoryId: null,
+        autoFillUserDefinedSubcategoryId: null,
         autoFillMemo: null,
         autoFillAmount: 0,
         name,
@@ -327,6 +328,7 @@ export function buildStockPlanBootstrap(
         autoFillSubCategoryEnabled: false,
         autoFillAmountEnabled: false,
         autoFillMemoEnabled: false,
+        renameOnImportEnabled: null,
       }),
     );
   }
@@ -344,7 +346,10 @@ export function buildStockPlanBootstrap(
     ),
   );
 
-  for (const eventName of ['created_after_onboarding', 'completed_ftue']) {
+  for (const [eventName, serverKnowledge] of [
+    ['created_after_onboarding', 27],
+    ['completed_ftue', 28],
+  ] as const) {
     entities.push(
       entity(
         'be_onboarding_events',
@@ -355,7 +360,9 @@ export function buildStockPlanBootstrap(
           userId: input.principalId,
           createdAt: input.createdAtMilliseconds,
           updatedAt: input.createdAtMilliseconds,
-          deviceKnowledge: 0,
+          deviceKnowledge: null,
+          lastUpdatedByDeviceId: null,
+          serverKnowledge,
         },
       ),
     );
@@ -385,6 +392,7 @@ export function buildStockPlanBootstrap(
             subCategoryId: categoryId,
             budgeted: 0,
             overspendingHandling: null,
+            goalSnoozedAt: null,
             note: null,
             deviceKnowledge: 0,
           },
