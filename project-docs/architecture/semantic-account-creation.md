@@ -31,15 +31,15 @@ one live Immediate Income system category. It creates in one change set:
 
 Canonical identities are deterministic from plan plus idempotency key. The
 receipt owns exact replay. Reusing a key with another payload fails, and an
-existing unrelated live account remains unsupported until the multi-account
-calculation projection is admitted. The browser-root repetitions prove that
-stock accepts later account-create invocations, but they do not yet provide a
-terminal multi-account calculation fixture.
+later requests use distinct command keys and identities. A browser-root
+bootstrap with three controlled accounts proves one independent group per
+request and admits repeated unlinked Checking creation.
 
 ## Calculation projection
 
-Account source rows and calculation rows remain separate modules. The admitted
-calculation projector validates the exact three-entity relationship and emits:
+Account source rows and calculation rows remain separate modules. For every
+admitted Checking account the calculation projector validates the exact
+three-entity relationship and emits:
 
 - one account calculation with cleared balance and one transaction;
 - current-month cleared and rolling balance;
@@ -47,8 +47,14 @@ calculation projector validates the exact three-entity relationship and emits:
 - current-month Immediate Income and Ready to Assign; and
 - next-month carried Ready to Assign.
 
-Malformed identities, extra accounts or transactions, tombstones, non-Checking
-types, transfer fields, or divergent system relationships fail closed.
+With multiple accounts, account and monthly-account calculations remain
+independent. Current Immediate Income and current/next Ready to Assign are the
+safe-integer sum of all captured Starting Balances. The evidence fixture is
+`123450 + 234560 + 345670 = 703680`.
+
+Malformed identities, extra transactions without a matching account,
+tombstones, non-Checking types, transfer fields, or divergent system
+relationships fail closed.
 
 ## Transport boundary
 
@@ -63,6 +69,7 @@ entities itself.
 ## Verification
 
 Focused request, command, gateway, projection, and calculation tests pass.
-Disposable PostgreSQL integration proves the direct-import route, one
-knowledge advance, three canonical entities, one receipt, exact semantic
-replay without duplicates, and stock bootstrap readback.
+Disposable PostgreSQL integration proves repeated direct-import requests,
+three canonical entities per request, independent account calculations,
+additive budget calculations, exact semantic replay without duplicates, and
+stock bootstrap readback.

@@ -6,16 +6,12 @@ import { projectStockFreshPlanCalculations } from './stock-budget-calculations';
 export function projectStockCheckingAccountCalculations(
   snapshot: PlanSnapshot,
 ): StockFreshPlanCalculations {
-  const account = exactlyOne(snapshot.entities, 'be_accounts');
-  const transaction = exactlyOne(snapshot.entities, 'be_transactions');
-  const transferPayee = exactlyOne(
-    snapshot.entities.filter(
-      entity =>
-        entity.entityKind === 'be_payees' &&
-        entity.payload.accountId === account.entityId,
-    ),
-    'be_payees',
+  const accounts = snapshot.entities.filter(
+    entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
   );
+  if (accounts.length === 0) {
+    throw new Error('Checking-account calculations require an account');
+  }
   const startingBalancePayee = exactlyOne(
     snapshot.entities.filter(
       entity =>
@@ -32,43 +28,31 @@ export function projectStockCheckingAccountCalculations(
     ),
     'be_subcategories',
   );
-  const accountName = requireString(account.payload.accountName);
-  if (
-    account.isTombstone ||
-    account.payload.accountType !== 'Checking' ||
-    account.payload.onBudget !== true ||
-    account.payload.isClosed !== false ||
-    transferPayee.isTombstone ||
-    transferPayee.payload.enabled !== true ||
-    transferPayee.payload.name !== `Transfer : ${accountName}` ||
-    transferPayee.payload.autoFillSubCategoryEnabled !== true ||
-    transferPayee.payload.autoFillAmountEnabled !== false ||
-    transferPayee.payload.autoFillMemoEnabled !== false ||
-    transferPayee.payload.renameOnImportEnabled !== false ||
-    transaction.isTombstone ||
-    transaction.payload.accountId !== account.entityId ||
-    transaction.payload.payeeId !== startingBalancePayee.entityId ||
-    transaction.payload.subCategoryId !== immediateIncomeCategory.entityId ||
-    transaction.payload.amount !== transaction.payload.cashAmount ||
-    transaction.payload.creditAmount !== 0 ||
-    transaction.payload.cleared !== 'Cleared' ||
-    transaction.payload.accepted !== true ||
-    transaction.payload.memo !== null ||
-    transaction.payload.transferAccountId !== null ||
-    transaction.payload.transferTransactionId !== null ||
-    transaction.payload.transferSubtransactionId !== null
-  ) {
-    throw new Error('Unsupported checking-account calculation state');
+  const groups = accounts.map(account =>
+    checkingAccountGroup(
+      snapshot.entities,
+      account,
+      startingBalancePayee,
+      immediateIncomeCategory,
+    ),
+  );
+  const accountIds = new Set(accounts.map(account => account.entityId));
+  const liveTransactions = snapshot.entities.filter(
+    entity => entity.entityKind === 'be_transactions' && !entity.isTombstone,
+  );
+  if (liveTransactions.length !== groups.length) {
+    throw new Error('Expected one Starting Balance per Checking account');
   }
-  const amount = requireNonnegativeInteger(transaction.payload.amount);
-  const transactionDate = requireIsoDate(transaction.payload.date);
   const base = projectStockFreshPlanCalculations({
     ...snapshot,
     entities: snapshot.entities.filter(
       entity =>
         entity.entityKind !== 'be_accounts' &&
         entity.entityKind !== 'be_transactions' &&
-        entity !== transferPayee,
+        !(
+          entity.entityKind === 'be_payees' &&
+          accountIds.has(String(entity.payload.accountId))
+        ),
     ),
   });
   const monthlyBudgets = snapshot.entities
@@ -85,8 +69,16 @@ export function projectStockCheckingAccountCalculations(
   }
   const currentMonth = requireIsoDate(monthlyBudgets[0].payload.month);
   const nextMonth = requireIsoDate(monthlyBudgets[1].payload.month);
-  if (transactionDate.slice(0, 7) !== currentMonth.slice(0, 7)) {
+  if (
+    groups.some(
+      group => group.transactionDate.slice(0, 7) !== currentMonth.slice(0, 7),
+    )
+  ) {
     throw new Error('Starting balance must belong to the current budget month');
+  }
+  const totalAmount = groups.reduce((sum, group) => sum + group.amount, 0);
+  if (!Number.isSafeInteger(totalAmount)) {
+    throw new Error('Starting Balance total must be a safe integer');
   }
 
   return {
@@ -96,36 +88,99 @@ export function projectStockCheckingAccountCalculations(
         ...row,
         immediate_income:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? amount
+            ? totalAmount
             : 0,
-        available_to_budget: amount,
+        available_to_budget: totalAmount,
       }),
     ),
-    be_account_calculations: [
-      {
-        id: `ac/${account.entityId}`,
-        entities_account_id: account.entityId,
-        is_tombstone: false,
-        cleared_balance: amount,
-        uncleared_balance: 0,
-        info_count: 0,
-        warning_count: 0,
-        error_count: 0,
-        transaction_count: 1,
-        debt_last_payment_date: null,
-        debt_payments: null,
-      },
-    ],
-    be_monthly_account_calculations: [
+    be_account_calculations: groups.map(group => ({
+      id: `ac/${group.account.entityId}`,
+      entities_account_id: group.account.entityId,
+      is_tombstone: false,
+      cleared_balance: group.amount,
+      uncleared_balance: 0,
+      info_count: 0,
+      warning_count: 0,
+      error_count: 0,
+      transaction_count: 1,
+      debt_last_payment_date: null,
+      debt_payments: null,
+    })),
+    be_monthly_account_calculations: groups.flatMap(group => [
       monthlyAccountCalculation(
-        account.entityId,
+        group.account.entityId,
         currentMonth,
-        amount,
-        amount,
+        group.amount,
+        group.amount,
         1,
       ),
-      monthlyAccountCalculation(account.entityId, nextMonth, 0, amount, 0),
-    ],
+      monthlyAccountCalculation(
+        group.account.entityId,
+        nextMonth,
+        0,
+        group.amount,
+        0,
+      ),
+    ]),
+  };
+}
+
+function checkingAccountGroup(
+  entities: readonly PlanEntity[],
+  account: PlanEntity,
+  startingBalancePayee: PlanEntity,
+  immediateIncomeCategory: PlanEntity,
+): {
+  account: PlanEntity;
+  amount: number;
+  transactionDate: string;
+} {
+  const transaction = exactlyOne(
+    entities.filter(
+      entity =>
+        entity.entityKind === 'be_transactions' &&
+        entity.payload.accountId === account.entityId,
+    ),
+    'be_transactions',
+  );
+  const transferPayee = exactlyOne(
+    entities.filter(
+      entity =>
+        entity.entityKind === 'be_payees' &&
+        entity.payload.accountId === account.entityId,
+    ),
+    'be_payees',
+  );
+  const accountName = requireString(account.payload.accountName);
+  if (
+    account.payload.accountType !== 'Checking' ||
+    account.payload.onBudget !== true ||
+    account.payload.isClosed !== false ||
+    transferPayee.isTombstone ||
+    transferPayee.payload.enabled !== true ||
+    transferPayee.payload.name !== `Transfer : ${accountName}` ||
+    transferPayee.payload.autoFillSubCategoryEnabled !== true ||
+    transferPayee.payload.autoFillAmountEnabled !== false ||
+    transferPayee.payload.autoFillMemoEnabled !== false ||
+    transferPayee.payload.renameOnImportEnabled !== false ||
+    transaction.isTombstone ||
+    transaction.payload.payeeId !== startingBalancePayee.entityId ||
+    transaction.payload.subCategoryId !== immediateIncomeCategory.entityId ||
+    transaction.payload.amount !== transaction.payload.cashAmount ||
+    transaction.payload.creditAmount !== 0 ||
+    transaction.payload.cleared !== 'Cleared' ||
+    transaction.payload.accepted !== true ||
+    transaction.payload.memo !== null ||
+    transaction.payload.transferAccountId !== null ||
+    transaction.payload.transferTransactionId !== null ||
+    transaction.payload.transferSubtransactionId !== null
+  ) {
+    throw new Error('Unsupported checking-account calculation state');
+  }
+  return {
+    account,
+    amount: requireNonnegativeInteger(transaction.payload.amount),
+    transactionDate: requireIsoDate(transaction.payload.date),
   };
 }
 

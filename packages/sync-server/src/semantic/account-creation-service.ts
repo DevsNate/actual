@@ -51,16 +51,6 @@ export function createAccountCreationService(
         throw new AccountCreationError('plan-not-found');
       }
 
-      const existingAccounts = snapshot.entities.filter(
-        entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
-      );
-      const replayAccount = existingAccounts.find(
-        entity => entity.payload.creationCommandKey === input.idempotencyKey,
-      );
-      if (existingAccounts.length !== 0 && !replayAccount) {
-        throw new AccountCreationError('unsupported-account-state');
-      }
-
       const startingBalancePayee = exactlyOne(
         snapshot.entities,
         entity =>

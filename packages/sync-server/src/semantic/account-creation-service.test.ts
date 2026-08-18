@@ -116,7 +116,7 @@ describe('account creation service', () => {
     expect(startingBalance?.entityId).toMatch(/^[0-9a-f-]{36}$/u);
   });
 
-  test('fails closed when account state or required system entities are ambiguous', async () => {
+  test('allows another captured Checking account while required system entities remain exact', async () => {
     const first = fixture();
     first.snapshot.entities.push({
       entityKind: 'be_accounts',
@@ -126,8 +126,8 @@ describe('account creation service', () => {
     });
     await expect(
       first.service.createCheckingAccount(input),
-    ).rejects.toMatchObject({
-      code: 'unsupported-account-state',
+    ).resolves.toMatchObject({
+      response: { account_name: 'Account Capture 1' },
     });
 
     const second = fixture();

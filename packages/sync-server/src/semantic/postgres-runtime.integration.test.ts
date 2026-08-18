@@ -666,6 +666,7 @@ integrationTest('semantic catalog runtime integration', () => {
       })
       .expect(201);
     const directPlanId = plan.body.data.budget_id as string;
+    const directVersionId = plan.body.data.budget_version_id as string;
 
     const created = await request(testApp)
       .post(`/api/direct_import/budgets/${directPlanId}/accounts`)
@@ -689,16 +690,73 @@ integrationTest('semantic catalog runtime integration', () => {
       balance_millicents: 345670,
       budget_id: directPlanId,
     });
+    const second = await request(testApp)
+      .post(`/api/direct_import/budgets/${directPlanId}/accounts`)
+      .set('authorization', `Token ${token}`)
+      .set('x-ynab-api-version', '2026-01-01')
+      .send({
+        name: 'Account Capture 2',
+        type: 'Checking',
+        balance: 234560,
+        starting_balance_date: '2026-08-17',
+        debt_interest_rates: '{"2026-08-01":0}',
+        debt_minimum_payments: '{"2026-08-01":0}',
+        debt_escrow_amounts: null,
+        paired_sub_category: null,
+        is_migrating_to_debt_account: false,
+      })
+      .expect(201);
 
     const persisted = await seedPool!.query<{ count: string }>(
       `SELECT count(*)
        FROM semantic_plan_entities
        WHERE plan_id = $1
-         AND ((entity_kind = 'be_accounts' AND entity_id = $2)
-           OR (entity_kind = 'be_payees' AND payload->>'accountId' = $2)
-           OR (entity_kind = 'be_transactions' AND payload->>'accountId' = $2))`,
-      [directPlanId, created.body.id],
+         AND ((entity_kind = 'be_accounts' AND entity_id = ANY($2))
+           OR (entity_kind = 'be_payees' AND payload->>'accountId' = ANY($2))
+           OR (entity_kind = 'be_transactions' AND payload->>'accountId' = ANY($2)))`,
+      [directPlanId, [created.body.id, second.body.id]],
     );
-    expect(persisted.rows[0]?.count).toBe('3');
+    expect(persisted.rows[0]?.count).toBe('6');
+
+    const bootstrap = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-multi-account-bootstrap')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncBudgetData',
+        request_data: JSON.stringify({
+          budget_version_id: directVersionId,
+          sync_type: 'bootstrap',
+          calculated_entities_included: false,
+          schema_version: 44,
+          schema_version_of_knowledge: 44,
+          starting_device_knowledge: 0,
+          ending_device_knowledge: 0,
+          device_knowledge_of_server: 0,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+    expect(
+      bootstrap.body.changed_entities.be_account_calculations,
+    ).toHaveLength(2);
+    expect(
+      bootstrap.body.changed_entities.be_monthly_account_calculations,
+    ).toHaveLength(4);
+    expect(
+      bootstrap.body.changed_entities.be_monthly_budget_calculations,
+    ).toEqual([
+      expect.objectContaining({
+        immediate_income: 580230,
+        available_to_budget: 580230,
+      }),
+      expect.objectContaining({
+        immediate_income: 0,
+        available_to_budget: 580230,
+      }),
+    ]);
   });
 });

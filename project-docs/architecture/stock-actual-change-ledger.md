@@ -436,11 +436,11 @@ Copy this block for a new architectural delta:
   endpoint and terminal bootstrap are admitted. Two browser-root page+worker
   recaptures confirm the page POST/HTTP 201 contract and observe no worker
   network request; the final instrumented commit observes no worker message.
-- **Migration/rollback:** The command supports only the first unlinked Checking
-  account with a nonnegative starting balance. Stock is now proven to accept
-  later account-create invocations, but additional accounts still fail closed
-  until their complete calculation projection is captured. Other types,
-  linked accounts, and lifecycle mutations also fail closed.
+- **Migration/rollback:** The command supports repeated unlinked Checking
+  accounts with nonnegative starting balances. A browser-root bootstrap admits
+  one independent entity/calculation group per account and additive budget
+  calculations. Other types, linked accounts, and lifecycle mutations still
+  fail closed.
 - **Verification:** Focused route/service/projection tests plus disposable
   PostgreSQL atomicity, receipt replay, entity-count, and stock-bootstrap
   integration.

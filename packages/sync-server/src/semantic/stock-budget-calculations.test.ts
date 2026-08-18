@@ -184,5 +184,75 @@ describe('stock checking-account calculations', () => {
         available_to_budget: 123450,
       }),
     ]);
+
+    for (const [suffix, amount] of [
+      ['2', 234560],
+      ['3', 345670],
+    ] as const) {
+      snapshot.entities.push(
+        {
+          entityKind: 'be_accounts',
+          entityId: `account-${suffix}`,
+          isTombstone: false,
+          payload: {
+            accountName: `Account Capture ${suffix}`,
+            accountType: 'Checking',
+            onBudget: true,
+            isClosed: false,
+          },
+        },
+        {
+          entityKind: 'be_payees',
+          entityId: `transfer-payee-${suffix}`,
+          isTombstone: false,
+          payload: {
+            accountId: `account-${suffix}`,
+            name: `Transfer : Account Capture ${suffix}`,
+            enabled: true,
+            autoFillSubCategoryEnabled: true,
+            autoFillAmountEnabled: false,
+            autoFillMemoEnabled: false,
+            renameOnImportEnabled: false,
+          },
+        },
+        {
+          entityKind: 'be_transactions',
+          entityId: `starting-balance-${suffix}`,
+          isTombstone: false,
+          payload: {
+            accountId: `account-${suffix}`,
+            payeeId: startingPayee.entityId,
+            subCategoryId: immediateIncome.entityId,
+            date: '2026-08-17',
+            amount,
+            cashAmount: amount,
+            creditAmount: 0,
+            memo: null,
+            cleared: 'Cleared',
+            accepted: true,
+            transferAccountId: null,
+            transferTransactionId: null,
+            transferSubtransactionId: null,
+          },
+        },
+      );
+    }
+
+    const multiple = projectStockCheckingAccountCalculations(snapshot);
+    expect(multiple.be_account_calculations).toHaveLength(3);
+    expect(multiple.be_monthly_account_calculations).toHaveLength(6);
+    expect(
+      multiple.be_account_calculations.map(row => row.cleared_balance),
+    ).toEqual([123450, 234560, 345670]);
+    expect(multiple.be_monthly_budget_calculations).toEqual([
+      expect.objectContaining({
+        immediate_income: 703680,
+        available_to_budget: 703680,
+      }),
+      expect.objectContaining({
+        immediate_income: 0,
+        available_to_budget: 703680,
+      }),
+    ]);
   });
 });
