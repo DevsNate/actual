@@ -6,13 +6,19 @@ fork never loses the distinction between stock Actual behavior and project
 behavior.
 
 Read these documents before changing synchronization, persistence,
-authentication, plan lifecycle, or the React data boundary:
+authentication, plan lifecycle, the web parity boundary, or the React data
+boundary:
 
-1. [`selective-fork-decision.md`](selective-fork-decision.md)
-2. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
-3. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
-4. [`semantic-docker-development.md`](semantic-docker-development.md)
-5. [`semantic-account-creation.md`](semantic-account-creation.md)
+1. [`product-objective.md`](product-objective.md)
+2. [`selective-fork-decision.md`](selective-fork-decision.md)
+3. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
+4. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
+5. [`semantic-docker-development.md`](semantic-docker-development.md)
+6. [`semantic-account-creation.md`](semantic-account-creation.md)
+
+The `reference/` subdirectory contains repository-audit and promotion-planning
+records. Those documents preserve provenance and repository-boundary analysis,
+but they do not replace admitted YNAB evidence or the governing decisions above.
 
 ## Required workflow
 
@@ -34,3 +40,8 @@ Each ledger entry records:
 Stock-specific behavior may not move from `proposed` to `implemented` without
 an admitted evidence fixture. Infrastructure that does not encode stock
 behavior may be implemented from ordinary engineering requirements.
+
+The product objective is stricter than compatibility of a single endpoint or
+screen: final parity claims are evaluated against the observable visual,
+interaction, semantic, calculation, synchronization, and compatible-client
+requirements in `product-objective.md`.
