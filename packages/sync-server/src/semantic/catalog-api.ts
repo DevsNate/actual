@@ -16,7 +16,7 @@ export function createSemanticCatalogHandlers(
   const handlers = express.Router();
 
   handlers.get('/catalog', async (request, response) => {
-    const principal = authenticateRequest(
+    const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
       dependencies,
@@ -42,7 +42,7 @@ export function createSemanticCatalogHandlers(
   return handlers;
 }
 
-function authenticateRequest(
+export function authenticateSemanticRequest(
   sessionToken: string | undefined,
   response: express.Response,
   dependencies: SemanticCatalogApiDependencies,

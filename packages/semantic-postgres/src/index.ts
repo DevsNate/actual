@@ -7,6 +7,8 @@ export type {
   CatalogCommandResult,
   CommitChangeSetInput,
   CommitChangeSetResult,
-  CreatePlanInput,
+  CreatePlanCommand,
+  CreatePlanResult,
   EntityChangeInput,
+  SeedPlanInput,
 } from './types';

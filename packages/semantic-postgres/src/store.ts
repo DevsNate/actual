@@ -2,6 +2,8 @@ import type {
   CatalogCommand,
   CatalogCommandResult,
   CatalogSnapshot,
+  CreatePlanCommand,
+  CreatePlanResult,
   PlanMembership,
   PrincipalId,
 } from '@actual-app/semantic-core';
@@ -11,7 +13,7 @@ import { SemanticStoreError } from './errors';
 import type {
   CommitChangeSetInput,
   CommitChangeSetResult,
-  CreatePlanInput,
+  SeedPlanInput,
 } from './types';
 
 type PlanKnowledgeRow = {
@@ -53,8 +55,8 @@ type CatalogRow = {
 export class PostgresSemanticStore {
   constructor(private readonly pool: Pool) {}
 
-  async createPlan(input: CreatePlanInput): Promise<void> {
-    validateCreatePlan(input);
+  async seedPlan(input: SeedPlanInput): Promise<void> {
+    validateSeedPlan(input);
     await this.transact(async client => {
       await client.query(
         `INSERT INTO semantic_plans
@@ -82,6 +84,165 @@ export class PostgresSemanticStore {
            updated_at = now()`,
         [input.principalId],
       );
+    });
+  }
+
+  async createPlan(command: CreatePlanCommand): Promise<CreatePlanResult> {
+    validateCreatePlanCommand(command);
+    return this.transact(async client => {
+      await lockCreatePlanIdempotencyKey(client, command);
+      const replay = await findCreatePlanReceipt(client, command);
+      if (replay) {
+        return replay;
+      }
+
+      const catalogKnowledge = await lockCatalogKnowledge(
+        client,
+        command.principalId,
+      );
+      if (catalogKnowledge !== command.expectedCatalogServerKnowledge) {
+        throw new SemanticStoreError(
+          'SERVER_KNOWLEDGE_MISMATCH',
+          `Expected catalog server knowledge ${command.expectedCatalogServerKnowledge}, received ${catalogKnowledge}`,
+        );
+      }
+      const catalogDeviceKnowledge = await lockCreatePlanCatalogDevice(
+        client,
+        command,
+      );
+      if (catalogDeviceKnowledge !== command.startingCatalogDeviceKnowledge) {
+        throw new SemanticStoreError(
+          'DEVICE_KNOWLEDGE_MISMATCH',
+          `Expected catalog device knowledge ${command.startingCatalogDeviceKnowledge}, received ${catalogDeviceKnowledge}`,
+        );
+      }
+
+      const nextCatalogKnowledge = catalogKnowledge + 1;
+      const budgetKnowledge = 1;
+      await client.query(
+        `INSERT INTO semantic_plans
+           (plan_id, budget_version_id, name, server_knowledge,
+            currency_format, date_format)
+         VALUES ($1, $2, $3, 0, $4, $5)`,
+        [
+          command.planId,
+          command.budgetVersionId,
+          command.name.trim(),
+          command.currencyFormat,
+          command.dateFormat,
+        ],
+      );
+      await client.query(
+        `INSERT INTO semantic_plan_memberships
+           (membership_id, plan_id, principal_id, permissions)
+         VALUES ($1, $2, $3, $4)`,
+        [
+          command.membershipId,
+          command.planId,
+          command.principalId,
+          command.permissions,
+        ],
+      );
+
+      const membershipPayload = {
+        id: command.membershipId,
+        planId: command.planId,
+        budgetVersionId: command.budgetVersionId,
+        principalId: command.principalId,
+        name: command.name.trim(),
+        permissions: command.permissions,
+      };
+      await insertCatalogChangeSet(
+        client,
+        {
+          changeSetId: command.catalogChangeSetId,
+          principalId: command.principalId,
+          originDeviceId: command.originDeviceId,
+          startingDeviceKnowledge: command.startingCatalogDeviceKnowledge,
+          endingDeviceKnowledge: command.endingCatalogDeviceKnowledge,
+          expectedServerKnowledge: command.expectedCatalogServerKnowledge,
+          schemaVersion: command.schemaVersion,
+          commandKind: 'create-plan',
+          idempotencyKey: command.idempotencyKey,
+          payloadDigest: command.payloadDigest,
+          changes: [
+            {
+              entityKind: 'ce_user_budgets',
+              entityId: command.membershipId,
+              isTombstone: false,
+              payload: membershipPayload,
+            },
+          ],
+          response: command.response,
+        },
+        nextCatalogKnowledge,
+      );
+      await client.query(
+        `INSERT INTO semantic_catalog_entity_changes
+           (change_set_id, ordinal, entity_kind, entity_id,
+            is_tombstone, payload)
+         VALUES ($1, 0, 'ce_user_budgets', $2, false, $3)`,
+        [command.catalogChangeSetId, command.membershipId, membershipPayload],
+      );
+
+      const budgetChangeSet: CommitChangeSetInput = {
+        changeSetId: command.budgetChangeSetId,
+        planId: command.planId,
+        originDeviceId: command.originDeviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 0,
+        expectedServerKnowledge: 0,
+        schemaVersion: command.schemaVersion,
+        idempotencyKey: command.idempotencyKey,
+        payloadDigest: command.payloadDigest,
+        changes: command.entities,
+        response: command.response,
+      };
+      await insertChangeSet(client, budgetChangeSet, budgetKnowledge);
+      await insertEntityChanges(client, budgetChangeSet);
+      await upsertPlanEntities(client, budgetChangeSet, budgetKnowledge);
+
+      await client.query(
+        `UPDATE semantic_plans
+         SET server_knowledge = $2, updated_at = now()
+         WHERE plan_id = $1`,
+        [command.planId, budgetKnowledge],
+      );
+      await client.query(
+        `UPDATE semantic_catalog_knowledge
+         SET server_knowledge = $2, updated_at = now()
+         WHERE principal_id = $1`,
+        [command.principalId, nextCatalogKnowledge],
+      );
+      await client.query(
+        `UPDATE semantic_catalog_devices
+         SET server_knowledge_of_device = $3, updated_at = now()
+         WHERE principal_id = $1 AND device_id = $2`,
+        [
+          command.principalId,
+          command.originDeviceId,
+          command.endingCatalogDeviceKnowledge,
+        ],
+      );
+      await client.query(
+        `INSERT INTO semantic_devices
+           (plan_id, device_id, server_knowledge_of_device)
+         VALUES ($1, $2, 0)`,
+        [command.planId, command.originDeviceId],
+      );
+      await insertCreatePlanReceipts(
+        client,
+        command,
+        nextCatalogKnowledge,
+        budgetKnowledge,
+      );
+
+      return {
+        replayed: false,
+        catalogServerKnowledge: nextCatalogKnowledge,
+        budgetServerKnowledge: budgetKnowledge,
+        response: command.response,
+      };
     });
   }
 
@@ -237,6 +398,7 @@ export class PostgresSemanticStore {
       const nextServerKnowledge = currentServerKnowledge + 1;
       await insertChangeSet(client, input, nextServerKnowledge);
       await insertEntityChanges(client, input);
+      await upsertPlanEntities(client, input, nextServerKnowledge);
       await client.query(
         `UPDATE semantic_plans
          SET server_knowledge = $2, updated_at = now()
@@ -295,6 +457,112 @@ export class PostgresSemanticStore {
       client.release();
     }
   }
+}
+
+async function lockCreatePlanIdempotencyKey(
+  client: PoolClient,
+  command: CreatePlanCommand,
+): Promise<void> {
+  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+    `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
+  ]);
+}
+
+async function findCreatePlanReceipt(
+  client: PoolClient,
+  command: CreatePlanCommand,
+): Promise<CreatePlanResult | null> {
+  const receipt = await client.query<CatalogReceiptRow>(
+    `SELECT payload_digest, ending_device_knowledge,
+            server_knowledge, response
+     FROM semantic_catalog_command_receipts
+     WHERE principal_id = $1 AND device_id = $2 AND idempotency_key = $3
+     FOR UPDATE`,
+    [command.principalId, command.originDeviceId, command.idempotencyKey],
+  );
+  const row = receipt.rows[0];
+  if (!row) {
+    return null;
+  }
+  if (row.payload_digest !== command.payloadDigest) {
+    throw new SemanticStoreError(
+      'IDEMPOTENCY_CONFLICT',
+      'The plan creation idempotency key was already used with a different payload',
+    );
+  }
+  return {
+    replayed: true,
+    catalogServerKnowledge: toSafeInteger(
+      row.server_knowledge,
+      'catalog server knowledge',
+    ),
+    budgetServerKnowledge: 1,
+    response: row.response,
+  };
+}
+
+async function lockCreatePlanCatalogDevice(
+  client: PoolClient,
+  command: CreatePlanCommand,
+): Promise<number> {
+  await client.query(
+    `INSERT INTO semantic_catalog_devices
+       (principal_id, device_id, server_knowledge_of_device)
+     VALUES ($1, $2, 0)
+     ON CONFLICT (principal_id, device_id) DO NOTHING`,
+    [command.principalId, command.originDeviceId],
+  );
+  const result = await client.query<CatalogDeviceKnowledgeRow>(
+    `SELECT server_knowledge_of_device
+     FROM semantic_catalog_devices
+     WHERE principal_id = $1 AND device_id = $2
+     FOR UPDATE`,
+    [command.principalId, command.originDeviceId],
+  );
+  return toSafeInteger(
+    result.rows[0].server_knowledge_of_device,
+    'catalog device knowledge',
+  );
+}
+
+async function insertCreatePlanReceipts(
+  client: PoolClient,
+  command: CreatePlanCommand,
+  catalogServerKnowledge: number,
+  budgetServerKnowledge: number,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO semantic_catalog_command_receipts
+       (principal_id, device_id, idempotency_key, payload_digest,
+        starting_device_knowledge, ending_device_knowledge,
+        server_knowledge, response)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      command.principalId,
+      command.originDeviceId,
+      command.idempotencyKey,
+      command.payloadDigest,
+      command.startingCatalogDeviceKnowledge,
+      command.endingCatalogDeviceKnowledge,
+      catalogServerKnowledge,
+      command.response,
+    ],
+  );
+  await client.query(
+    `INSERT INTO semantic_device_receipts
+       (plan_id, device_id, idempotency_key, payload_digest,
+        starting_device_knowledge, ending_device_knowledge,
+        server_knowledge, response)
+     VALUES ($1, $2, $3, $4, 0, 0, $5, $6)`,
+    [
+      command.planId,
+      command.originDeviceId,
+      command.idempotencyKey,
+      command.payloadDigest,
+      budgetServerKnowledge,
+      command.response,
+    ],
+  );
 }
 
 async function lockCatalogIdempotencyKey(
@@ -550,6 +818,36 @@ async function insertEntityChanges(
   }
 }
 
+async function upsertPlanEntities(
+  client: PoolClient,
+  input: CommitChangeSetInput,
+  serverKnowledge: number,
+): Promise<void> {
+  for (const change of input.changes) {
+    await client.query(
+      `INSERT INTO semantic_plan_entities
+         (plan_id, entity_kind, entity_id, schema_version,
+          is_tombstone, payload, last_server_knowledge)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (plan_id, entity_kind, entity_id) DO UPDATE SET
+         schema_version = EXCLUDED.schema_version,
+         is_tombstone = EXCLUDED.is_tombstone,
+         payload = EXCLUDED.payload,
+         last_server_knowledge = EXCLUDED.last_server_knowledge,
+         updated_at = now()`,
+      [
+        input.planId,
+        change.entityKind,
+        change.entityId,
+        input.schemaVersion,
+        change.isTombstone,
+        change.payload,
+        serverKnowledge,
+      ],
+    );
+  }
+}
+
 type CatalogMembershipRow = CatalogRow & {
   membership_id: string;
   plan_id: string;
@@ -584,7 +882,7 @@ function mapMembership(row: CatalogMembershipRow): PlanMembership {
   };
 }
 
-function validateCreatePlan(input: CreatePlanInput): void {
+function validateSeedPlan(input: SeedPlanInput): void {
   if (
     !input.planId ||
     !input.budgetVersionId ||
@@ -597,6 +895,48 @@ function validateCreatePlan(input: CreatePlanInput): void {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
       'Plan creation contains invalid identity, name, or permissions',
+    );
+  }
+}
+
+function validateCreatePlanCommand(command: CreatePlanCommand): void {
+  const validKnowledge = [
+    command.expectedCatalogServerKnowledge,
+    command.startingCatalogDeviceKnowledge,
+    command.endingCatalogDeviceKnowledge,
+  ].every(value => Number.isSafeInteger(value) && value >= 0);
+  const identities = command.entities.map(
+    entity => `${entity.entityKind}\u001f${entity.entityId}`,
+  );
+  const validEntities =
+    command.entities.length > 0 &&
+    command.entities.every(
+      entity => entity.entityKind.trim() && entity.entityId.trim(),
+    ) &&
+    new Set(identities).size === identities.length;
+  if (
+    !command.catalogChangeSetId ||
+    !command.budgetChangeSetId ||
+    !command.planId ||
+    !command.budgetVersionId ||
+    !command.membershipId ||
+    !command.principalId ||
+    !command.originDeviceId ||
+    !command.idempotencyKey ||
+    !command.name.trim() ||
+    !validKnowledge ||
+    command.endingCatalogDeviceKnowledge <
+      command.startingCatalogDeviceKnowledge ||
+    !Number.isSafeInteger(command.permissions) ||
+    command.permissions < 0 ||
+    !Number.isSafeInteger(command.schemaVersion) ||
+    command.schemaVersion <= 0 ||
+    !/^[0-9a-f]{64}$/u.test(command.payloadDigest) ||
+    !validEntities
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Plan creation failed semantic storage validation',
     );
   }
 }

@@ -1,3 +1,4 @@
+import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 import { Pool } from 'pg';
 
 import { SemanticStoreError } from './errors';
@@ -22,7 +23,7 @@ integrationTest('PostgresSemanticStore integration', () => {
   });
 
   test('persists a catalog and replays one atomic tombstone change', async () => {
-    await store.createPlan({
+    await store.seedPlan({
       planId: 'plan-integration',
       budgetVersionId: 'version-integration',
       membershipId: 'membership-integration',
@@ -179,6 +180,99 @@ integrationTest('PostgresSemanticStore integration', () => {
         ...operation,
         payloadDigest: 'f'.repeat(64),
       }),
+    ).rejects.toBeInstanceOf(SemanticStoreError);
+  });
+
+  test('atomically creates and exactly replays the admitted PLAN-001 bootstrap', async () => {
+    const entities = buildStockPlanBootstrap({
+      planId: 'created-plan-integration',
+      budgetVersionId: 'created-version-integration',
+      principalId: 'created-principal-integration',
+      name: 'Created integration plan',
+      currencyFormat: { iso_code: 'USD' },
+      dateFormat: { format: 'MM/DD/YYYY' },
+      createdOn: '2026-08-16',
+      createdAtMilliseconds: 1786954979513,
+      allocateId: label => `created-${label}`,
+    });
+    const operation = {
+      catalogChangeSetId: 'created-catalog-change-integration',
+      budgetChangeSetId: 'created-budget-change-integration',
+      planId: 'created-plan-integration',
+      budgetVersionId: 'created-version-integration',
+      membershipId: 'created-membership-integration',
+      principalId: 'created-principal-integration',
+      originDeviceId: 'created-device-integration',
+      expectedCatalogServerKnowledge: 0,
+      startingCatalogDeviceKnowledge: 0,
+      endingCatalogDeviceKnowledge: 0,
+      schemaVersion: 1,
+      idempotencyKey: 'created-request-integration',
+      payloadDigest: '1'.repeat(64),
+      name: 'Created integration plan',
+      permissions: 1,
+      currencyFormat: { iso_code: 'USD' },
+      dateFormat: { format: 'MM/DD/YYYY' },
+      entities,
+      response: {
+        budget_id: 'created-plan-integration',
+        budget_version_id: 'created-version-integration',
+      },
+    } as const;
+
+    await expect(store.createPlan(operation)).resolves.toEqual({
+      replayed: false,
+      catalogServerKnowledge: 1,
+      budgetServerKnowledge: 1,
+      response: operation.response,
+    });
+    await expect(
+      store.createPlan({
+        ...operation,
+        planId: 'ignored-retry-plan',
+        budgetVersionId: 'ignored-retry-version',
+      }),
+    ).resolves.toEqual({
+      replayed: true,
+      catalogServerKnowledge: 1,
+      budgetServerKnowledge: 1,
+      response: operation.response,
+    });
+
+    const state = await pool.query<{
+      plans: string;
+      memberships: string;
+      catalog_changes: string;
+      budget_changes: string;
+      entity_changes: string;
+      entity_snapshots: string;
+      catalog_receipts: string;
+      budget_receipts: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM semantic_plans WHERE plan_id = $1) AS plans,
+         (SELECT count(*) FROM semantic_plan_memberships WHERE plan_id = $1) AS memberships,
+         (SELECT count(*) FROM semantic_catalog_change_sets WHERE principal_id = $2) AS catalog_changes,
+         (SELECT count(*) FROM semantic_change_sets WHERE plan_id = $1) AS budget_changes,
+         (SELECT count(*) FROM semantic_entity_changes WHERE change_set_id = $3) AS entity_changes,
+         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_snapshots,
+         (SELECT count(*) FROM semantic_catalog_command_receipts WHERE principal_id = $2) AS catalog_receipts,
+         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS budget_receipts`,
+      [operation.planId, operation.principalId, operation.budgetChangeSetId],
+    );
+    expect(state.rows[0]).toEqual({
+      plans: '1',
+      memberships: '1',
+      catalog_changes: '1',
+      budget_changes: '1',
+      entity_changes: '58',
+      entity_snapshots: '58',
+      catalog_receipts: '1',
+      budget_receipts: '1',
+    });
+
+    await expect(
+      store.createPlan({ ...operation, payloadDigest: '2'.repeat(64) }),
     ).rejects.toBeInstanceOf(SemanticStoreError);
   });
 });

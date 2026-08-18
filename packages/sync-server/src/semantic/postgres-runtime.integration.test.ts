@@ -102,4 +102,75 @@ integrationTest('semantic catalog runtime integration', () => {
       },
     });
   });
+
+  test('creates a complete plan through the retained Actual session', async () => {
+    const response = await request(testApp)
+      .post('/semantic/v1/plans')
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-create-request')
+      .send({
+        name: 'Semantic Created Plan',
+        currency_format: {
+          iso_code: 'USD',
+          decimal_digits: 2,
+          currency_symbol: '$',
+        },
+        date_format: { format: 'MM/DD/YYYY' },
+      })
+      .expect(201);
+
+    expect(response.body).toMatchObject({
+      status: 'ok',
+      data: {
+        catalog_server_knowledge: 2,
+        budget_server_knowledge: 1,
+        replayed: false,
+      },
+    });
+    const createdPlanId = response.body.data.budget_id as string;
+    const createdVersionId = response.body.data.budget_version_id as string;
+    expect(createdPlanId).toBeTruthy();
+    expect(createdVersionId).toBeTruthy();
+
+    const counts = await seedPool!.query<{
+      entity_count: string;
+      catalog_receipts: string;
+      budget_receipts: string;
+    }>(
+      `SELECT
+         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_catalog_command_receipts WHERE principal_id = $2) AS catalog_receipts,
+         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS budget_receipts`,
+      [createdPlanId, userId],
+    );
+    expect(counts.rows[0]).toEqual({
+      entity_count: '58',
+      catalog_receipts: '1',
+      budget_receipts: '1',
+    });
+
+    const replay = await request(testApp)
+      .post('/semantic/v1/plans')
+      .set('x-actual-token', token)
+      .set('x-semantic-device-id', 'semantic-web-device')
+      .set('idempotency-key', 'semantic-create-request')
+      .send({
+        name: 'Semantic Created Plan',
+        currency_format: {
+          iso_code: 'USD',
+          decimal_digits: 2,
+          currency_symbol: '$',
+        },
+        date_format: { format: 'MM/DD/YYYY' },
+      })
+      .expect(200);
+    expect(replay.body.data).toMatchObject({
+      budget_id: createdPlanId,
+      budget_version_id: createdVersionId,
+      catalog_server_knowledge: 2,
+      budget_server_knowledge: 1,
+      replayed: true,
+    });
+  });
 });

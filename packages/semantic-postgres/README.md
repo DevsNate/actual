@@ -23,9 +23,11 @@ device knowledge, and commits the change set, knowledge advancement, and exact
 response receipt in one database transaction. An identical retry replays the
 receipt. A different payload using the same key fails closed.
 
-The catalog ledger migration is intentionally schema-only for now. No route
-may advance it until the atomic plan lifecycle writer can commit catalog facts
-and the complete canonical budget bootstrap together.
+`createPlan` commits the plan, owner membership, catalog change, complete
+canonical budget bootstrap, both knowledge ledgers, materialized entity
+snapshots, and exact receipts in one PostgreSQL transaction. The authenticated
+native semantic API is the first caller; compatibility projections remain
+separate adapters over the same command.
 
 Canonical entity snapshots retain a complete JSON payload, entity kind,
 identity, schema version, tombstone state, and last server knowledge. This is

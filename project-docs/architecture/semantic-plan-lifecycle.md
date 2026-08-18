@@ -48,10 +48,12 @@ The command returns stable plan and budget-version identities. A retry with the
 same principal, device, idempotency key, and payload digest replays the exact
 stored response. Reusing the key for another payload fails without mutation.
 
-Until canonical bootstrap entities and catalog-command receipts exist, plan
-creation remains unavailable through the HTTP API. `PostgresSemanticStore`'s
-current low-level `createPlan` helper is foundation/seeding infrastructure, not
-an admitted product command.
+The admitted PLAN-001 bootstrap is implemented as a versioned semantic
+template. It creates the captured six master categories, fifteen
+subcategories, three system payees, one server setting, two onboarding events,
+two monthly budgets, and twenty-eight monthly category rows. Client-owned
+`budget_views`, the prior-month row, and `opened_budget` remain later client
+changes rather than server bootstrap facts.
 
 ## Rename
 
@@ -85,12 +87,13 @@ the service, and project its result.
 The implementation sequence is:
 
 1. add principal/device-scoped catalog knowledge and command receipts
-   (**schema and atomic command writer implemented; product commands
-   pending**);
+   (**implemented**);
 2. add canonical plan metadata and an unknown-field-preserving entity store
-   (**schema implemented; exact default bootstrap evidence pending**);
-3. implement atomic create, rename, and delete domain commands;
-4. expose the native React command API;
+   (**implemented with the admitted PLAN-001 bootstrap**);
+3. implement atomic create, rename, and delete domain commands (**create
+   implemented; rename and delete pending**);
+4. expose the native React command API (**create endpoint implemented; UI
+   wiring pending**);
 5. project the same commands through admitted YNAB-shaped endpoints; and
 6. add physical cross-client acceptance fixtures without weakening the
    canonical invariants.

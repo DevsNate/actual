@@ -201,7 +201,16 @@ API` contains the expiry correction and first route integration.
 - **Entity extension:** `0003_canonical_plan_entities.sql` adds structured
   date/currency metadata and a schema-versioned, tombstone-capable canonical
   entity snapshot table. Complete JSON payloads preserve unknown fields; no
-  entity-specific behavior or default bootstrap contents are inferred.
+  entity-specific behavior is inferred.
+- **PLAN-001 bootstrap extension:** `buildStockPlanBootstrap` materializes the
+  58 authoritative source entities demonstrated by the sealed PLAN-001 stock
+  capture: budget, six master categories, fifteen categories, three system
+  payees, one onboarding setting, two onboarding events, two monthly budgets,
+  and twenty-eight monthly-category rows. Calculation rows remain projections,
+  while `budget_views`, the prior-month row, and `opened_budget` remain later
+  client-authored events rather than server bootstrap data. The captured
+  subscription deadline rule is creation date plus thirteen months and three
+  days.
 - **Boundary:** This is the canonical storage foundation, not yet the live
   authority for budgeting entities. No inferred account, transfer, schedule,
   or target policy is encoded in this migration.
@@ -210,7 +219,8 @@ API` contains the expiry correction and first route integration.
   integration run that applies the migration twice and exercises plan/catalog
   persistence, tombstone commit, exact replay, and conflicting replay.
 - **Commit/PR:** `6e50cfc`; bundled migration support is included in `[AI]
-Mount semantic catalog API`.
+Mount semantic catalog API`; PLAN-001 bootstrap is included in `[AI] Add
+evidence-backed plan creation`.
 - **Status:** implemented; live routing and budgeting tables remain pending.
 
 ### ADD-002 — Knowledge and receipt ledger
@@ -230,17 +240,21 @@ Mount semantic catalog API`.
   principal/device/idempotency tuple, checks both knowledge counters, appends
   the versioned catalog change set and complete entity changes, advances
   catalog knowledge, and stores the exact response receipt in one transaction.
-  This is storage infrastructure; it does not expose plan creation or mutate
-  canonical plan rows by itself.
+- **Plan creation implementation:** `PostgresSemanticStore.createPlan` commits
+  the plan, owner membership, catalog change, PLAN-001 bootstrap change set,
+  canonical entity snapshots, both knowledge ledgers, and both exact replay
+  receipts in one PostgreSQL transaction. A reused key with the same digest
+  returns the original identities; a different digest fails closed.
 - **Verification:** Focused tests cover first commit, exact replay, conflicting
   replay rollback, validation before database access, and the schema's
   knowledge/receipt foreign-key constraints. The same lifecycle passes against
   disposable PostgreSQL 17, with exactly one change set and receipt after
   replay.
-- **Commit/PR:** `6e50cfc`.
-- **Status:** implemented for budget and catalog command storage;
-  acknowledgment delivery, product commands, and pruning policy remain
-  pending.
+- **Commit/PR:** `6e50cfc`; plan creation is included in `[AI] Add
+evidence-backed plan creation`.
+- **Status:** implemented for budget/catalog command storage and atomic plan
+  creation; acknowledgment delivery beyond the HTTP response, remaining
+  product commands, and pruning policy remain pending.
 
 ### ADD-003 — YNAB protocol gateway
 
@@ -260,16 +274,20 @@ Mount semantic catalog API`.
 - **Implementation:** Feature-gated `GET /semantic/v1/catalog` authenticates
   with the retained `X-Actual-Token`, derives the principal server-side, and
   returns only that principal's canonical PostgreSQL memberships and catalog
-  knowledge. Storage errors expose neither partial data nor database details.
-- **Deliberate exclusion:** Plan lifecycle mutation remains disabled until its
-  idempotency receipt and admitted endpoint contract are implemented.
+  knowledge. Authenticated `POST /semantic/v1/plans` accepts only the admitted
+  name, currency-format, and date-format inputs and delegates atomic creation
+  to the same canonical store. Storage errors expose neither partial data nor
+  database details.
 - **Configuration:** `ACTUAL_SEMANTIC_ENABLED=true` plus
   `ACTUAL_SEMANTIC_DATABASE_URL`. Disabled is the default.
 - **Verification:** Unauthorized/scoped/error route tests, production bundle,
   and disposable PostgreSQL integration through a real Actual account/session
   row. See `semantic-catalog-api.md`.
-- **Commit/PR:** `[AI] Mount semantic catalog API`.
-- **Status:** implemented for read-only catalog; commands pending.
+- **Commit/PR:** `[AI] Mount semantic catalog API`; create is included in `[AI]
+Add evidence-backed plan creation`.
+- **Status:** implemented for catalog reads and plan creation; rename, delete,
+  activation/materialization UI, and stock compatibility projection remain
+  pending.
 
 ### ADD-005 — Compatibility fixture suite
 

@@ -1,10 +1,17 @@
 import type {
   CatalogCommand,
   CatalogCommandResult,
+  CreatePlanCommand,
+  CreatePlanResult,
   PlanId,
 } from '@actual-app/semantic-core';
 
-export type { CatalogCommand, CatalogCommandResult };
+export type {
+  CatalogCommand,
+  CatalogCommandResult,
+  CreatePlanCommand,
+  CreatePlanResult,
+};
 
 export type EntityChangeInput = {
   entityKind: string;
@@ -34,7 +41,7 @@ export type CommitChangeSetResult = {
   response: Readonly<Record<string, unknown>>;
 };
 
-export type CreatePlanInput = {
+export type SeedPlanInput = {
   planId: PlanId;
   budgetVersionId: string;
   membershipId: string;

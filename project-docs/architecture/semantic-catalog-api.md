@@ -1,8 +1,8 @@
 # Semantic catalog API
 
-The first semantic HTTP slice is a read-only, authenticated plan catalog. It
-proves that retained Actual authentication can safely scope canonical
-PostgreSQL data before any stock file/CRDT authority is removed.
+The semantic HTTP plan slice provides an authenticated catalog read and atomic
+plan creation. It proves that retained Actual authentication can safely scope
+canonical PostgreSQL data before any stock file/CRDT authority is removed.
 
 ## Configuration
 
@@ -32,13 +32,29 @@ No caller may select a different principal. Authentication failures return
 `401`; storage failures return a generic `500` without database details or a
 partial catalog.
 
+```http
+POST /semantic/v1/plans
+X-Actual-Token: <retained Actual session token>
+X-Semantic-Device-Id: <stable caller device identity>
+Idempotency-Key: <stable request identity>
+Content-Type: application/json
+
+{
+  "name": "Plan Create Trace",
+  "currency_format": { "iso_code": "USD", "...": "..." },
+  "date_format": { "format": "MM/DD/YYYY" }
+}
+```
+
+Creation stores the authenticated owner's membership and the evidence-backed
+PLAN-001 bootstrap atomically. An identical retry returns the original plan
+and budget-version identities; conflicting reuse returns `409`.
+
 ## Deliberate boundary
 
-This slice does not create, rename, delete, or select plans. Those commands need
-catalog idempotency receipts and admitted endpoint behavior before they are
-enabled. It does not change `/sync`, the stock file catalog, encrypted budget
-files, or CRDT behavior. The route is an internal web semantic API, not yet a
-claim about a stock YNAB endpoint.
+This slice does not rename, delete, or select plans. It does not change `/sync`,
+the stock file catalog, encrypted budget files, or CRDT behavior. The routes
+are an internal web semantic API, not yet a claim about stock YNAB endpoints.
 
 The atomic command boundary and the distinction between membership,
 materialization, and selection are defined in

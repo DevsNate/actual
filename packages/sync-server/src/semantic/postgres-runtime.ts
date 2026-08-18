@@ -9,6 +9,7 @@ import { semanticFoundationMigration } from '@actual-app/semantic-postgres/found
 import { Pool } from 'pg';
 
 import { createSemanticCatalogHandlers } from './catalog-api';
+import { createSemanticPlanHandlers } from './plan-api';
 import { resolveActualPrincipal } from './session-principal-adapter';
 
 export async function createPostgresSemanticCatalogHandlers(
@@ -28,11 +29,19 @@ export async function createPostgresSemanticCatalogHandlers(
   }
 
   const store = new PostgresSemanticStore(pool);
-  return {
-    handlers: createSemanticCatalogHandlers({
+  const handlers = createSemanticCatalogHandlers({
+    catalogReader: store,
+    resolvePrincipal: resolveActualPrincipal,
+  });
+  handlers.use(
+    createSemanticPlanHandlers({
       catalogReader: store,
+      planCreator: store,
       resolvePrincipal: resolveActualPrincipal,
     }),
+  );
+  return {
+    handlers,
     close: () => pool.end(),
   };
 }
