@@ -1,4 +1,5 @@
 import type {
+  BudgetVersionPlanReader,
   PlanEntity,
   PlanReader,
   PlanSnapshot,
@@ -21,21 +22,42 @@ type EntityRow = {
   payload: Readonly<Record<string, unknown>>;
 };
 
-export class PostgresPlanReader implements PlanReader {
+export class PostgresPlanReader implements PlanReader, BudgetVersionPlanReader {
   constructor(private readonly pool: Pool) {}
 
   async readPlan(
     principalId: string,
     planId: string,
   ): Promise<PlanSnapshot | null> {
+    return this.readAuthorizedPlan(principalId, 'plan', planId);
+  }
+
+  async readPlanByBudgetVersion(
+    principalId: string,
+    budgetVersionId: string,
+  ): Promise<PlanSnapshot | null> {
+    return this.readAuthorizedPlan(
+      principalId,
+      'budget-version',
+      budgetVersionId,
+    );
+  }
+
+  private async readAuthorizedPlan(
+    principalId: string,
+    identityKind: 'plan' | 'budget-version',
+    identity: string,
+  ): Promise<PlanSnapshot | null> {
+    const identityColumn =
+      identityKind === 'plan' ? 'm.plan_id' : 'p.budget_version_id';
     const plan = await this.pool.query<PlanRow>(
       `SELECT p.plan_id, p.budget_version_id, p.name, p.server_knowledge,
               p.currency_format, p.date_format
        FROM semantic_plan_memberships m
        JOIN semantic_plans p ON p.plan_id = m.plan_id
-       WHERE m.principal_id = $1 AND m.plan_id = $2
+       WHERE m.principal_id = $1 AND ${identityColumn} = $2
          AND m.is_tombstone = false AND p.is_tombstone = false`,
-      [principalId, planId],
+      [principalId, identity],
     );
     const row = plan.rows[0];
     if (!row) {
@@ -46,7 +68,7 @@ export class PostgresPlanReader implements PlanReader {
        FROM semantic_plan_entities
        WHERE plan_id = $1
        ORDER BY last_server_knowledge, entity_kind, entity_id`,
-      [planId],
+      [row.plan_id],
     );
     return {
       planId: row.plan_id,

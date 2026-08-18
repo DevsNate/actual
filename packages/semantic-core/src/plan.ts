@@ -56,3 +56,10 @@ export type PlanReader = {
     planId: string,
   ): Promise<PlanSnapshot | null>;
 };
+
+export type BudgetVersionPlanReader = {
+  readPlanByBudgetVersion(
+    principalId: PrincipalId,
+    budgetVersionId: string,
+  ): Promise<PlanSnapshot | null>;
+};

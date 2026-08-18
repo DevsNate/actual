@@ -271,9 +271,20 @@ evidence-backed plan creation`.
   adapter authenticates `x-session-token` through retained Actual sessions and
   projects canonical memberships, including tombstones, as complete
   `ce_user_budgets` records. See `stock-catalog-gateway.md`.
+- **Budget-read foundation:** The principal-scoped PostgreSQL reader can now
+  resolve a canonical plan by its opaque budget-version identity, and the pure
+  stock budget projector converts the 58 admitted PLAN-001 source entities to
+  their complete `be_*` wire tables without losing unknown fields. Projection
+  rejects malformed entity kinds and identity/key collisions. Calculated rows
+  are deliberately excluded until their captured schemas and derivations are
+  admitted; consequently `syncBudgetData` is not mounted yet.
+- **Verification:** Source projection fixtures, strict TypeScript checks,
+  repository lint, production sync-server build, and disposable PostgreSQL 17
+  authorization/readback integration.
 - **Status:** migrating; read-only `syncCatalogData` membership projection is
-  implemented. Initial user, family, budget, and catalog-write operations
-  remain explicit unsupported boundaries.
+  implemented, and budget source projection is implemented but not routed.
+  Initial user, family, calculated budget rows, budget transport, and
+  catalog-write operations remain explicit unsupported boundaries.
 
 ### ADD-004 — Web semantic API
 

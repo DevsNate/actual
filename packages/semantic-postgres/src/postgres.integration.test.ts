@@ -3,6 +3,7 @@ import { Pool } from 'pg';
 
 import { SemanticStoreError } from './errors';
 import { migrateSemanticDatabase } from './migrate';
+import { PostgresPlanReader } from './plan-reader';
 import { PostgresSemanticStore } from './store';
 
 const databaseUrl = process.env.SEMANTIC_POSTGRES_TEST_URL;
@@ -11,6 +12,7 @@ const integrationTest = databaseUrl ? describe : describe.skip;
 integrationTest('PostgresSemanticStore integration', () => {
   const pool = new Pool({ connectionString: databaseUrl });
   const store = new PostgresSemanticStore(pool);
+  const planReader = new PostgresPlanReader(pool);
   const digest = 'c'.repeat(64);
 
   beforeAll(async () => {
@@ -272,6 +274,23 @@ integrationTest('PostgresSemanticStore integration', () => {
       catalog_receipts: '1',
       budget_receipts: '1',
     });
+
+    const byVersion = await planReader.readPlanByBudgetVersion(
+      operation.principalId,
+      operation.budgetVersionId,
+    );
+    expect(byVersion).toMatchObject({
+      planId: operation.planId,
+      budgetVersionId: operation.budgetVersionId,
+      serverKnowledge: 1,
+    });
+    expect(byVersion?.entities).toHaveLength(58);
+    await expect(
+      planReader.readPlanByBudgetVersion(
+        'different-principal',
+        operation.budgetVersionId,
+      ),
+    ).resolves.toBeNull();
 
     await expect(
       store.createPlan({ ...operation, payloadDigest: '2'.repeat(64) }),
