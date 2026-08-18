@@ -61,6 +61,7 @@ integrationTest('semantic catalog runtime integration', () => {
 
     const app = express();
     app.use('/semantic/v1', runtime.handlers);
+    app.use('/api/v1', runtime.stockHandlers);
     testApp = app;
   });
 
@@ -97,7 +98,57 @@ integrationTest('semantic catalog runtime integration', () => {
             principalId: userId,
             name: 'Semantic Integration Plan',
             permissions: 7,
+            lastModifiedAt: expect.any(String),
+            source: null,
             isTombstone: false,
+          },
+        ],
+      },
+    });
+  });
+
+  test('projects the same catalog through the stock sync envelope', async () => {
+    const response = await request(testApp)
+      .post('/api/v1/catalog')
+      .set('x-session-token', token)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-client-request-id', 'stock-catalog-request')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .type('form')
+      .send({
+        operation_name: 'syncCatalogData',
+        request_data: JSON.stringify({
+          user_id: userId,
+          schema_version: 16,
+          schema_version_of_knowledge: 16,
+          starting_device_knowledge: 0,
+          ending_device_knowledge: 0,
+          device_knowledge_of_server: 0,
+          changed_entities: {},
+        }),
+      })
+      .expect(200);
+
+    expect(response.headers['x-ynab-client-request-id']).toBe(
+      'stock-catalog-request',
+    );
+    expect(response.body).toMatchObject({
+      error: null,
+      schema_version_of_response: 16,
+      server_knowledge_of_device: 0,
+      current_server_knowledge: 1,
+      changed_entities: {
+        ce_user_budgets: [
+          {
+            id: 'semantic-integration-membership',
+            budget_id: planId,
+            budget_version_id: 'semantic-integration-version',
+            user_id: userId,
+            budget_name: 'Semantic Integration Plan',
+            permissions: 7,
+            source: null,
+            is_tombstone: false,
+            last_modified_at: expect.any(String),
           },
         ],
       },

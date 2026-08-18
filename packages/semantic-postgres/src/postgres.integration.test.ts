@@ -45,6 +45,8 @@ integrationTest('PostgresSemanticStore integration', () => {
           principalId: 'principal-integration',
           name: 'Integration plan',
           permissions: 7,
+          lastModifiedAt: expect.any(String),
+          source: null,
           isTombstone: false,
         },
       ],

@@ -76,6 +76,7 @@ if (config.get('semantic.enabled')) {
   const semanticCatalog =
     await createPostgresSemanticCatalogHandlers(databaseUrl);
   app.use('/semantic/v1', semanticCatalog.handlers);
+  app.use('/api/v1', semanticCatalog.stockHandlers);
 }
 
 if (config.get('corsProxy.enabled')) {

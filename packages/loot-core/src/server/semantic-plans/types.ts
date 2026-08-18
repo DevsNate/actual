@@ -5,6 +5,8 @@ export type SemanticPlanMembership = {
   principalId: string;
   name: string;
   permissions: number;
+  lastModifiedAt: string;
+  source: string | null;
   isTombstone: boolean;
 };
 

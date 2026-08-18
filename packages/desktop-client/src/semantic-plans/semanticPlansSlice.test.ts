@@ -17,6 +17,8 @@ const catalog = {
       principalId: 'user-1',
       name: 'Plan',
       permissions: 1,
+      lastModifiedAt: '2026-08-17T00:00:00.000Z',
+      source: null,
       isTombstone: false,
     },
   ],

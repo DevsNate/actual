@@ -114,6 +114,8 @@ describe('PostgresSemanticStore', () => {
         principal_id: 'principal-1',
         name: 'My plan',
         permissions: '7',
+        last_modified_at: '2026-08-17T00:00:00.000Z',
+        source: null,
         is_tombstone: false,
       },
     ]);
@@ -132,6 +134,8 @@ describe('PostgresSemanticStore', () => {
           principalId: 'principal-1',
           name: 'My plan',
           permissions: 7,
+          lastModifiedAt: '2026-08-17T00:00:00.000Z',
+          source: null,
           isTombstone: false,
         },
       ],

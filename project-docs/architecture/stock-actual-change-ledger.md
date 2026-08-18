@@ -30,7 +30,7 @@ v26.8.1. The baseline commit is
 | ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                     |
 | ADD-001    | Canonical semantic database              | Add                | implemented    | PostgreSQL foundation; entity authority follows   |
 | ADD-002    | Knowledge and receipt ledger             | Add                | implemented    | Ordered per-plan/device synchronization state     |
-| ADD-003    | YNAB protocol gateway                    | Add                | proposed       | Evidence-derived stock projections                |
+| ADD-003    | YNAB protocol gateway                    | Add                | migrating      | Evidence-derived stock projections                |
 | ADD-004    | Web semantic API                         | Add                | implemented    | Read-only authenticated catalog slice             |
 | ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests  |
 | ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
@@ -266,7 +266,14 @@ evidence-backed plan creation`.
 - **Rule:** Implement only admitted endpoint and entity contracts. Explicitly
   reject unsupported operations.
 - **Evidence:** `STARTUP-001` and `PLAN-001`.
-- **Status:** proposed.
+- **Implementation:** A sanitized 2026-08-17 stock-web capture confirms the
+  catalog form envelope and non-secret request-context header names. The first
+  adapter authenticates `x-session-token` through retained Actual sessions and
+  projects canonical memberships, including tombstones, as complete
+  `ce_user_budgets` records. See `stock-catalog-gateway.md`.
+- **Status:** migrating; read-only `syncCatalogData` membership projection is
+  implemented. Initial user, family, budget, and catalog-write operations
+  remain explicit unsupported boundaries.
 
 ### ADD-004 — Web semantic API
 
@@ -385,5 +392,6 @@ Copy this block for a new architectural delta:
   drift even if both write to the same PostgreSQL tables.
 - **Verification:** Existing route command-shape tests, runtime PostgreSQL
   integration tests, lint, and strict typechecks.
-- **Status:** implemented; stock transport adapter awaits an admitted
-  non-secret request-context header fixture after Chrome reconnects.
+- **Status:** implemented and consumed by the first stock catalog adapter; all
+  later transport slices must continue to call these services rather than
+  rebuilding command orchestration.

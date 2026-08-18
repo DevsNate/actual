@@ -49,6 +49,8 @@ type CatalogRow = {
   principal_id: string | null;
   name: string | null;
   permissions: string | null;
+  last_modified_at: Date | string | null;
+  source: string | null;
   is_tombstone: boolean | null;
 };
 
@@ -254,6 +256,8 @@ export class PostgresSemanticStore {
               CASE WHEN m.is_tombstone OR p.is_tombstone
                    THEN 'Unknown' ELSE p.name END AS name,
               m.permissions,
+              m.updated_at AS last_modified_at,
+              NULL::text AS source,
               CASE WHEN m.membership_id IS NULL THEN NULL
                    ELSE (m.is_tombstone OR p.is_tombstone)
               END AS is_tombstone
@@ -858,6 +862,7 @@ type CatalogMembershipRow = CatalogRow & {
   principal_id: string;
   name: string;
   permissions: string;
+  last_modified_at: Date | string;
   is_tombstone: boolean;
 };
 
@@ -869,6 +874,7 @@ function hasMembership(row: CatalogRow): row is CatalogMembershipRow {
     row.principal_id !== null &&
     row.name !== null &&
     row.permissions !== null &&
+    row.last_modified_at !== null &&
     row.is_tombstone !== null
   );
 }
@@ -881,8 +887,18 @@ function mapMembership(row: CatalogMembershipRow): PlanMembership {
     principalId: row.principal_id,
     name: row.name,
     permissions: toSafeInteger(row.permissions, 'permissions'),
+    lastModifiedAt: timestamp(row.last_modified_at, 'last modified at'),
+    source: row.source,
     isTombstone: row.is_tombstone,
   };
+}
+
+function timestamp(value: Date | string, label: string): string {
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new SemanticStoreError('INVALID_OPERATION', `${label} is invalid`);
+  }
+  return parsed.toISOString();
 }
 
 function validateSeedPlan(input: SeedPlanInput): void {

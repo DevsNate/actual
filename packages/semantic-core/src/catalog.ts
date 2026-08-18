@@ -10,6 +10,8 @@ export type PlanMembership = {
   principalId: PrincipalId;
   name: string;
   permissions: number;
+  lastModifiedAt: string;
+  source: string | null;
   isTombstone: boolean;
 };
 
