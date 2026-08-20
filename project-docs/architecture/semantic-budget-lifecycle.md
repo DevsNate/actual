@@ -1,4 +1,4 @@
-# Semantic plan lifecycle
+# Semantic budget lifecycle
 
 This record translates admitted `PLAN-001` behavior into the canonical domain
 boundary for the fork. It defines what must be atomic before a plan mutation is
@@ -147,7 +147,7 @@ weakening cross-device delivery or inventing an undocumented rule.
 ## Client boundary
 
 The React application does not call semantic HTTP endpoints or read session
-tokens. `desktop-client/src/semantic-plans/api.ts` sends typed commands through
+tokens. `desktop-client/src/semantic-budgets/api.ts` sends typed commands through
 the existing Actual worker message bus. The loot-core semantic plan app owns
 authentication headers, a durable device identity, and HTTP envelope parsing.
 Canonical catalog and authorized plan snapshots live in their own Redux slice;

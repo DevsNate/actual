@@ -1,4 +1,4 @@
-import type { PlanEntity, PlanSnapshot } from '@actual-app/semantic-core';
+import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
 export type StockBudgetSourceProjection = {
   changedEntities: Readonly<Record<string, unknown>>;
@@ -7,7 +7,7 @@ export type StockBudgetSourceProjection = {
 };
 
 export function projectStockBudgetSource(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): StockBudgetSourceProjection {
   const grouped = new Map<string, Array<Readonly<Record<string, unknown>>>>();
   for (const entity of snapshot.entities) {
@@ -51,7 +51,7 @@ export function projectStockBudgetSource(
 }
 
 export function projectStockEntity(
-  entity: PlanEntity,
+  entity: BudgetEntity,
 ): Readonly<Record<string, unknown>> {
   const payload = projectEntityPayload(entity.entityKind, entity.payload);
   if ('id' in payload || 'is_tombstone' in payload) {

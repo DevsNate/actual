@@ -1,18 +1,18 @@
 import {
-  deleteSemanticPlan,
+  deleteSemanticBudget,
   getInitialState,
   loadSemanticCatalog,
-  loadSemanticPlan,
+  loadSemanticBudget,
   reducer,
-  renameSemanticPlan,
-} from './semanticPlansSlice';
+  renameSemanticBudget,
+} from './semanticBudgetsSlice';
 
 const catalog = {
   knowledge: { principalId: 'user-1', currentServerKnowledge: 2 },
   memberships: [
     {
       id: 'membership-1',
-      planId: 'plan-1',
+      budgetId: 'budget-1',
       budgetVersionId: 'version-1',
       principalId: 'user-1',
       name: 'Plan',
@@ -25,7 +25,7 @@ const catalog = {
 };
 
 const plan = {
-  planId: 'plan-1',
+  budgetId: 'budget-1',
   budgetVersionId: 'version-1',
   name: 'Plan',
   serverKnowledge: 1,
@@ -34,7 +34,7 @@ const plan = {
   entities: [],
 };
 
-describe('semantic plans state', () => {
+describe('semantic budgets state', () => {
   it('tracks catalog loading independently from legacy budget files', () => {
     let state = reducer(
       getInitialState(),
@@ -53,23 +53,23 @@ describe('semantic plans state', () => {
   it('stores authorized plan snapshots by stable plan identity', () => {
     const state = reducer(
       getInitialState(),
-      loadSemanticPlan.fulfilled(plan, 'request-1', { planId: 'plan-1' }),
+      loadSemanticBudget.fulfilled(plan, 'request-1', { budgetId: 'budget-1' }),
     );
 
-    expect(state.plans['plan-1']).toEqual(plan);
+    expect(state.budgets['budget-1']).toEqual(plan);
   });
 
   it('updates rename projection and removes deleted snapshots', () => {
     let state = reducer(
       getInitialState(),
-      loadSemanticPlan.fulfilled(plan, 'request-1', { planId: 'plan-1' }),
+      loadSemanticBudget.fulfilled(plan, 'request-1', { budgetId: 'budget-1' }),
     );
     state = reducer(
       state,
-      renameSemanticPlan.fulfilled(
+      renameSemanticBudget.fulfilled(
         {
           result: {
-            budget_id: 'plan-1',
+            budget_id: 'budget-1',
             name: 'Renamed',
             catalog_server_knowledge: 2,
             budget_server_knowledge: 2,
@@ -81,17 +81,17 @@ describe('semantic plans state', () => {
           },
         },
         'request-2',
-        { planId: 'plan-1', name: 'Renamed' },
+        { budgetId: 'budget-1', name: 'Renamed' },
       ),
     );
-    expect(state.plans['plan-1'].name).toBe('Renamed');
+    expect(state.budgets['budget-1'].name).toBe('Renamed');
 
     state = reducer(
       state,
-      deleteSemanticPlan.fulfilled(
+      deleteSemanticBudget.fulfilled(
         {
           result: {
-            budget_id: 'plan-1',
+            budget_id: 'budget-1',
             deleted: true,
             catalog_server_knowledge: 3,
             budget_server_knowledge: null,
@@ -100,9 +100,9 @@ describe('semantic plans state', () => {
           catalog: { ...catalog, memberships: [] },
         },
         'request-3',
-        { planId: 'plan-1' },
+        { budgetId: 'budget-1' },
       ),
     );
-    expect(state.plans['plan-1']).toBeUndefined();
+    expect(state.budgets['budget-1']).toBeUndefined();
   });
 });

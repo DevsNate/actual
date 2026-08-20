@@ -12,7 +12,9 @@
     "./foundation-migration": "./src/foundation-migration.ts",
     "./catalog-command-migration": "./src/catalog-command-migration.ts",
     "./catalog-schema-version-migration": "./src/catalog-schema-version-migration.ts",
-    "./canonical-plan-migration": "./src/canonical-plan-migration.ts"
+    "./canonical-budget-entity-migration": "./src/canonical-budget-entity-migration.ts",
+    "./budget-identity-schema-migration": "./src/budget-identity-schema-migration.ts",
+    "./canonical-account-domain-migration": "./src/canonical-account-domain-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

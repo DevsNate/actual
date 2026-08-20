@@ -1,14 +1,14 @@
 import type {
   AuthenticatedPrincipal,
-  DeletePlanCommand,
-  PlanLifecycleWriter,
-  RenamePlanCommand,
+  DeleteBudgetCommand,
+  BudgetLifecycleWriter,
+  RenameBudgetCommand,
 } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
-import { createSemanticPlanLifecycleHandlers } from './plan-lifecycle-api';
-import { createPlanLifecycleService } from './plan-lifecycle-service';
+import { createSemanticBudgetLifecycleHandlers } from './budget-lifecycle-api';
+import { createBudgetLifecycleService } from './budget-lifecycle-service';
 
 const principal: AuthenticatedPrincipal = {
   id: 'principal-1',
@@ -18,44 +18,44 @@ const principal: AuthenticatedPrincipal = {
 };
 
 test('translates rename and delete into scoped lifecycle commands', async () => {
-  let rename: RenamePlanCommand | undefined;
-  let deletion: DeletePlanCommand | undefined;
-  const writer: PlanLifecycleWriter = {
-    renamePlan: vi.fn(async command => {
+  let rename: RenameBudgetCommand | undefined;
+  let deletion: DeleteBudgetCommand | undefined;
+  const writer: BudgetLifecycleWriter = {
+    renameBudget: vi.fn(async command => {
       rename = command;
       return {
         replayed: false,
         catalogServerKnowledge: 4,
         budgetServerKnowledge: 2,
-        response: command.response,
+        budget: command.receipt,
       };
     }),
-    deletePlan: vi.fn(async command => {
+    deleteBudget: vi.fn(async command => {
       deletion = command;
       return {
         replayed: false,
         catalogServerKnowledge: 5,
         budgetServerKnowledge: null,
-        response: command.response,
+        budget: command.receipt,
       };
     }),
   };
   const app = express();
   let id = 0;
-  const planLifecycleService = createPlanLifecycleService({
-    planLifecycleWriter: writer,
+  const budgetLifecycleService = createBudgetLifecycleService({
+    budgetLifecycleWriter: writer,
     allocateId: () => `change-${++id}`,
   });
   app.use(
     '/semantic/v1',
-    createSemanticPlanLifecycleHandlers({
-      planLifecycleService,
+    createSemanticBudgetLifecycleHandlers({
+      budgetLifecycleService,
       resolvePrincipal: () => principal,
     }),
   );
 
   await request(app)
-    .patch('/semantic/v1/plans/plan-1')
+    .patch('/semantic/v1/budgets/plan-1')
     .set('x-actual-token', 'session')
     .set('x-semantic-device-id', 'device-1')
     .set('idempotency-key', 'rename-1')
@@ -65,12 +65,12 @@ test('translates rename and delete into scoped lifecycle commands', async () => 
     catalogChangeSetId: 'change-1',
     budgetChangeSetId: 'change-2',
     principalId: 'principal-1',
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     newName: 'Renamed',
   });
 
   await request(app)
-    .delete('/semantic/v1/plans/plan-1')
+    .delete('/semantic/v1/budgets/plan-1')
     .set('x-actual-token', 'session')
     .set('x-semantic-device-id', 'device-1')
     .set('idempotency-key', 'delete-1')
@@ -78,29 +78,29 @@ test('translates rename and delete into scoped lifecycle commands', async () => 
   expect(deletion).toMatchObject({
     catalogChangeSetId: 'change-3',
     principalId: 'principal-1',
-    planId: 'plan-1',
+    budgetId: 'plan-1',
   });
 });
 
 test('rejects incomplete requests before calling storage', async () => {
-  const writer: PlanLifecycleWriter = {
-    renamePlan: vi.fn(),
-    deletePlan: vi.fn(),
+  const writer: BudgetLifecycleWriter = {
+    renameBudget: vi.fn(),
+    deleteBudget: vi.fn(),
   };
   const app = express();
   app.use(
     '/semantic/v1',
-    createSemanticPlanLifecycleHandlers({
-      planLifecycleService: createPlanLifecycleService({
-        planLifecycleWriter: writer,
+    createSemanticBudgetLifecycleHandlers({
+      budgetLifecycleService: createBudgetLifecycleService({
+        budgetLifecycleWriter: writer,
       }),
       resolvePrincipal: () => principal,
     }),
   );
   await request(app)
-    .patch('/semantic/v1/plans/plan-1')
+    .patch('/semantic/v1/budgets/plan-1')
     .set('x-actual-token', 'session')
     .send({ name: '' })
     .expect(400);
-  expect(writer.renamePlan).not.toHaveBeenCalled();
+  expect(writer.renameBudget).not.toHaveBeenCalled();
 });

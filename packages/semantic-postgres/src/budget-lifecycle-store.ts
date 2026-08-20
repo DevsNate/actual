@@ -1,8 +1,9 @@
 import type {
-  DeletePlanCommand,
-  PlanLifecycleResult,
-  PlanLifecycleWriter,
-  RenamePlanCommand,
+  BudgetLifecycleReceipt,
+  DeleteBudgetCommand,
+  BudgetLifecycleResult,
+  BudgetLifecycleWriter,
+  RenameBudgetCommand,
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
 
@@ -23,21 +24,23 @@ type LifecycleState = {
 type ReceiptRow = {
   payload_digest: string;
   server_knowledge: string;
-  response: Readonly<Record<string, unknown>>;
+  response: BudgetLifecycleReceipt;
   command_kind: string;
 };
 
-export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
+export class PostgresBudgetLifecycleStore implements BudgetLifecycleWriter {
   constructor(private readonly pool: Pool) {}
 
-  async renamePlan(command: RenamePlanCommand): Promise<PlanLifecycleResult> {
+  async renameBudget(
+    command: RenameBudgetCommand,
+  ): Promise<BudgetLifecycleResult> {
     validateBase(command);
     if (!command.budgetChangeSetId || !command.newName.trim()) {
       throw invalidOperation();
     }
     return this.transact(async client => {
       await lockIdempotency(client, command);
-      const replay = await findReplay(client, command, 'rename-plan', true);
+      const replay = await findReplay(client, command, 'rename-budget', true);
       if (replay) {
         return replay;
       }
@@ -67,14 +70,14 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       );
 
       await client.query(
-        `UPDATE semantic_plans SET name = $2, updated_at = now()
-         WHERE plan_id = $1`,
-        [command.planId, name],
+        `UPDATE semantic_budgets SET name = $2, updated_at = now()
+         WHERE budget_id = $1`,
+        [command.budgetId, name],
       );
       await insertCatalogMutation(
         client,
         command,
-        'rename-plan',
+        'rename-budget',
         catalogRange.starting,
         catalogRange.ending,
         nextCatalogKnowledge,
@@ -96,10 +99,10 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
         [command.principalId, nextCatalogKnowledge],
       );
       await client.query(
-        `UPDATE semantic_plans
+        `UPDATE semantic_budgets
          SET server_knowledge = $2, updated_at = now()
-         WHERE plan_id = $1`,
-        [command.planId, nextBudgetKnowledge],
+         WHERE budget_id = $1`,
+        [command.budgetId, nextBudgetKnowledge],
       );
       await updateCatalogDevice(client, command, catalogRange.ending);
       await updateBudgetDevice(client, command, budgetRange.ending);
@@ -115,16 +118,18 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
         false,
         nextCatalogKnowledge,
         nextBudgetKnowledge,
-        command.response,
+        command.receipt,
       );
     });
   }
 
-  async deletePlan(command: DeletePlanCommand): Promise<PlanLifecycleResult> {
+  async deleteBudget(
+    command: DeleteBudgetCommand,
+  ): Promise<BudgetLifecycleResult> {
     validateBase(command);
     return this.transact(async client => {
       await lockIdempotency(client, command);
-      const replay = await findReplay(client, command, 'delete-plan', false);
+      const replay = await findReplay(client, command, 'delete-budget', false);
       if (replay) {
         return replay;
       }
@@ -140,7 +145,7 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       const catalogPayload = membershipPayload(command, state, 'Unknown', true);
 
       await client.query(
-        `UPDATE semantic_plan_memberships
+        `UPDATE semantic_budget_memberships
          SET is_tombstone = true, updated_at = now()
          WHERE membership_id = $1`,
         [state.membership_id],
@@ -148,7 +153,7 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       await insertCatalogMutation(
         client,
         command,
-        'delete-plan',
+        'delete-budget',
         catalogRange.starting,
         catalogRange.ending,
         nextCatalogKnowledge,
@@ -169,7 +174,7 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
         catalogRange.ending,
         nextCatalogKnowledge,
       );
-      return result(false, nextCatalogKnowledge, null, command.response);
+      return result(false, nextCatalogKnowledge, null, command.receipt);
     });
   }
 
@@ -189,7 +194,10 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
   }
 }
 
-async function lockIdempotency(client: PoolClient, command: DeletePlanCommand) {
+async function lockIdempotency(
+  client: PoolClient,
+  command: DeleteBudgetCommand,
+) {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
     `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
   ]);
@@ -197,10 +205,10 @@ async function lockIdempotency(client: PoolClient, command: DeletePlanCommand) {
 
 async function findReplay(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
   commandKind: string,
   hasBudgetReceipt: boolean,
-): Promise<PlanLifecycleResult | null> {
+): Promise<BudgetLifecycleResult | null> {
   const receipt = await client.query<ReceiptRow>(
     `SELECT r.payload_digest, r.server_knowledge, r.response, c.command_kind
      FROM semantic_catalog_command_receipts r
@@ -222,20 +230,20 @@ async function findReplay(
   ) {
     throw new SemanticStoreError(
       'IDEMPOTENCY_CONFLICT',
-      'The plan lifecycle idempotency key was already used by another command',
+      'The budget lifecycle idempotency key was already used by another command',
     );
   }
   let budgetKnowledge: number | null = null;
   if (hasBudgetReceipt) {
     const budget = await client.query<{ server_knowledge: string }>(
-      `SELECT server_knowledge FROM semantic_device_receipts
-       WHERE plan_id = $1 AND device_id = $2 AND idempotency_key = $3`,
-      [command.planId, command.originDeviceId, command.idempotencyKey],
+      `SELECT server_knowledge FROM semantic_budget_device_receipts
+       WHERE budget_id = $1 AND device_id = $2 AND idempotency_key = $3`,
+      [command.budgetId, command.originDeviceId, command.idempotencyKey],
     );
     if (!budget.rows[0]) {
       throw new SemanticStoreError(
         'INVALID_OPERATION',
-        'The plan lifecycle replay receipt is incomplete',
+        'The budget lifecycle replay receipt is incomplete',
       );
     }
     budgetKnowledge = integer(budget.rows[0].server_knowledge);
@@ -250,7 +258,7 @@ async function findReplay(
 
 async function lockLifecycleState(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
 ): Promise<LifecycleState> {
   await client.query(
     `INSERT INTO semantic_catalog_knowledge (principal_id, server_knowledge)
@@ -263,17 +271,17 @@ async function lockLifecycleState(
             p.server_knowledge AS budget_server_knowledge,
             k.server_knowledge AS catalog_server_knowledge,
             p.currency_format, p.date_format
-     FROM semantic_plan_memberships m
-     JOIN semantic_plans p ON p.plan_id = m.plan_id
+     FROM semantic_budget_memberships m
+     JOIN semantic_budgets p ON p.budget_id = m.budget_id
      JOIN semantic_catalog_knowledge k ON k.principal_id = m.principal_id
-     WHERE m.principal_id = $1 AND m.plan_id = $2
+     WHERE m.principal_id = $1 AND m.budget_id = $2
      FOR UPDATE OF m, p, k`,
-    [command.principalId, command.planId],
+    [command.principalId, command.budgetId],
   );
   if (!state.rows[0]) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'The authenticated principal does not own this plan membership',
+      'The authenticated principal does not own this budget membership',
     );
   }
   return state.rows[0];
@@ -283,14 +291,14 @@ function assertLiveMembership(state: LifecycleState) {
   if (state.membership_tombstone) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'The plan membership is already tombstoned',
+      'The budget membership is already tombstoned',
     );
   }
 }
 
 async function lockCatalogDevice(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
 ) {
   await client.query(
     `INSERT INTO semantic_catalog_devices
@@ -308,18 +316,18 @@ async function lockCatalogDevice(
 
 async function lockBudgetDevice(
   client: PoolClient,
-  command: RenamePlanCommand,
+  command: RenameBudgetCommand,
 ) {
   await client.query(
-    `INSERT INTO semantic_devices
-       (plan_id, device_id, server_knowledge_of_device)
-     VALUES ($1, $2, 0) ON CONFLICT (plan_id, device_id) DO NOTHING`,
-    [command.planId, command.originDeviceId],
+    `INSERT INTO semantic_budget_devices
+       (budget_id, device_id, server_knowledge_of_device)
+     VALUES ($1, $2, 0) ON CONFLICT (budget_id, device_id) DO NOTHING`,
+    [command.budgetId, command.originDeviceId],
   );
   const row = await client.query<{ server_knowledge_of_device: string }>(
-    `SELECT server_knowledge_of_device FROM semantic_devices
-     WHERE plan_id = $1 AND device_id = $2 FOR UPDATE`,
-    [command.planId, command.originDeviceId],
+    `SELECT server_knowledge_of_device FROM semantic_budget_devices
+     WHERE budget_id = $1 AND device_id = $2 FOR UPDATE`,
+    [command.budgetId, command.originDeviceId],
   );
   return integer(row.rows[0].server_knowledge_of_device);
 }
@@ -346,7 +354,7 @@ function knowledgeRange(
 
 async function updateCatalogDevice(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
   endingDeviceKnowledge: number,
 ) {
   await client.query(
@@ -359,26 +367,26 @@ async function updateCatalogDevice(
 
 async function updateBudgetDevice(
   client: PoolClient,
-  command: RenamePlanCommand,
+  command: RenameBudgetCommand,
   endingDeviceKnowledge: number,
 ) {
   await client.query(
-    `UPDATE semantic_devices
+    `UPDATE semantic_budget_devices
      SET server_knowledge_of_device = $3, updated_at = now()
-     WHERE plan_id = $1 AND device_id = $2`,
-    [command.planId, command.originDeviceId, endingDeviceKnowledge],
+     WHERE budget_id = $1 AND device_id = $2`,
+    [command.budgetId, command.originDeviceId, endingDeviceKnowledge],
   );
 }
 
 function membershipPayload(
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
   state: LifecycleState,
   name: string,
   isTombstone: boolean,
 ) {
   return {
     id: state.membership_id,
-    planId: command.planId,
+    budgetId: command.budgetId,
     budgetVersionId: state.budget_version_id,
     principalId: command.principalId,
     name,
@@ -390,23 +398,23 @@ function membershipPayload(
 
 async function renamedBudgetPayload(
   client: PoolClient,
-  command: RenamePlanCommand,
+  command: RenameBudgetCommand,
   state: LifecycleState,
   name: string,
 ) {
   const snapshot = await client.query<{
     payload: Readonly<Record<string, unknown>>;
   }>(
-    `SELECT payload FROM semantic_plan_entities
-     WHERE plan_id = $1 AND entity_kind = 'be_budget' AND entity_id = $2
+    `SELECT payload FROM semantic_budget_entities
+     WHERE budget_id = $1 AND entity_kind = 'be_budget' AND entity_id = $2
        AND is_tombstone = false
      FOR UPDATE`,
-    [command.planId, state.budget_version_id],
+    [command.budgetId, state.budget_version_id],
   );
   if (!snapshot.rows[0]) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'The plan budget metadata snapshot is unavailable',
+      'The budget metadata snapshot is unavailable',
     );
   }
   return { ...snapshot.rows[0].payload, budgetName: name };
@@ -414,7 +422,7 @@ async function renamedBudgetPayload(
 
 async function insertCatalogMutation(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
   commandKind: string,
   startingDeviceKnowledge: number,
   endingDeviceKnowledge: number,
@@ -451,21 +459,21 @@ async function insertCatalogMutation(
 
 async function insertBudgetMutation(
   client: PoolClient,
-  command: RenamePlanCommand,
+  command: RenameBudgetCommand,
   startingDeviceKnowledge: number,
   endingDeviceKnowledge: number,
   serverKnowledge: number,
   payload: Readonly<Record<string, unknown>>,
 ) {
   await client.query(
-    `INSERT INTO semantic_change_sets
-       (change_set_id, plan_id, server_knowledge, origin_device_id,
+    `INSERT INTO semantic_budget_change_sets
+       (change_set_id, budget_id, server_knowledge, origin_device_id,
         starting_device_knowledge, ending_device_knowledge, schema_version,
         idempotency_key, payload_digest)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       command.budgetChangeSetId,
-      command.planId,
+      command.budgetId,
       serverKnowledge,
       command.originDeviceId,
       startingDeviceKnowledge,
@@ -476,23 +484,23 @@ async function insertBudgetMutation(
     ],
   );
   await client.query(
-    `INSERT INTO semantic_entity_changes
+    `INSERT INTO semantic_budget_entity_changes
        (change_set_id, ordinal, entity_kind, entity_id, is_tombstone, payload)
      SELECT $1, 0, 'be_budget', budget_version_id, false, $2
-     FROM semantic_plans WHERE plan_id = $3`,
-    [command.budgetChangeSetId, payload, command.planId],
+     FROM semantic_budgets WHERE budget_id = $3`,
+    [command.budgetChangeSetId, payload, command.budgetId],
   );
   await client.query(
-    `UPDATE semantic_plan_entities
+    `UPDATE semantic_budget_entities
      SET payload = $3, last_server_knowledge = $4, updated_at = now()
-     WHERE plan_id = $1 AND entity_kind = 'be_budget' AND entity_id = $2`,
-    [command.planId, payload.budgetVersionId, payload, serverKnowledge],
+     WHERE budget_id = $1 AND entity_kind = 'be_budget' AND entity_id = $2`,
+    [command.budgetId, payload.budgetVersionId, payload, serverKnowledge],
   );
 }
 
 async function insertReceipts(
   client: PoolClient,
-  command: RenamePlanCommand,
+  command: RenameBudgetCommand,
   catalogRange: { starting: number; ending: number },
   budgetRange: { starting: number; ending: number },
   catalogKnowledge: number,
@@ -506,27 +514,27 @@ async function insertReceipts(
     catalogKnowledge,
   );
   await client.query(
-    `INSERT INTO semantic_device_receipts
-       (plan_id, device_id, idempotency_key, payload_digest,
+    `INSERT INTO semantic_budget_device_receipts
+       (budget_id, device_id, idempotency_key, payload_digest,
         starting_device_knowledge, ending_device_knowledge,
         server_knowledge, response)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
-      command.planId,
+      command.budgetId,
       command.originDeviceId,
       command.idempotencyKey,
       command.payloadDigest,
       budgetRange.starting,
       budgetRange.ending,
       budgetKnowledge,
-      command.response,
+      command.receipt,
     ],
   );
 }
 
 async function insertCatalogReceipt(
   client: PoolClient,
-  command: DeletePlanCommand,
+  command: DeleteBudgetCommand,
   startingDeviceKnowledge: number,
   endingDeviceKnowledge: number,
   serverKnowledge: number,
@@ -545,16 +553,16 @@ async function insertCatalogReceipt(
       startingDeviceKnowledge,
       endingDeviceKnowledge,
       serverKnowledge,
-      command.response,
+      command.receipt,
     ],
   );
 }
 
-function validateBase(command: DeletePlanCommand) {
+function validateBase(command: DeleteBudgetCommand) {
   if (
     !command.catalogChangeSetId ||
     !command.principalId ||
-    !command.planId ||
+    !command.budgetId ||
     !command.originDeviceId ||
     !command.idempotencyKey ||
     !Number.isSafeInteger(command.schemaVersion) ||
@@ -568,7 +576,7 @@ function validateBase(command: DeletePlanCommand) {
 function invalidOperation() {
   return new SemanticStoreError(
     'INVALID_OPERATION',
-    'Plan lifecycle command failed semantic storage validation',
+    'Budget lifecycle command failed semantic storage validation',
   );
 }
 
@@ -577,7 +585,7 @@ function integer(value: string) {
   if (!Number.isSafeInteger(number) || number < 0) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'Plan lifecycle knowledge is outside the supported range',
+      'Budget lifecycle knowledge is outside the supported range',
     );
   }
   return number;
@@ -587,12 +595,12 @@ function result(
   replayed: boolean,
   catalogServerKnowledge: number,
   budgetServerKnowledge: number | null,
-  response: Readonly<Record<string, unknown>>,
-): PlanLifecycleResult {
+  budget: BudgetLifecycleReceipt,
+): BudgetLifecycleResult {
   return {
     replayed,
     catalogServerKnowledge,
     budgetServerKnowledge,
-    response,
+    budget,
   };
 }

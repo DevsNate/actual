@@ -4,10 +4,10 @@ import type {
   CatalogCommandChange,
   CatalogCommandWriter,
   CatalogReader,
-  PlanMembership,
+  BudgetMembership,
 } from '@actual-app/semantic-core';
 
-import type { PlanLifecycleService } from './plan-lifecycle-service';
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import {
   isRecord,
   nonnegativeInteger,
@@ -29,7 +29,7 @@ export async function handleStockCatalogSync(
   dependencies: {
     catalogReader: CatalogReader;
     catalogWriter: CatalogCommandWriter;
-    planLifecycleService: PlanLifecycleService;
+    budgetLifecycleService: BudgetLifecycleService;
   },
 ): Promise<StockOperationResponse> {
   const syncRequest = parseCatalogSyncRequest(context.requestData);
@@ -70,9 +70,9 @@ export async function handleStockCatalogSync(
     ) {
       return operationError(400, 'invalid_catalog_knowledge_range');
     }
-    const result = await dependencies.planLifecycleService.renamePlan({
+    const result = await dependencies.budgetLifecycleService.renameBudget({
       principalId: context.principal.id,
-      planId: outgoing.planId,
+      budgetId: outgoing.budgetId,
       originDeviceId: context.deviceId,
       idempotencyKey: context.clientRequestId,
       name: outgoing.name,
@@ -195,10 +195,10 @@ function parseCatalogSyncRequest(value: string): CatalogSyncRequest | null {
 function parseOutgoingChanges(
   changedEntities: Readonly<Record<string, unknown>>,
   principalId: string,
-  memberships: readonly PlanMembership[],
+  memberships: readonly BudgetMembership[],
 ):
   | { kind: 'changes'; changes: readonly CatalogCommandChange[] }
-  | { kind: 'rename'; planId: string; name: string }
+  | { kind: 'rename'; budgetId: string; name: string }
   | null {
   const keys = Object.keys(changedEntities);
   if (keys.length === 0) {
@@ -208,7 +208,7 @@ function parseOutgoingChanges(
     return null;
   }
   if (keys[0] === 'ce_user_budgets') {
-    return parsePlanRename(
+    return parseBudgetRename(
       changedEntities.ce_user_budgets,
       principalId,
       memberships,
@@ -236,22 +236,22 @@ function parseOutgoingChanges(
   return { kind: 'changes', changes };
 }
 
-function parsePlanRename(
+function parseBudgetRename(
   value: unknown,
   principalId: string,
-  memberships: readonly PlanMembership[],
-): { kind: 'rename'; planId: string; name: string } | null {
+  memberships: readonly BudgetMembership[],
+): { kind: 'rename'; budgetId: string; name: string } | null {
   if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) {
     return null;
   }
   const row = value[0];
-  if (!validPlanRenameRow(row, principalId)) {
+  if (!validBudgetRenameRow(row, principalId)) {
     return null;
   }
   const membership = memberships.find(
     candidate =>
       candidate.id === row.id &&
-      candidate.planId === row.budget_id &&
+      candidate.budgetId === row.budget_id &&
       candidate.budgetVersionId === row.budget_version_id &&
       candidate.principalId === row.user_id &&
       candidate.permissions === row.permissions &&
@@ -262,7 +262,7 @@ function parsePlanRename(
   }
   return {
     kind: 'rename',
-    planId: membership.planId,
+    budgetId: membership.budgetId,
     name: row.budget_name.trim(),
   };
 }
@@ -291,14 +291,24 @@ function validOutgoingEnvelope(
     keys[0] === 'ce_user_budgets' &&
     rows.length === 1 &&
     isRecord(rows[0]) &&
-    validPlanRenameRow(rows[0], principalId)
+    validBudgetRenameRow(rows[0], principalId)
   );
 }
 
-function validPlanRenameRow(
+function validBudgetRenameRow(
   row: Readonly<Record<string, unknown>>,
   principalId: string,
-): boolean {
+): row is Readonly<Record<string, unknown>> & {
+  id: string;
+  budget_id: string;
+  budget_version_id: string;
+  budget_name: string;
+  user_id: string;
+  permissions: number;
+  is_tombstone: false;
+  source: null;
+  last_modified_at: string;
+} {
   return (
     Object.keys(row).sort().join(',') ===
       'budget_id,budget_name,budget_version_id,id,is_tombstone,last_modified_at,permissions,source,user_id' &&
@@ -346,10 +356,10 @@ function catalogResponse(
   };
 }
 
-function projectMembership(membership: PlanMembership) {
+function projectMembership(membership: BudgetMembership) {
   return {
     id: membership.id,
-    budget_id: membership.planId,
+    budget_id: membership.budgetId,
     budget_version_id: membership.budgetVersionId,
     user_id: membership.principalId,
     budget_name: membership.name,

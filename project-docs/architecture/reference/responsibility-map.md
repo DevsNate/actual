@@ -45,11 +45,13 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 
 **Primary location:** `packages/semantic-core`
 
-**Current responsibility:** framework-independent principal, catalog, plan, lifecycle, change-set, knowledge, replay and result contracts.
+**Current responsibility:** framework-independent principal, catalog, budget,
+lifecycle, account-aggregate, change-set, knowledge, replay, and result
+contracts.
 
 **Strength:** largely independent of Express, React, Redux, SQLite, CRDT and PostgreSQL implementation details.
 
-**Current leak:** `stock-plan-bootstrap.ts` lives in the same package and the generic `PlanEntity` abstraction is used to persist stock YNAB `be_*` entity kinds. This means package location alone does not prove canonical representation ownership.
+**Current leak:** `stock-budget-bootstrap.ts` lives in the same package and the generic `BudgetEntity` abstraction is used to persist stock YNAB `be_*` entity kinds. This means package location alone does not prove canonical representation ownership.
 
 **Target boundary:** final canonical contracts must be importable without importing or understanding YNAB table names, stock schema versions, Actual worker types, or retained Actual sessions.
 
@@ -59,7 +61,7 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 
 **Current responsibility:**
 
-- catalog and plan knowledge;
+- catalog and budget knowledge;
 - per-device knowledge;
 - ordered change sets;
 - explicit entity changes and tombstones;
@@ -67,7 +69,8 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 - exact stored receipts and replay;
 - principal-scoped reads;
 - PostgreSQL transaction boundaries;
-- canonical entity snapshots with unknown-field preservation.
+- canonical entity snapshots with unknown-field preservation; and
+- typed storage for the admitted unlinked Checking-account aggregate.
 
 **Strength:** this is the most portable implementation area in the fork.
 
@@ -93,15 +96,20 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 
 **Strength:** commit 14 established the correct architectural direction: transports call shared services rather than building semantic commands independently.
 
-**Current leak:** plan creation calls `buildStockPlanBootstrap`; checking-account creation directly constructs `be_accounts`, `be_payees`, and `be_transactions` records. The orchestration boundary is good, but representation ownership is not yet clean.
+**Current leak:** budget creation still calls `buildStockPlanBootstrap`.
+Checking-account creation now produces a canonical aggregate and delegates
+`be_accounts`, `be_payees`, and `be_transactions` construction to its
+compatibility adapter; the application service still carries that delivery
+command beside the aggregate until projection generation moves fully behind
+the compatibility boundary.
 
-**Target boundary:** application services express operations such as `CreatePlan`, `RenamePlan`, `CreateCheckingAccount`, and `DeleteAccount` in canonical domain terms. A YNAB compatibility layer separately translates those results to/from admitted stock representations.
+**Target boundary:** application services express operations such as `CreateBudget`, `RenameBudget`, `CreateCheckingAccount`, and `DeleteAccount` in canonical domain terms. A YNAB compatibility layer separately translates those results to/from admitted stock representations.
 
 ### 4. YNAB compatibility layer
 
 **Primary locations:**
 
-- `packages/semantic-core/src/stock-plan-bootstrap.ts`;
+- `packages/semantic-core/src/stock-budget-bootstrap.ts`;
 - `packages/sync-server/src/semantic/stock-*`.
 
 **Current responsibility:** reproduce only observed/admitted stock behavior, including:
@@ -126,7 +134,7 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 
 - `catalog-api.ts`;
 - `plan-api.ts`;
-- `plan-lifecycle-api.ts`;
+- `budget-lifecycle-api.ts`;
 - `account-api.ts`.
 
 **Current responsibility:** expose semantic operations to the retained Actual client through Express routes under `/semantic/v1`.
@@ -140,8 +148,8 @@ The important property is convergence: native Actual-facing and stock YNAB-facin
 **Primary locations:**
 
 - `session-principal-adapter.ts`;
-- `packages/loot-core/src/server/semantic-plans/`;
-- `packages/desktop-client/src/semantic-plans/`;
+- `packages/loot-core/src/server/semantic-budgets/`;
+- `packages/desktop-client/src/semantic-budgets/`;
 - small registrations in inherited Actual files.
 
 **Current responsibility:** let the retained Actual authentication, worker messaging, async storage and Redux environment consume the semantic server without exposing credentials to React.

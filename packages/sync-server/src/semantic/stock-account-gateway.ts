@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   AuthenticatedPrincipal,
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
@@ -18,7 +18,7 @@ import { STOCK_API_VERSION } from './stock-operation';
 
 type Dependencies = {
   accountCreationService: AccountCreationService;
-  planReader: BudgetVersionPlanReader;
+  budgetReader: BudgetVersionReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
   allocateRequestId?(): string;
 };
@@ -30,12 +30,12 @@ export function createStockAccountGateway(
   handlers.use(express.json({ limit: '64kb' }));
 
   handlers.post(
-    '/direct_import/budgets/:planId/accounts',
+    '/direct_import/budgets/:budgetId/accounts',
     async (request, response) => {
       const principal = authenticateStockTokenRequest(
         request,
         response,
-        (token) => dependencies.resolvePrincipal(token),
+        token => dependencies.resolvePrincipal(token),
       );
       if (!principal) {
         return;
@@ -45,7 +45,7 @@ export function createStockAccountGateway(
         return;
       }
 
-      const stockBudgetId = request.params.planId?.trim() ?? '';
+      const stockBudgetId = request.params.budgetId?.trim() ?? '';
       const body = parseStockCheckingAccountBody(request.body);
       if (!stockBudgetId || !body) {
         response.status(400).send({ error: { id: 'invalid_account_request' } });
@@ -53,12 +53,12 @@ export function createStockAccountGateway(
       }
 
       try {
-        const plan = await dependencies.planReader.readPlanByBudgetVersion(
+        const budget = await dependencies.budgetReader.readBudgetByVersion(
           principal.id,
           stockBudgetId,
         );
-        if (!plan) {
-          response.status(404).send({ error: { id: 'plan-not-found' } });
+        if (!budget) {
+          response.status(404).send({ error: { id: 'budget-not-found' } });
           return;
         }
         const requestId = dependencies.allocateRequestId
@@ -68,7 +68,7 @@ export function createStockAccountGateway(
           await dependencies.accountCreationService.createUnlinkedCheckingAccount(
             {
               principalId: principal.id,
-              planId: plan.planId,
+              budgetId: budget.budgetId,
               originDeviceId: 'stock-web-direct-import',
               idempotencyKey: `stock-account-create:${requestId}`,
               ...body,
@@ -79,7 +79,7 @@ export function createStockAccountGateway(
           .send(projectStockCreatedAccount(result.response, stockBudgetId));
       } catch (error) {
         if (error instanceof AccountCreationError) {
-          response.status(error.code === 'plan-not-found' ? 404 : 400).send({
+          response.status(error.code === 'budget-not-found' ? 404 : 400).send({
             error: { id: error.code },
           });
           return;

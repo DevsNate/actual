@@ -24,13 +24,13 @@ describe('semantic account API', () => {
           name: 'Account Capture 1',
           type: 'checking',
           openingBalance: 123450,
-          planId: 'plan-1',
+          budgetId: 'plan-1',
         },
       }),
     };
     const app = createApp(accountCreationService);
     await request(app)
-      .post('/semantic/v1/plans/plan-1/accounts')
+      .post('/semantic/v1/budgets/plan-1/accounts')
       .set('x-actual-token', 'actual-session')
       .set('x-semantic-device-id', 'web-device-1')
       .set('idempotency-key', 'account-request-1')
@@ -48,7 +48,7 @@ describe('semantic account API', () => {
             name: 'Account Capture 1',
             type: 'checking',
             openingBalance: 123450,
-            planId: 'plan-1',
+            budgetId: 'plan-1',
           },
           budget_server_knowledge: 3,
           replayed: false,
@@ -58,7 +58,7 @@ describe('semantic account API', () => {
       accountCreationService.createUnlinkedCheckingAccount,
     ).toHaveBeenCalledWith({
       principalId: 'principal-1',
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       originDeviceId: 'web-device-1',
       idempotencyKey: 'account-request-1',
       name: 'Account Capture 1',
@@ -73,7 +73,7 @@ describe('semantic account API', () => {
     };
     const app = createApp(accountCreationService);
     await request(app)
-      .post('/semantic/v1/plans/plan-1/accounts')
+      .post('/semantic/v1/budgets/plan-1/accounts')
       .set('x-actual-token', 'actual-session')
       .set('x-semantic-device-id', 'web-device-1')
       .set('idempotency-key', 'account-request-1')

@@ -33,7 +33,7 @@ import * as prefs from './prefs';
 import { app as reportsApp } from './reports/app';
 import { app as rulesApp } from './rules/app';
 import { app as schedulesApp } from './schedules/app';
-import { app as semanticPlansApp } from './semantic-plans/app';
+import { app as semanticBudgetsApp } from './semantic-budgets/app';
 import { getServer, setServer } from './server-config';
 import { app as spreadsheetApp } from './spreadsheet/app';
 import { fullSync, setSyncingMode } from './sync';
@@ -132,7 +132,7 @@ app.handlers = handlers;
 app.combine(
   authApp,
   schedulesApp,
-  semanticPlansApp,
+  semanticBudgetsApp,
   budgetApp,
   dashboardApp,
   notesApp,

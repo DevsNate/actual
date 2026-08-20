@@ -16,28 +16,29 @@ v26.8.1. The baseline commit is
 
 ## Summary
 
-| ID         | Stock area                               | Disposition        | Current status | Replacement or retained boundary                  |
-| ---------- | ---------------------------------------- | ------------------ | -------------- | ------------------------------------------------- |
-| ACTUAL-001 | Authentication and sessions              | Keep               | implemented    | Actual account DB plus semantic principal adapter |
-| ACTUAL-002 | Express server shell                     | Keep and extend    | implemented    | Feature-gated semantic catalog route mounted      |
-| ACTUAL-003 | File and user-access catalog             | Modify             | migrating      | Canonical plans and memberships in PostgreSQL     |
-| ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger    |
-| ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                 |
-| ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services               |
-| ACTUAL-007 | React application shell                  | Retain selectively | deferred       | Actual admin/provider/fallback surfaces           |
-| ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                          |
-| ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands    |
-| ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                     |
-| ADD-001    | Canonical semantic database              | Add                | implemented    | PostgreSQL foundation; entity authority follows   |
-| ADD-002    | Knowledge and receipt ledger             | Add                | implemented    | Ordered per-plan/device synchronization state     |
-| ADD-003    | YNAB protocol gateway                    | Add                | migrating      | Evidence-derived stock projections                |
-| ADD-004    | Web semantic API                         | Add                | implemented    | Read-only authenticated catalog slice             |
-| ADD-005    | Compatibility fixture suite              | Add                | migrating      | Stock captures plus semantic and black-box tests  |
-| ADD-006    | Framework-independent semantic contracts | Add                | implemented    | `@actual-app/semantic-core` workspace             |
-| ADD-007    | Local semantic development stack         | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
-| ADD-008    | Semantic plan client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
-| ADD-009    | Shared plan command application services | Add                | implemented    | One orchestration path for React and stock routes |
-| ADD-013    | Deployed stock Web runtime               | Add                | investigating  | Schema-44 gateway over canonical semantics        |
+| ID         | Stock area                                 | Disposition        | Current status | Replacement or retained boundary                  |
+| ---------- | ------------------------------------------ | ------------------ | -------------- | ------------------------------------------------- |
+| ACTUAL-001 | Authentication and sessions                | Keep               | implemented    | Actual account DB plus semantic principal adapter |
+| ACTUAL-002 | Express server shell                       | Keep and extend    | implemented    | Feature-gated semantic catalog route mounted      |
+| ACTUAL-003 | File and user-access catalog               | Modify             | migrating      | Canonical plans and memberships in PostgreSQL     |
+| ACTUAL-004 | CRDT sync endpoint and relay               | Replace            | proposed       | Semantic commands and ordered knowledge ledger    |
+| ACTUAL-005 | Encrypted budget file as live authority    | Replace            | proposed       | Canonical PostgreSQL budget store                 |
+| ACTUAL-006 | `loot-core` domain handlers                | Extract and modify | proposed       | Evidence-verified semantic services               |
+| ACTUAL-007 | React application shell                    | Retain selectively | deferred       | Actual admin/provider/fallback surfaces           |
+| ACTUAL-008 | Import, export, and backups                | Modify             | deferred       | Canonical-store adapters                          |
+| ACTUAL-009 | Bank-provider ingestion                    | Modify             | deferred       | Provider facts enter through semantic commands    |
+| ACTUAL-010 | Compatibility-server login                 | Remove             | proposed       | Actual authentication adapter                     |
+| ADD-001    | Canonical semantic database                | Add                | implemented    | PostgreSQL foundation; entity authority follows   |
+| ADD-002    | Knowledge and receipt ledger               | Add                | implemented    | Ordered per-plan/device synchronization state     |
+| ADD-003    | YNAB protocol gateway                      | Add                | migrating      | Evidence-derived stock projections                |
+| ADD-004    | Web semantic API                           | Add                | implemented    | Read-only authenticated catalog slice             |
+| ADD-005    | Compatibility fixture suite                | Add                | migrating      | Stock captures plus semantic and black-box tests  |
+| ADD-006    | Framework-independent semantic contracts   | Add                | implemented    | `@actual-app/semantic-core` workspace             |
+| ADD-007    | Local semantic development stack           | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
+| ADD-008    | Semantic budget client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
+| ADD-009    | Shared budget command application services | Add                | implemented    | One orchestration path for React and stock routes |
+| ADD-013    | Deployed stock Web runtime                 | Add                | investigating  | Schema-44 gateway over canonical semantics        |
+| ADD-014    | Typed canonical account aggregate          | Add                | implemented    | Account/payee/starting-balance authority          |
 
 ## Detailed entries
 
@@ -201,13 +202,14 @@ API` contains the expiry correction and first route integration.
 ### ADD-001 — Canonical semantic database
 
 - **Disposition:** Add.
-- **Initial scope:** plans, memberships, devices, knowledge ranges, change
+- **Initial scope:** budgets, memberships, devices, knowledge ranges, change
   sets, idempotency receipts, and tombstones.
 - **Later scope:** accounts, payees, categories, transactions, splits,
   schedules, targets, and mappings.
 - **Implementation:** `packages/semantic-postgres` migration
-  `0001_semantic_foundation.sql` defines canonical plans, memberships, catalog
-  knowledge, devices, change sets, entity changes, and durable receipts. Text
+  `0001_semantic_foundation.sql` historically defined plan-named budget rows,
+  memberships, catalog knowledge, devices, change sets, entity changes, and
+  durable receipts. Text
   identifiers deliberately preserve opaque stock identities rather than
   assuming every admitted identifier is a UUID.
 - **Catalog extension:** `0002_catalog_command_ledger.sql` separates catalog
@@ -216,11 +218,16 @@ API` contains the expiry correction and first route integration.
 - **Catalog command extension:**
   `0004_catalog_command_schema_version.sql` versions catalog command envelopes
   without rewriting the already-applied catalog migration.
+- **Identity-vocabulary migration:** `0005_budget_identity_schema.sql` renames
+  every budget-scoped table, column, constraint, and index from the early
+  internal plan vocabulary to `budget_id` while preserving distinct
+  `budget_version_id` and membership identities, ledger rows, cursors,
+  tombstones, and receipts.
 - **Entity extension:** `0003_canonical_plan_entities.sql` adds structured
   date/currency metadata and a schema-versioned, tombstone-capable canonical
   entity snapshot table. Complete JSON payloads preserve unknown fields; no
   entity-specific behavior is inferred.
-- **PLAN-001 bootstrap extension:** `buildStockPlanBootstrap` materializes the
+- **PLAN-001 bootstrap extension:** `buildStockBudgetBootstrap` materializes the
   58 authoritative source entities demonstrated by the sealed PLAN-001 stock
   capture: budget, six master categories, fifteen categories, three system
   payees, one onboarding setting, two onboarding events, two monthly budgets,
@@ -240,6 +247,27 @@ API` contains the expiry correction and first route integration.
 Mount semantic catalog API`; PLAN-001 bootstrap is included in `[AI] Add
 evidence-backed plan creation`.
 - **Status:** implemented; live routing and budgeting tables remain pending.
+
+### ADD-014 — Typed canonical account aggregate
+
+- **Disposition:** Add.
+- **Scope:** The evidence-admitted first unlinked Checking-account creation
+  operation only.
+- **Implementation:** Migration 0006 adds typed `semantic_accounts`,
+  `semantic_payees`, and `semantic_transactions`. The account application
+  service builds one canonical account aggregate and a separate stock delivery
+  projection. `PostgresSemanticStore.commitUnlinkedAccountCreation` commits the
+  canonical rows, compatibility projections, knowledge advancement, and exact
+  replay receipt in one transaction.
+- **Boundary:** `be_*` rows remain unknown-field-preserving compatibility
+  projections. They are not account authority. Rename, deletion, close/reopen,
+  other account types, and general transaction semantics remain outside this
+  admitted slice.
+- **Verification:** Contract tests cover the typed schema and adapter boundary.
+  Disposable PostgreSQL integration verifies atomic persistence and exact
+  replay with one account, one account-bound payee, one starting-balance
+  transaction, and no duplicate rows.
+- **Status:** implemented for unlinked Checking-account creation.
 
 ### ADD-002 — Knowledge and receipt ledger
 
@@ -329,7 +357,7 @@ evidence-backed plan creation`.
 - **Implementation:** Feature-gated `GET /semantic/v1/catalog` authenticates
   with the retained `X-Actual-Token`, derives the principal server-side, and
   returns only that principal's canonical PostgreSQL memberships and catalog
-  knowledge. Authenticated `POST /semantic/v1/plans` accepts only the admitted
+  knowledge. Authenticated `POST /semantic/v1/budgets` accepts only the admitted
   name, currency-format, and date-format inputs and delegates atomic creation
   to the same canonical store. Storage errors expose neither partial data nor
   database details.
@@ -340,7 +368,7 @@ evidence-backed plan creation`.
   row. See `semantic-catalog-api.md`.
 - **Commit/PR:** `[AI] Mount semantic catalog API`; create is included in `[AI]
 Add evidence-backed plan creation`.
-- **Lifecycle extension:** `PostgresPlanLifecycleStore` and the thin lifecycle
+- **Lifecycle extension:** `PostgresBudgetLifecycleStore` and the thin lifecycle
   HTTP router implement evidence-backed rename and delete without adding those
   policies to the general command store. Rename advances catalog and budget
   knowledge atomically. Delete advances only catalog knowledge, emits the
@@ -406,11 +434,11 @@ Copy this block for a new architectural delta:
 - **Commit/PR:**
 ```
 
-### ADD-008 — Semantic plan client bridge
+### ADD-008 — Semantic budget client bridge
 
 - **Disposition:** Add.
-- **Location:** `packages/loot-core/src/server/semantic-plans` and
-  `packages/desktop-client/src/semantic-plans`.
+- **Location:** `packages/loot-core/src/server/semantic-budgets` and
+  `packages/desktop-client/src/semantic-budgets`.
 - **Fork behavior:** Typed catalog, read, create, rename, and delete commands
   cross the existing worker message bus. Loot-core alone owns the retained
   login token, durable semantic device identity, and HTTP envelope parsing.
@@ -425,13 +453,13 @@ Copy this block for a new architectural delta:
 - **Status:** implemented through the isolated Redux catalog/snapshot state;
   manager presentation and budget-screen projection remain pending.
 
-### ADD-009 — Shared plan command application services
+### ADD-009 — Shared budget command application services
 
 - **Disposition:** Add.
-- **Location:** `packages/sync-server/src/semantic/plan-creation-service.ts`
-  and `plan-lifecycle-service.ts`.
+- **Location:** `packages/sync-server/src/semantic/budget-creation-service.ts`
+  and `budget-lifecycle-service.ts`.
 - **Fork behavior:** Semantic HTTP and future stock-compatible adapters call
-  the same plan creation, rename, and delete orchestration. Identity allocation,
+  the same budget creation, rename, and delete orchestration. Identity allocation,
   PLAN-001 bootstrap construction, knowledge expectations, payload digests,
   and stored responses are not transport concerns.
 - **Reason:** Duplicating command assembly in two routers would create behavior
@@ -453,9 +481,9 @@ Copy this block for a new architectural delta:
   Checking account, one enabled account-bound transfer payee, one cleared
   Starting Balance in Immediate Income, and the exact captured account,
   monthly-account, and Ready-to-Assign calculations.
-- **Fork behavior:** One canonical account intent is mapped to the three
-  authoritative source entities and committed atomically through the shared
-  plan-change writer. The retained Actual-session and stock direct-import
+- **Fork behavior:** One canonical account intent is mapped to three YNAB
+  compatibility projections and committed atomically through the shared
+  budget-change writer. The retained Actual-session and stock direct-import
   routes are independent thin protocol adapters. The stock route resolves its
   external budget-version identity before invoking the canonical service.
   Stock source and calculated projections remain separate modules.
@@ -480,7 +508,7 @@ Copy this block for a new architectural delta:
 ### ADD-011 — Explicit source and derived knowledge advancement
 
 - **Disposition:** Add.
-- **Location:** `packages/semantic-core/src/plan.ts` and
+- **Location:** `packages/semantic-core/src/budget.ts` and
   `packages/semantic-postgres/src/store.ts`.
 - **Observed stock behavior:** Source-only edits such as account/payee rename
   advance budget server knowledge once. Operations that trigger a server

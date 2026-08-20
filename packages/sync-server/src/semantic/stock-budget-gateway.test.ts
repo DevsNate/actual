@@ -1,14 +1,14 @@
 import type {
   AuthenticatedPrincipal,
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
   CatalogCommandWriter,
   CatalogReader,
 } from '@actual-app/semantic-core';
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 import express from 'express';
 import request from 'supertest';
 
-import type { PlanLifecycleService } from './plan-lifecycle-service';
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { projectStockEntity } from './stock-budget-projection';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
@@ -23,14 +23,14 @@ const principal: AuthenticatedPrincipal = {
 function createSnapshot() {
   let sequence = 0;
   return {
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     budgetVersionId: 'version-1',
     name: 'Plan',
     serverKnowledge: 29,
     currencyFormat: {},
     dateFormat: {},
-    entities: buildStockPlanBootstrap({
-      planId: 'plan-1',
+    entities: buildStockBudgetBootstrap({
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       principalId: 'user-1',
       name: 'Plan',
@@ -38,13 +38,13 @@ function createSnapshot() {
       dateFormat: {},
       createdOn: '2026-08-17',
       createdAtMilliseconds: Date.UTC(2026, 7, 17),
-      allocateId: (label) => `${label}:${sequence++}`,
+      allocateId: label => `${label}:${sequence++}`,
     }),
   };
 }
 
 function application(
-  planReader: BudgetVersionPlanReader,
+  budgetReader: BudgetVersionReader,
   changeWriter: StockBudgetChangeWriter = {
     commitChangeSet: vi.fn(),
     acknowledgeDevice: vi.fn(),
@@ -55,18 +55,18 @@ function application(
   const catalogWriter: CatalogCommandWriter = {
     commitCatalogCommand: vi.fn(),
   };
-  const planLifecycleService: PlanLifecycleService = {
-    renamePlan: vi.fn(),
-    deletePlan: vi.fn(),
+  const budgetLifecycleService: BudgetLifecycleService = {
+    renameBudget: vi.fn(),
+    deleteBudget: vi.fn(),
   };
   result.use(
     '/api/v1',
     createStockCatalogGateway({
       catalogReader,
       catalogWriter,
-      planReader,
+      budgetReader,
       changeWriter,
-      planLifecycleService,
+      budgetLifecycleService,
       resolvePrincipal: () => principal,
     }),
   );
@@ -92,12 +92,12 @@ function budgetRequest(syncType: string, overrides = {}) {
 }
 
 function stockRequest(
-  planReader: BudgetVersionPlanReader,
+  budgetReader: BudgetVersionReader,
   syncType: string,
   overrides = {},
   changeWriter?: StockBudgetChangeWriter,
 ) {
-  return request(application(planReader, changeWriter))
+  return request(application(budgetReader, changeWriter))
     .post('/api/v1/catalog')
     .set('x-session-token', 'session')
     .set('x-ynab-api-version', '2026-01-01')
@@ -108,12 +108,12 @@ function stockRequest(
 }
 
 describe('stock budget gateway', () => {
-  test('returns the exact fresh-plan bootstrap table surface', async () => {
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+  test('returns the exact fresh-budget bootstrap table surface', async () => {
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(createSnapshot()),
     };
 
-    const response = await stockRequest(planReader, 'bootstrap').expect(200);
+    const response = await stockRequest(budgetReader, 'bootstrap').expect(200);
     expect(response.headers['x-ynab-client-request-id']).toBe('request-1');
     expect(response.body).toMatchObject({
       error: null,
@@ -159,18 +159,18 @@ describe('stock budget gateway', () => {
     expect(
       response.body.changed_entities.be_monthly_subcategory_budget_calculations,
     ).toHaveLength(28);
-    expect(planReader.readPlanByBudgetVersion).toHaveBeenCalledWith(
+    expect(budgetReader.readBudgetByVersion).toHaveBeenCalledWith(
       'user-1',
       'version-1',
     );
   });
 
   test('returns the admitted empty backfill surface', async () => {
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(createSnapshot()),
     };
 
-    const response = await stockRequest(planReader, 'backfill').expect(200);
+    const response = await stockRequest(budgetReader, 'backfill').expect(200);
     expect(response.body.changed_entities).toMatchObject({
       first_month: '2026-08-01',
       last_month: '2026-08-01',
@@ -183,11 +183,11 @@ describe('stock budget gateway', () => {
 
   test('returns source rows changed after an older device knowledge', async () => {
     const snapshot = createSnapshot();
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue({
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue({
         ...snapshot,
         entities: [
-          ...snapshot.entities.map((entity) => ({
+          ...snapshot.entities.map(entity => ({
             ...entity,
             lastServerKnowledge: 1,
           })),
@@ -205,7 +205,7 @@ describe('stock budget gateway', () => {
       }),
     };
 
-    const response = await stockRequest(planReader, 'delta', {
+    const response = await stockRequest(budgetReader, 'delta', {
       device_knowledge_of_server: 28,
     }).expect(200);
     expect(response.body.current_server_knowledge).toBe(29);
@@ -221,14 +221,14 @@ describe('stock budget gateway', () => {
   });
 
   test('fails closed for writes, deltas, and unauthorized versions', async () => {
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(null),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(null),
     };
-    await stockRequest(planReader, 'bootstrap').expect(403, {
+    await stockRequest(budgetReader, 'bootstrap').expect(403, {
       error: { id: 'user_does_not_have_read_permissions' },
     });
-    const liveReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+    const liveReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(createSnapshot()),
     };
     await stockRequest(liveReader, 'bootstrap', {
       changed_entities: { be_transactions: [{}] },
@@ -239,12 +239,12 @@ describe('stock budget gateway', () => {
   });
 
   test('commits the admitted opened-budget delta atomically', async () => {
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(createSnapshot()),
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
-      commitChangeSet: vi.fn().mockImplementation((input) =>
+      commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
           serverKnowledge: 30,
@@ -256,7 +256,7 @@ describe('stock budget gateway', () => {
     const timestamp = '2026-08-17T01:02:03.456Z';
 
     const response = await stockRequest(
-      planReader,
+      budgetReader,
       'delta',
       {
         starting_device_knowledge: 0,
@@ -299,7 +299,7 @@ describe('stock budget gateway', () => {
     expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
       expect.objectContaining({
         changeSetId: 'stock-budget:plan-1:request-1',
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         originDeviceId: 'device-1',
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 2,
@@ -324,8 +324,8 @@ describe('stock budget gateway', () => {
 
   test('acknowledges an empty current delta without another write', async () => {
     const snapshot = { ...createSnapshot(), serverKnowledge: 30 };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
@@ -333,7 +333,7 @@ describe('stock budget gateway', () => {
     };
 
     await stockRequest(
-      planReader,
+      budgetReader,
       'delta',
       {
         starting_device_knowledge: 2,
@@ -347,7 +347,7 @@ describe('stock budget gateway', () => {
 
   test('acknowledges the second leg of an already-atomic plan rename', async () => {
     const base = createSnapshot();
-    const entities = base.entities.map((entity) =>
+    const entities = base.entities.map(entity =>
       entity.entityKind === 'be_budget'
         ? {
             ...entity,
@@ -361,14 +361,12 @@ describe('stock budget gateway', () => {
       serverKnowledge: 30,
       entities,
     };
-    const budget = entities.find(
-      (entity) => entity.entityKind === 'be_budget',
-    )!;
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    const budget = entities.find(entity => entity.entityKind === 'be_budget')!;
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
-      acknowledgeDevice: vi.fn().mockImplementation(async (input) => ({
+      acknowledgeDevice: vi.fn().mockImplementation(async input => ({
         replayed: false,
         serverKnowledge: input.expectedServerKnowledge,
         endingDeviceKnowledge: input.endingDeviceKnowledge,
@@ -378,7 +376,7 @@ describe('stock budget gateway', () => {
     };
 
     const response = await stockRequest(
-      planReader,
+      budgetReader,
       'delta',
       {
         starting_device_knowledge: 0,
@@ -396,7 +394,7 @@ describe('stock budget gateway', () => {
     });
     expect(changeWriter.acknowledgeDevice).toHaveBeenCalledWith(
       expect.objectContaining({
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         originDeviceId: 'device-1',
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 2,
@@ -459,12 +457,12 @@ describe('stock budget gateway', () => {
       serverKnowledge: 36,
       entities: [...baseSnapshot.entities, account, payee],
     };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
-      commitChangeSet: vi.fn().mockImplementation((input) =>
+      commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
           serverKnowledge: 37,
@@ -475,7 +473,7 @@ describe('stock budget gateway', () => {
     };
 
     const response = await stockRequest(
-      planReader,
+      budgetReader,
       'delta',
       {
         starting_device_knowledge: 0,

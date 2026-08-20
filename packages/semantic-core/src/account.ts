@@ -1,6 +1,8 @@
+import type { BudgetChangeSetCommand, BudgetChangeSetResult } from './budget';
+
 export type CanonicalUnlinkedAccount = {
   id: string;
-  planId: string;
+  budgetId: string;
   name: string;
   type: 'checking';
   isOnBudget: true;
@@ -11,7 +13,7 @@ export type CanonicalUnlinkedAccount = {
 
 export type CanonicalAccountTransferPayee = {
   id: string;
-  planId: string;
+  budgetId: string;
   accountId: string;
   name: string;
   isEnabled: true;
@@ -19,7 +21,7 @@ export type CanonicalAccountTransferPayee = {
 
 export type CanonicalStartingBalance = {
   id: string;
-  planId: string;
+  budgetId: string;
   accountId: string;
   payeeId: string;
   categoryId: string;
@@ -35,8 +37,24 @@ export type CanonicalUnlinkedAccountGroup = {
   startingBalance: CanonicalStartingBalance;
 };
 
+/**
+ * Atomic persistence envelope for the first admitted account aggregate.
+ * `delivery` is compatibility delivery state; it is not canonical account
+ * authority. A writer must commit both parts or neither part.
+ */
+export type CommitUnlinkedAccountCreation = {
+  accountGroup: CanonicalUnlinkedAccountGroup;
+  delivery: BudgetChangeSetCommand;
+};
+
+export type UnlinkedAccountCreationWriter = {
+  commitUnlinkedAccountCreation(
+    command: CommitUnlinkedAccountCreation,
+  ): Promise<BudgetChangeSetResult>;
+};
+
 export type BuildUnlinkedCheckingAccountInput = {
-  planId: string;
+  budgetId: string;
   accountId: string;
   transferPayeeId: string;
   startingBalanceId: string;
@@ -54,7 +72,7 @@ export function buildUnlinkedCheckingAccount(
   return {
     account: {
       id: input.accountId,
-      planId: input.planId,
+      budgetId: input.budgetId,
       name: input.name,
       type: 'checking',
       isOnBudget: true,
@@ -64,14 +82,14 @@ export function buildUnlinkedCheckingAccount(
     },
     transferPayee: {
       id: input.transferPayeeId,
-      planId: input.planId,
+      budgetId: input.budgetId,
       accountId: input.accountId,
       name: `Transfer : ${input.name}`,
       isEnabled: true,
     },
     startingBalance: {
       id: input.startingBalanceId,
-      planId: input.planId,
+      budgetId: input.budgetId,
       accountId: input.accountId,
       payeeId: input.startingBalancePayeeId,
       categoryId: input.immediateIncomeCategoryId,

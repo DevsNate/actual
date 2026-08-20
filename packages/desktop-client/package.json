@@ -20,7 +20,7 @@
     "#payees": "./src/payees/index.ts",
     "#queries": "./src/queries/index.ts",
     "#redux": "./src/redux/index.ts",
-    "#semantic-plans/*": "./src/semantic-plans/*.ts",
+    "#semantic-budgets/*": "./src/semantic-budgets/*.ts",
     "#reports": "./src/reports/index.ts",
     "#spreadsheet": "./src/spreadsheet/index.ts",
     "#style": "./src/style/index.ts",

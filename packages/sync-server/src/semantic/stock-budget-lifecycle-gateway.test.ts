@@ -2,8 +2,8 @@ import type { AuthenticatedPrincipal } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
-import type { PlanCreationService } from './plan-creation-service';
-import { createStockPlanGateway } from './stock-plan-gateway';
+import type { BudgetCreationService } from './budget-creation-service';
+import { createStockBudgetGateway } from './stock-budget-lifecycle-gateway';
 
 const principal: AuthenticatedPrincipal = {
   id: 'principal-1',
@@ -12,16 +12,16 @@ const principal: AuthenticatedPrincipal = {
   role: 'BASIC',
 };
 
-describe('stock plan gateway', () => {
-  test('accepts the captured create-plan envelope and returns the stock client acknowledgement', async () => {
-    const service: PlanCreationService = {
-      createPlan: vi.fn().mockResolvedValue({
+describe('stock budget lifecycle gateway', () => {
+  test('accepts the captured create-budget envelope and returns the stock client acknowledgement', async () => {
+    const service: BudgetCreationService = {
+      createBudget: vi.fn().mockResolvedValue({
         replayed: false,
         catalogServerKnowledge: 8,
         budgetServerKnowledge: 1,
-        response: {
-          budget_id: 'plan-1',
-          budget_version_id: 'version-1',
+        budget: {
+          budgetId: 'plan-1',
+          budgetVersionId: 'version-1',
         },
       }),
     };
@@ -39,7 +39,7 @@ describe('stock plan gateway', () => {
     expect(response.headers['x-ynab-client-request-id']).toBe(
       'stock-plan-request-1',
     );
-    expect(service.createPlan).toHaveBeenCalledWith({
+    expect(service.createBudget).toHaveBeenCalledWith({
       principalId: 'principal-1',
       originDeviceId: 'stock-web-device',
       idempotencyKey: 'stock-plan-request-1',
@@ -50,14 +50,14 @@ describe('stock plan gateway', () => {
   });
 
   test('returns the original acknowledgement for an idempotent replay', async () => {
-    const service: PlanCreationService = {
-      createPlan: vi.fn().mockResolvedValue({
+    const service: BudgetCreationService = {
+      createBudget: vi.fn().mockResolvedValue({
         replayed: true,
         catalogServerKnowledge: 8,
         budgetServerKnowledge: 1,
-        response: {
-          budget_id: 'plan-1',
-          budget_version_id: 'version-1',
+        budget: {
+          budgetId: 'plan-1',
+          budgetVersionId: 'version-1',
         },
       }),
     };
@@ -66,7 +66,7 @@ describe('stock plan gateway', () => {
   });
 
   test('fails closed for missing auth, request identity, unsupported versions, and malformed bodies', async () => {
-    const service: PlanCreationService = { createPlan: vi.fn() };
+    const service: BudgetCreationService = { createBudget: vi.fn() };
     const app = createApp(service);
     await request(app)
       .post('/api/budgets')
@@ -89,20 +89,20 @@ describe('stock plan gateway', () => {
       .set('x-ynab-api-version', '2026-01-01')
       .set('x-ynab-device-id', 'stock-web-device')
       .send(capturedBody())
-      .expect(400, { error: { id: 'invalid_plan_request' } });
+      .expect(400, { error: { id: 'invalid_budget_request' } });
     await stockRequest(app, { budget: { name: 'Incomplete' } }).expect(400, {
-      error: { id: 'invalid_plan_request' },
+      error: { id: 'invalid_budget_request' },
     });
-    expect(service.createPlan).not.toHaveBeenCalled();
+    expect(service.createBudget).not.toHaveBeenCalled();
   });
 });
 
-function createApp(service: PlanCreationService): express.Express {
+function createApp(service: BudgetCreationService): express.Express {
   const app = express();
   app.use(
     '/api',
-    createStockPlanGateway({
-      planCreationService: service,
+    createStockBudgetGateway({
+      budgetCreationService: service,
       resolvePrincipal: token => {
         expect(token).toBe('actual-session');
         return principal;

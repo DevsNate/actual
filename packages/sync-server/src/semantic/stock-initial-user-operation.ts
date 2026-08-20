@@ -1,5 +1,5 @@
 import type {
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
   CatalogReader,
 } from '@actual-app/semantic-core';
 
@@ -12,7 +12,7 @@ import { projectStockUser } from './stock-user-projection';
 
 type Dependencies = {
   catalogReader: CatalogReader;
-  planReader: BudgetVersionPlanReader;
+  budgetReader: BudgetVersionReader;
 };
 
 export async function handleStockInitialUserData(
@@ -44,11 +44,11 @@ export async function handleStockInitialUserData(
     };
   }
 
-  const plan = await dependencies.planReader.readPlanByBudgetVersion(
+  const budget = await dependencies.budgetReader.readBudgetByVersion(
     context.principal.id,
     membership.budgetVersionId,
   );
-  if (!plan || plan.planId !== membership.planId) {
+  if (!budget || budget.budgetId !== membership.budgetId) {
     return operationError(409, 'initial_budget_unavailable');
   }
 
@@ -58,7 +58,7 @@ export async function handleStockInitialUserData(
       ...initialUserBody(context),
       user_budget: {
         id: membership.id,
-        budget_id: membership.planId,
+        budget_id: membership.budgetId,
         user_id: membership.principalId,
         permissions: membership.permissions,
         is_tombstone: false,
@@ -66,10 +66,10 @@ export async function handleStockInitialUserData(
       },
       budget_version: {
         id: membership.budgetVersionId,
-        budget_id: membership.planId,
+        budget_id: membership.budgetId,
         budget_name: membership.name,
-        currency_format: JSON.stringify(plan.currencyFormat),
-        date_format: JSON.stringify(plan.dateFormat),
+        currency_format: JSON.stringify(budget.currencyFormat),
+        date_format: JSON.stringify(budget.dateFormat),
         source: membership.source,
         is_tombstone: false,
       },

@@ -1,6 +1,6 @@
 import type {
-  PlanChangeSetCommand,
-  PlanSnapshot,
+  BudgetChangeSetCommand,
+  BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
 import { projectStockEntity } from './stock-budget-projection';
@@ -8,8 +8,8 @@ import { isRecord } from './stock-operation';
 
 export function parseStockAccountRenameDelta(
   changedEntities: Record<string, unknown>,
-  snapshot: PlanSnapshot,
-): PlanChangeSetCommand['changes'] | null {
+  snapshot: BudgetSnapshot,
+): BudgetChangeSetCommand['changes'] | null {
   if (!hasExactKeys(changedEntities, ['be_accounts', 'be_payees'])) {
     return null;
   }

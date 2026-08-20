@@ -1,13 +1,13 @@
 import type {
-  BudgetVersionPlanReader,
-  PlanEntity,
-  PlanReader,
-  PlanSnapshot,
+  BudgetVersionReader,
+  BudgetEntity,
+  BudgetReader,
+  BudgetSnapshot,
 } from '@actual-app/semantic-core';
 import type { Pool } from 'pg';
 
-type PlanRow = {
-  plan_id: string;
+type BudgetRow = {
+  budget_id: string;
   budget_version_id: string;
   name: string;
   server_knowledge: string;
@@ -23,57 +23,57 @@ type EntityRow = {
   last_server_knowledge: string;
 };
 
-export class PostgresPlanReader implements PlanReader, BudgetVersionPlanReader {
+export class PostgresBudgetReader implements BudgetReader, BudgetVersionReader {
   constructor(private readonly pool: Pool) {}
 
-  async readPlan(
+  async readBudget(
     principalId: string,
-    planId: string,
-  ): Promise<PlanSnapshot | null> {
-    return this.readAuthorizedPlan(principalId, 'plan', planId);
+    budgetId: string,
+  ): Promise<BudgetSnapshot | null> {
+    return this.readAuthorizedBudget(principalId, 'budget', budgetId);
   }
 
-  async readPlanByBudgetVersion(
+  async readBudgetByVersion(
     principalId: string,
     budgetVersionId: string,
-  ): Promise<PlanSnapshot | null> {
-    return this.readAuthorizedPlan(
+  ): Promise<BudgetSnapshot | null> {
+    return this.readAuthorizedBudget(
       principalId,
       'budget-version',
       budgetVersionId,
     );
   }
 
-  private async readAuthorizedPlan(
+  private async readAuthorizedBudget(
     principalId: string,
-    identityKind: 'plan' | 'budget-version',
+    identityKind: 'budget' | 'budget-version',
     identity: string,
-  ): Promise<PlanSnapshot | null> {
+  ): Promise<BudgetSnapshot | null> {
     const identityColumn =
-      identityKind === 'plan' ? 'm.plan_id' : 'p.budget_version_id';
-    const plan = await this.pool.query<PlanRow>(
-      `SELECT p.plan_id, p.budget_version_id, p.name, p.server_knowledge,
+      identityKind === 'budget' ? 'm.budget_id' : 'p.budget_version_id';
+    const budget = await this.pool.query<BudgetRow>(
+      `SELECT p.budget_id, p.budget_version_id, p.name, p.server_knowledge,
               p.currency_format, p.date_format
-       FROM semantic_plan_memberships m
-       JOIN semantic_plans p ON p.plan_id = m.plan_id
+       FROM semantic_budget_memberships m
+       JOIN semantic_budgets p ON p.budget_id = m.budget_id
        WHERE m.principal_id = $1 AND ${identityColumn} = $2
          AND m.is_tombstone = false AND p.is_tombstone = false`,
       [principalId, identity],
     );
-    const row = plan.rows[0];
+    const row = budget.rows[0];
     if (!row) {
       return null;
     }
     const entities = await this.pool.query<EntityRow>(
       `SELECT entity_kind, entity_id, is_tombstone, payload,
               last_server_knowledge
-       FROM semantic_plan_entities
-       WHERE plan_id = $1
+       FROM semantic_budget_entities
+       WHERE budget_id = $1
        ORDER BY last_server_knowledge, entity_kind, entity_id`,
-      [row.plan_id],
+      [row.budget_id],
     );
     return {
-      planId: row.plan_id,
+      budgetId: row.budget_id,
       budgetVersionId: row.budget_version_id,
       name: row.name,
       serverKnowledge: integer(row.server_knowledge),
@@ -84,7 +84,7 @@ export class PostgresPlanReader implements PlanReader, BudgetVersionPlanReader {
   }
 }
 
-function mapEntity(row: EntityRow): PlanEntity {
+function mapEntity(row: EntityRow): BudgetEntity {
   return {
     entityKind: row.entity_kind,
     entityId: row.entity_id,
@@ -97,7 +97,7 @@ function mapEntity(row: EntityRow): PlanEntity {
 function integer(value: string) {
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < 0) {
-    throw new Error('Plan knowledge is outside the supported range');
+    throw new Error('Budget knowledge is outside the supported range');
   }
   return number;
 }

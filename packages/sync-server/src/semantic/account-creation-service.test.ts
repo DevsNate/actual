@@ -1,24 +1,25 @@
 import type {
-  PlanChangeSetCommand,
-  PlanReader,
+  BudgetChangeSetCommand,
+  BudgetReader,
+  CommitUnlinkedAccountCreation,
 } from '@actual-app/semantic-core';
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
+import { stockAccountBudgetEntityAdapter } from './account-budget-entity-adapter';
 import { createAccountCreationService } from './account-creation-service';
-import { stockAccountPlanEntityAdapter } from './account-plan-entity-adapter';
 
 function fixture() {
   let sequence = 0;
   const snapshot = {
-    planId: '11111111-1111-4111-8111-111111111111',
+    budgetId: '11111111-1111-4111-8111-111111111111',
     budgetVersionId: '22222222-2222-4222-8222-222222222222',
     name: 'Plan',
     serverKnowledge: 2,
     currencyFormat: {},
     dateFormat: {},
     entities: [
-      ...buildStockPlanBootstrap({
-        planId: '11111111-1111-4111-8111-111111111111',
+      ...buildStockBudgetBootstrap({
+        budgetId: '11111111-1111-4111-8111-111111111111',
         budgetVersionId: '22222222-2222-4222-8222-222222222222',
         principalId: 'principal-1',
         name: 'Plan',
@@ -26,35 +27,40 @@ function fixture() {
         dateFormat: {},
         createdOn: '2026-08-17',
         createdAtMilliseconds: Date.UTC(2026, 7, 17),
-        allocateId: (label) => `${label}:${sequence++}`,
+        allocateId: label => `${label}:${sequence++}`,
       }),
     ],
   };
-  const planReader: PlanReader = {
-    readPlan: vi.fn().mockResolvedValue(snapshot),
+  const budgetReader: BudgetReader = {
+    readBudget: vi.fn().mockResolvedValue(snapshot),
   };
-  let command: PlanChangeSetCommand | undefined;
+  let commit: CommitUnlinkedAccountCreation | undefined;
   const service = createAccountCreationService({
-    planReader,
-    entityAdapter: stockAccountPlanEntityAdapter,
-    changeWriter: {
-      commitChangeSet: vi.fn(async (value) => {
-        command = value;
+    budgetReader,
+    entityAdapter: stockAccountBudgetEntityAdapter,
+    accountWriter: {
+      commitUnlinkedAccountCreation: vi.fn(async value => {
+        commit = value;
         return {
           replayed: false,
           serverKnowledge: 4,
           endingDeviceKnowledge: 0,
-          response: value.response,
+          response: value.delivery.response,
         };
       }),
     },
   });
-  return { service, snapshot, getCommand: () => command };
+  return {
+    service,
+    snapshot,
+    getCommand: (): BudgetChangeSetCommand | undefined => commit?.delivery,
+    getAccountGroup: () => commit?.accountGroup,
+  };
 }
 
 const input = {
   principalId: 'principal-1',
-  planId: '11111111-1111-4111-8111-111111111111',
+  budgetId: '11111111-1111-4111-8111-111111111111',
   originDeviceId: 'web-device-1',
   idempotencyKey: 'account-create-1',
   name: 'Account Capture 1',
@@ -64,7 +70,7 @@ const input = {
 
 describe('account creation service', () => {
   test('commits the admitted account, transfer payee, and starting balance atomically', async () => {
-    const { service, getCommand } = fixture();
+    const { service, getCommand, getAccountGroup } = fixture();
     const result = await service.createUnlinkedCheckingAccount(input);
     const command = getCommand();
 
@@ -73,10 +79,10 @@ describe('account creation service', () => {
       name: 'Account Capture 1',
       type: 'checking',
       openingBalance: 123450,
-      planId: input.planId,
+      budgetId: input.budgetId,
     });
     expect(command).toMatchObject({
-      planId: input.planId,
+      budgetId: input.budgetId,
       expectedServerKnowledge: 2,
       serverKnowledgeAdvance: 2,
       startingDeviceKnowledge: 0,
@@ -84,16 +90,21 @@ describe('account creation service', () => {
       idempotencyKey: 'account-create-1',
     });
     expect(command?.changes).toHaveLength(3);
+    expect(getAccountGroup()).toMatchObject({
+      account: { budgetId: input.budgetId, name: 'Account Capture 1' },
+      transferPayee: { name: 'Transfer : Account Capture 1' },
+      startingBalance: { amount: 123450, date: '2026-08-17' },
+    });
     const account = command?.changes.find(
-      (entity) => entity.entityKind === 'be_accounts',
+      entity => entity.entityKind === 'be_accounts',
     );
     const transferPayee = command?.changes.find(
-      (entity) =>
+      entity =>
         entity.entityKind === 'be_payees' &&
         entity.payload.accountId === account?.entityId,
     );
     const startingBalance = command?.changes.find(
-      (entity) => entity.entityKind === 'be_transactions',
+      entity => entity.entityKind === 'be_transactions',
     );
     expect(account?.payload).toMatchObject({
       accountName: 'Account Capture 1',
@@ -139,14 +150,14 @@ describe('account creation service', () => {
     expect(
       first
         .getCommand()
-        ?.changes.find((entity) => entity.entityKind === 'be_accounts')?.payload
+        ?.changes.find(entity => entity.entityKind === 'be_accounts')?.payload
         .sortableIndex,
     ).toBe(1);
 
     const second = fixture();
     second.snapshot.entities.push(
       second.snapshot.entities.find(
-        (entity) => entity.payload.internalName === 'StartingBalancePayee',
+        entity => entity.payload.internalName === 'StartingBalancePayee',
       )!,
     );
     await expect(

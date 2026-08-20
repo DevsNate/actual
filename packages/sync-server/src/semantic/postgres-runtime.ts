@@ -1,27 +1,29 @@
 import {
   migrateSemanticDatabase,
-  PostgresPlanLifecycleStore,
-  PostgresPlanReader,
+  PostgresBudgetLifecycleStore,
+  PostgresBudgetReader,
   PostgresSemanticStore,
 } from '@actual-app/semantic-postgres';
-import { semanticCanonicalPlanMigration } from '@actual-app/semantic-postgres/canonical-plan-migration';
+import { semanticBudgetIdentitySchemaMigration } from '@actual-app/semantic-postgres/budget-identity-schema-migration';
+import { semanticCanonicalAccountDomainMigration } from '@actual-app/semantic-postgres/canonical-account-domain-migration';
+import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-postgres/canonical-budget-entity-migration';
 import { semanticCatalogCommandMigration } from '@actual-app/semantic-postgres/catalog-command-migration';
 import { semanticCatalogSchemaVersionMigration } from '@actual-app/semantic-postgres/catalog-schema-version-migration';
 import { semanticFoundationMigration } from '@actual-app/semantic-postgres/foundation-migration';
 import { Pool } from 'pg';
 
 import { createSemanticAccountHandlers } from './account-api';
+import { stockAccountBudgetEntityAdapter } from './account-budget-entity-adapter';
 import { createAccountCreationService } from './account-creation-service';
-import { stockAccountPlanEntityAdapter } from './account-plan-entity-adapter';
+import { createSemanticBudgetHandlers } from './budget-api';
+import { createBudgetCreationService } from './budget-creation-service';
+import { createSemanticBudgetLifecycleHandlers } from './budget-lifecycle-api';
+import { createBudgetLifecycleService } from './budget-lifecycle-service';
 import { createSemanticCatalogHandlers } from './catalog-api';
-import { createSemanticPlanHandlers } from './plan-api';
-import { createPlanCreationService } from './plan-creation-service';
-import { createSemanticPlanLifecycleHandlers } from './plan-lifecycle-api';
-import { createPlanLifecycleService } from './plan-lifecycle-service';
 import { resolveActualPrincipal } from './session-principal-adapter';
 import { createStockAccountGateway } from './stock-account-gateway';
+import { createStockBudgetGateway } from './stock-budget-lifecycle-gateway';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
-import { createStockPlanGateway } from './stock-plan-gateway';
 import { createStockUserGateway } from './stock-user-gateway';
 
 export async function createPostgresSemanticCatalogHandlers(
@@ -32,8 +34,10 @@ export async function createPostgresSemanticCatalogHandlers(
     await migrateSemanticDatabase(pool, [
       semanticFoundationMigration,
       semanticCatalogCommandMigration,
-      semanticCanonicalPlanMigration,
+      semanticCanonicalBudgetEntityMigration,
       semanticCatalogSchemaVersionMigration,
+      semanticBudgetIdentitySchemaMigration,
+      semanticCanonicalAccountDomainMigration,
     ]);
   } catch (error) {
     await pool.end();
@@ -41,28 +45,28 @@ export async function createPostgresSemanticCatalogHandlers(
   }
 
   const store = new PostgresSemanticStore(pool);
-  const lifecycleStore = new PostgresPlanLifecycleStore(pool);
-  const planReader = new PostgresPlanReader(pool);
-  const planCreationService = createPlanCreationService({
+  const lifecycleStore = new PostgresBudgetLifecycleStore(pool);
+  const budgetReader = new PostgresBudgetReader(pool);
+  const budgetCreationService = createBudgetCreationService({
     catalogReader: store,
-    planCreator: store,
+    budgetCreator: store,
   });
   const accountCreationService = createAccountCreationService({
-    planReader,
-    changeWriter: store,
-    entityAdapter: stockAccountPlanEntityAdapter,
+    budgetReader,
+    accountWriter: store,
+    entityAdapter: stockAccountBudgetEntityAdapter,
   });
-  const planLifecycleService = createPlanLifecycleService({
-    planLifecycleWriter: lifecycleStore,
+  const budgetLifecycleService = createBudgetLifecycleService({
+    budgetLifecycleWriter: lifecycleStore,
   });
   const handlers = createSemanticCatalogHandlers({
     catalogReader: store,
     resolvePrincipal: resolveActualPrincipal,
   });
   handlers.use(
-    createSemanticPlanHandlers({
-      planCreationService,
-      planReader,
+    createSemanticBudgetHandlers({
+      budgetCreationService,
+      budgetReader,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );
@@ -73,26 +77,26 @@ export async function createPostgresSemanticCatalogHandlers(
     }),
   );
   handlers.use(
-    createSemanticPlanLifecycleHandlers({
-      planLifecycleService,
+    createSemanticBudgetLifecycleHandlers({
+      budgetLifecycleService,
       resolvePrincipal: resolveActualPrincipal,
     }),
   );
   const stockHandlers = createStockCatalogGateway({
     catalogReader: store,
     catalogWriter: store,
-    planReader,
+    budgetReader,
     changeWriter: store,
-    planLifecycleService,
+    budgetLifecycleService,
     resolvePrincipal: resolveActualPrincipal,
   });
   const stockAccountHandlers = createStockAccountGateway({
     accountCreationService,
-    planReader,
+    budgetReader,
     resolvePrincipal: resolveActualPrincipal,
   });
-  const stockPlanHandlers = createStockPlanGateway({
-    planCreationService,
+  const stockBudgetLifecycleHandlers = createStockBudgetGateway({
+    budgetCreationService,
     resolvePrincipal: resolveActualPrincipal,
   });
   const stockUserHandlers = createStockUserGateway({
@@ -102,7 +106,7 @@ export async function createPostgresSemanticCatalogHandlers(
     handlers,
     stockHandlers,
     stockAccountHandlers,
-    stockPlanHandlers,
+    stockBudgetLifecycleHandlers,
     stockUserHandlers,
     close: () => pool.end(),
   };

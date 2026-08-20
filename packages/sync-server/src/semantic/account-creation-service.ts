@@ -2,17 +2,17 @@ import { createHash } from 'node:crypto';
 
 import type {
   CanonicalUnlinkedAccountGroup,
-  PlanChangeSetResult,
-  PlanChangeWriter,
-  PlanEntity,
-  PlanReader,
-  PlanSnapshot,
+  BudgetChangeSetResult,
+  BudgetEntity,
+  BudgetReader,
+  BudgetSnapshot,
+  UnlinkedAccountCreationWriter,
 } from '@actual-app/semantic-core';
 import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
 
 export type CreateCheckingAccountInput = {
   principalId: string;
-  planId: string;
+  budgetId: string;
   originDeviceId: string;
   idempotencyKey: string;
   name: string;
@@ -22,13 +22,13 @@ export type CreateCheckingAccountInput = {
 
 export type CreatedUnlinkedAccount = {
   accountId: string;
-  planId: string;
+  budgetId: string;
   name: string;
   type: 'checking';
   openingBalance: number;
 };
 
-export type AccountCreationResult = Omit<PlanChangeSetResult, 'response'> & {
+export type AccountCreationResult = Omit<BudgetChangeSetResult, 'response'> & {
   response: CreatedUnlinkedAccount;
 };
 
@@ -48,8 +48,8 @@ export class AccountCreationError extends Error {
 }
 
 type Dependencies = {
-  planReader: PlanReader;
-  changeWriter: PlanChangeWriter;
+  budgetReader: BudgetReader;
+  accountWriter: UnlinkedAccountCreationWriter;
   entityAdapter: AccountEntityAdapter;
 };
 
@@ -63,14 +63,14 @@ export type AccountCreationContext = {
 
 export type AccountEntityAdapter = {
   resolveCreationContext(
-    snapshot: PlanSnapshot,
+    snapshot: BudgetSnapshot,
     idempotencyKey: string,
   ): AccountCreationContext;
-  toPlanEntities(
+  toBudgetEntities(
     group: CanonicalUnlinkedAccountGroup,
     budgetVersionId: string,
     creationCommandKey: string,
-  ): readonly PlanEntity[];
+  ): readonly BudgetEntity[];
 };
 
 export function createAccountCreationService(
@@ -79,12 +79,12 @@ export function createAccountCreationService(
   return {
     async createUnlinkedCheckingAccount(input) {
       validateInput(input);
-      const snapshot = await dependencies.planReader.readPlan(
+      const snapshot = await dependencies.budgetReader.readBudget(
         input.principalId,
-        input.planId,
+        input.budgetId,
       );
       if (!snapshot) {
-        throw new AccountCreationError('plan-not-found');
+        throw new AccountCreationError('budget-not-found');
       }
       const context = dependencies.entityAdapter.resolveCreationContext(
         snapshot,
@@ -92,22 +92,22 @@ export function createAccountCreationService(
       );
 
       const accountId = deterministicUuid(
-        input.planId,
+        input.budgetId,
         input.idempotencyKey,
         'account',
       );
       const transferPayeeId = deterministicUuid(
-        input.planId,
+        input.budgetId,
         input.idempotencyKey,
         'transfer-payee',
       );
       const startingBalanceId = deterministicUuid(
-        input.planId,
+        input.budgetId,
         input.idempotencyKey,
         'starting-balance',
       );
       const group = buildUnlinkedCheckingAccount({
-        planId: input.planId,
+        budgetId: input.budgetId,
         accountId,
         transferPayeeId,
         startingBalanceId,
@@ -120,29 +120,33 @@ export function createAccountCreationService(
       });
       const response: CreatedUnlinkedAccount = {
         accountId,
-        planId: input.planId,
+        budgetId: input.budgetId,
         name: input.name.trim(),
         type: 'checking',
         openingBalance: input.openingBalance,
       };
-      const result = await dependencies.changeWriter.commitChangeSet({
-        changeSetId: `account-create:${input.planId}:${input.idempotencyKey}`,
-        planId: input.planId,
-        originDeviceId: input.originDeviceId,
-        startingDeviceKnowledge: 0,
-        endingDeviceKnowledge: 0,
-        expectedServerKnowledge: context.expectedServerKnowledge,
-        serverKnowledgeAdvance: 2,
-        schemaVersion: 1,
-        idempotencyKey: input.idempotencyKey,
-        payloadDigest: digest(input),
-        changes: dependencies.entityAdapter.toPlanEntities(
-          group,
-          context.budgetVersionId,
-          input.idempotencyKey,
-        ),
-        response,
-      });
+      const result =
+        await dependencies.accountWriter.commitUnlinkedAccountCreation({
+          accountGroup: group,
+          delivery: {
+            changeSetId: `account-create:${input.budgetId}:${input.idempotencyKey}`,
+            budgetId: input.budgetId,
+            originDeviceId: input.originDeviceId,
+            startingDeviceKnowledge: 0,
+            endingDeviceKnowledge: 0,
+            expectedServerKnowledge: context.expectedServerKnowledge,
+            serverKnowledgeAdvance: 2,
+            schemaVersion: 1,
+            idempotencyKey: input.idempotencyKey,
+            payloadDigest: digest(input),
+            changes: dependencies.entityAdapter.toBudgetEntities(
+              group,
+              context.budgetVersionId,
+              input.idempotencyKey,
+            ),
+            response,
+          },
+        });
       return { ...result, response: parseCreatedAccount(result.response) };
     },
   };
@@ -151,7 +155,7 @@ export function createAccountCreationService(
 function validateInput(input: CreateCheckingAccountInput): void {
   if (
     !input.principalId ||
-    !input.planId ||
+    !input.budgetId ||
     !input.originDeviceId ||
     !input.idempotencyKey ||
     !input.name.trim() ||
@@ -190,7 +194,7 @@ function digest(input: CreateCheckingAccountInput): string {
       JSON.stringify({
         commandKind: 'create-checking-account',
         principalId: input.principalId,
-        planId: input.planId,
+        budgetId: input.budgetId,
         name: input.name.trim(),
         openingBalance: input.openingBalance,
         openingDate: input.openingDate,
@@ -204,7 +208,7 @@ function parseCreatedAccount(
 ): CreatedUnlinkedAccount {
   if (
     typeof value.accountId !== 'string' ||
-    typeof value.planId !== 'string' ||
+    typeof value.budgetId !== 'string' ||
     typeof value.name !== 'string' ||
     value.type !== 'checking' ||
     !Number.isSafeInteger(value.openingBalance)
@@ -213,7 +217,7 @@ function parseCreatedAccount(
   }
   return {
     accountId: value.accountId,
-    planId: value.planId,
+    budgetId: value.budgetId,
     name: value.name,
     type: value.type,
     openingBalance: Number(value.openingBalance),

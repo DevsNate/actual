@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 
 import type {
   CatalogCommand,
-  PlanDeviceAcknowledgement,
+  BudgetDeviceAcknowledgement,
 } from '@actual-app/semantic-core';
 import type { Pool } from 'pg';
 
@@ -57,7 +57,7 @@ function changeSet(
 ): CommitChangeSetInput {
   return {
     changeSetId: 'change-1',
-    planId: 'plan-1',
+    budgetId: 'budget-1',
     originDeviceId: 'device-1',
     startingDeviceKnowledge: 0,
     endingDeviceKnowledge: 1,
@@ -68,8 +68,8 @@ function changeSet(
     payloadDigest: digest,
     changes: [
       {
-        entityKind: 'plan',
-        entityId: 'plan-1',
+        entityKind: 'budget',
+        entityId: 'budget-1',
         isTombstone: false,
         payload: { name: 'My plan' },
       },
@@ -90,12 +90,12 @@ function catalogCommand(
     endingDeviceKnowledge: 1,
     expectedServerKnowledge: 0,
     schemaVersion: 1,
-    commandKind: 'create-plan',
+    commandKind: 'create-budget',
     idempotencyKey: 'catalog-request-1',
     payloadDigest: digest,
     changes: [
       {
-        entityKind: 'plan-membership',
+        entityKind: 'budget-membership',
         entityId: 'membership-1',
         isTombstone: false,
         payload: { name: 'My plan' },
@@ -107,10 +107,10 @@ function catalogCommand(
 }
 
 function deviceAcknowledgement(
-  overrides: Partial<PlanDeviceAcknowledgement> = {},
-): PlanDeviceAcknowledgement {
+  overrides: Partial<BudgetDeviceAcknowledgement> = {},
+): BudgetDeviceAcknowledgement {
   return {
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     originDeviceId: 'device-1',
     startingDeviceKnowledge: 0,
     endingDeviceKnowledge: 2,
@@ -129,7 +129,7 @@ describe('PostgresSemanticStore', () => {
       {
         catalog_server_knowledge: '4',
         membership_id: 'membership-1',
-        plan_id: 'plan-1',
+        budget_id: 'plan-1',
         budget_version_id: 'version-1',
         principal_id: 'principal-1',
         name: 'My plan',
@@ -149,7 +149,7 @@ describe('PostgresSemanticStore', () => {
       memberships: [
         {
           id: 'membership-1',
-          planId: 'plan-1',
+          budgetId: 'plan-1',
           budgetVersionId: 'version-1',
           principalId: 'principal-1',
           name: 'My plan',
@@ -186,10 +186,10 @@ describe('PostgresSemanticStore', () => {
     expect(statements[1]).toContain('pg_advisory_xact_lock');
     expect(statements).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('INSERT INTO semantic_change_sets'),
-        expect.stringContaining('INSERT INTO semantic_entity_changes'),
-        expect.stringContaining('UPDATE semantic_plans'),
-        expect.stringContaining('INSERT INTO semantic_device_receipts'),
+        expect.stringContaining('INSERT INTO semantic_budget_change_sets'),
+        expect.stringContaining('INSERT INTO semantic_budget_entity_changes'),
+        expect.stringContaining('UPDATE semantic_budgets'),
+        expect.stringContaining('INSERT INTO semantic_budget_device_receipts'),
       ]),
     );
     expect(statements.at(-1)).toBe('COMMIT');
@@ -221,9 +221,9 @@ describe('PostgresSemanticStore', () => {
     });
     expect(
       database.queries.find(query =>
-        query.text.includes('UPDATE semantic_plans'),
+        query.text.includes('UPDATE semantic_budgets'),
       )?.values,
-    ).toEqual(['plan-1', 39]);
+    ).toEqual(['budget-1', 39]);
   });
 
   test('acknowledges coalesced device knowledge without another server mutation', async () => {
@@ -248,15 +248,15 @@ describe('PostgresSemanticStore', () => {
     const statements = database.queries.map(query => query.text);
     expect(statements).toEqual(
       expect.arrayContaining([
-        expect.stringContaining('UPDATE semantic_devices'),
-        expect.stringContaining('INSERT INTO semantic_device_receipts'),
+        expect.stringContaining('UPDATE semantic_budget_devices'),
+        expect.stringContaining('INSERT INTO semantic_budget_device_receipts'),
       ]),
     );
     expect(statements).not.toEqual(
       expect.arrayContaining([
-        expect.stringContaining('UPDATE semantic_plans'),
-        expect.stringContaining('INSERT INTO semantic_change_sets'),
-        expect.stringContaining('INSERT INTO semantic_entity_changes'),
+        expect.stringContaining('UPDATE semantic_budgets'),
+        expect.stringContaining('INSERT INTO semantic_budget_change_sets'),
+        expect.stringContaining('INSERT INTO semantic_budget_entity_changes'),
       ]),
     );
     expect(statements.at(-1)).toBe('COMMIT');
@@ -382,7 +382,7 @@ describe('PostgresSemanticStore', () => {
     });
     expect(
       database.queries.some(query =>
-        query.text.includes('INSERT INTO semantic_change_sets'),
+        query.text.includes('INSERT INTO semantic_budget_change_sets'),
       ),
     ).toBe(false);
     expect(database.queries.at(-1)?.text).toBe('COMMIT');
@@ -465,7 +465,7 @@ describe('semantic foundation migration', () => {
     );
   });
 
-  test('preserves complete canonical plan entity payloads', async () => {
+  test('introduces complete canonical entity payload storage', async () => {
     const migration = await readFile(
       fileURLToPath(
         new URL(
@@ -500,5 +500,55 @@ describe('semantic foundation migration', () => {
     expect(migration).toContain('ALTER TABLE semantic_catalog_change_sets');
     expect(migration).toContain('schema_version INTEGER NOT NULL');
     expect(migration).toContain('CHECK (schema_version > 0)');
+  });
+
+  test('renames every budget-owned table and key without collapsing version identity', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0005_budget_identity_schema.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'ALTER TABLE semantic_plans RENAME TO semantic_budgets',
+    );
+    expect(migration).toContain(
+      'ALTER TABLE semantic_budgets RENAME COLUMN plan_id TO budget_id',
+    );
+    expect(migration).toContain(
+      'ALTER TABLE semantic_plan_memberships RENAME TO semantic_budget_memberships',
+    );
+    expect(migration).toContain(
+      'ALTER TABLE semantic_plan_entities RENAME TO semantic_budget_entities',
+    );
+    expect(migration).toContain('budget_version_id');
+    expect(migration).not.toContain(
+      'RENAME COLUMN budget_version_id TO budget_id',
+    );
+  });
+
+  test('separates typed account authority from stock compatibility projections', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0006_canonical_account_domain.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE semantic_accounts');
+    expect(migration).toContain('CREATE TABLE semantic_payees');
+    expect(migration).toContain('CREATE TABLE semantic_transactions');
+    expect(migration).toContain('amount_milliunits BIGINT NOT NULL');
+    expect(migration).toContain('ON DELETE RESTRICT');
+    expect(migration).not.toContain('be_accounts');
+    expect(migration).not.toContain('be_payees');
+    expect(migration).not.toContain('be_transactions');
   });
 });

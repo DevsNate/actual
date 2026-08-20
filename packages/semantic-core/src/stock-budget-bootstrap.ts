@@ -1,7 +1,7 @@
-import type { PlanEntity } from './plan';
+import type { BudgetEntity } from './budget';
 
-export type StockPlanBootstrapInput = {
-  planId: string;
+export type StockBudgetBootstrapInput = {
+  budgetId: string;
   budgetVersionId: string;
   principalId: string;
   name: string;
@@ -236,9 +236,9 @@ const systemPayees = [
   ['starting-balance', 'StartingBalancePayee', 'Starting Balance'],
 ] as const;
 
-export function buildStockPlanBootstrap(
-  input: StockPlanBootstrapInput,
-): readonly PlanEntity[] {
+export function buildStockBudgetBootstrap(
+  input: StockBudgetBootstrapInput,
+): readonly BudgetEntity[] {
   const masterIds = new Map(
     masters.map(master => [
       master.key,
@@ -255,10 +255,10 @@ export function buildStockPlanBootstrap(
   const currentMonth = firstOfMonth(input.createdOn);
   const nextMonth = addMonthsAndDays(currentMonth, 1, 0);
 
-  const entities: PlanEntity[] = [
+  const entities: BudgetEntity[] = [
     entity('be_budget', input.budgetVersionId, {
       budgetVersionId: input.budgetVersionId,
-      budgetId: input.planId,
+      budgetId: input.budgetId,
       budgetName: input.name,
       deviceKnowledge: 0,
       dateFormat: input.dateFormat,
@@ -408,7 +408,7 @@ function entity(
   entityKind: string,
   entityId: string,
   payload: Readonly<Record<string, unknown>>,
-): PlanEntity {
+): BudgetEntity {
   return { entityKind, entityId, isTombstone: false, payload };
 }
 

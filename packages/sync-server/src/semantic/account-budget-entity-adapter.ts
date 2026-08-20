@@ -1,7 +1,7 @@
 import type {
   CanonicalUnlinkedAccountGroup,
-  PlanEntity,
-  PlanSnapshot,
+  BudgetEntity,
+  BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
 import {
@@ -9,20 +9,20 @@ import {
   type AccountEntityAdapter,
 } from './account-creation-service';
 
-export const stockAccountPlanEntityAdapter: AccountEntityAdapter = {
+export const stockAccountBudgetEntityAdapter: AccountEntityAdapter = {
   resolveCreationContext(snapshot, idempotencyKey) {
     const accounts = snapshot.entities.filter(
-      (entity) => entity.entityKind === 'be_accounts' && !entity.isTombstone,
+      entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
     );
     const replayAccount = accounts.find(
-      (entity) => entity.payload.creationCommandKey === idempotencyKey,
+      entity => entity.payload.creationCommandKey === idempotencyKey,
     );
     const sortOrder = replayAccount
       ? requireSortOrder(replayAccount.payload.sortableIndex)
       : nextSortOrder(accounts);
     const startingBalancePayee = exactlyOne(
       snapshot,
-      (entity) =>
+      entity =>
         entity.entityKind === 'be_payees' &&
         !entity.isTombstone &&
         entity.payload.internalName === 'StartingBalancePayee',
@@ -30,7 +30,7 @@ export const stockAccountPlanEntityAdapter: AccountEntityAdapter = {
     );
     const immediateIncomeCategory = exactlyOne(
       snapshot,
-      (entity) =>
+      entity =>
         entity.entityKind === 'be_subcategories' &&
         !entity.isTombstone &&
         entity.payload.internalName === 'Category/__ImmediateIncome__',
@@ -45,7 +45,7 @@ export const stockAccountPlanEntityAdapter: AccountEntityAdapter = {
     };
   },
 
-  toPlanEntities(group, budgetVersionId, creationCommandKey) {
+  toBudgetEntities(group, budgetVersionId, creationCommandKey) {
     return [
       accountEntity(group, budgetVersionId, creationCommandKey),
       transferPayeeEntity(group, budgetVersionId),
@@ -58,7 +58,7 @@ function accountEntity(
   group: CanonicalUnlinkedAccountGroup,
   budgetVersionId: string,
   creationCommandKey: string,
-): PlanEntity {
+): BudgetEntity {
   const { account } = group;
   return {
     entityKind: 'be_accounts',
@@ -91,7 +91,7 @@ function accountEntity(
 function transferPayeeEntity(
   group: CanonicalUnlinkedAccountGroup,
   budgetVersionId: string,
-): PlanEntity {
+): BudgetEntity {
   const { transferPayee } = group;
   return {
     entityKind: 'be_payees',
@@ -118,7 +118,7 @@ function transferPayeeEntity(
 function startingBalanceEntity(
   group: CanonicalUnlinkedAccountGroup,
   budgetVersionId: string,
-): PlanEntity {
+): BudgetEntity {
   const { startingBalance } = group;
   return {
     entityKind: 'be_transactions',
@@ -157,13 +157,13 @@ function startingBalanceEntity(
   };
 }
 
-function nextSortOrder(accounts: readonly PlanEntity[]): number {
+function nextSortOrder(accounts: readonly BudgetEntity[]): number {
   if (accounts.length === 0) {
     return 0;
   }
   const next =
     Math.max(
-      ...accounts.map((account) =>
+      ...accounts.map(account =>
         requireSortOrder(account.payload.sortableIndex),
       ),
     ) + 1;
@@ -181,10 +181,10 @@ function requireSortOrder(value: unknown): number {
 }
 
 function exactlyOne(
-  snapshot: PlanSnapshot,
-  predicate: (entity: PlanEntity) => boolean,
+  snapshot: BudgetSnapshot,
+  predicate: (entity: BudgetEntity) => boolean,
   errorCode: string,
-): PlanEntity {
+): BudgetEntity {
   const matches = snapshot.entities.filter(predicate);
   if (matches.length !== 1) {
     throw new AccountCreationError(errorCode);

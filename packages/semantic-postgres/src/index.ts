@@ -2,15 +2,16 @@ export { SemanticStoreError } from './errors';
 export { migrateSemanticDatabase } from './migrate';
 export type { SemanticMigration } from './migrate';
 export { PostgresSemanticStore } from './store';
-export { PostgresPlanLifecycleStore } from './plan-lifecycle-store';
-export { PostgresPlanReader } from './plan-reader';
+export { PostgresBudgetLifecycleStore } from './budget-lifecycle-store';
+export { PostgresBudgetReader } from './budget-reader';
+export { semanticCanonicalAccountDomainMigration } from './canonical-account-domain-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,
   CommitChangeSetInput,
   CommitChangeSetResult,
-  CreatePlanCommand,
-  CreatePlanResult,
+  CreateBudgetCommand,
+  CreateBudgetResult,
   EntityChangeInput,
-  SeedPlanInput,
+  SeedBudgetInput,
 } from './types';

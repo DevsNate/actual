@@ -1,17 +1,17 @@
-import type { PlanSnapshot } from '@actual-app/semantic-core';
+import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
-import type { StockFreshPlanCalculations } from './stock-budget-calculations';
-import { projectStockFreshPlanCalculations } from './stock-budget-calculations';
+import type { StockFreshBudgetCalculations } from './stock-budget-calculations';
+import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
 
 export function projectStockBudgetCalculations(
-  snapshot: PlanSnapshot,
-): StockFreshPlanCalculations {
+  snapshot: BudgetSnapshot,
+): StockFreshBudgetCalculations {
   const accounts = snapshot.entities.filter(
     entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
   );
   if (accounts.length === 0) {
-    return projectStockFreshPlanCalculations(snapshot);
+    return projectStockFreshBudgetCalculations(snapshot);
   }
   return projectStockCheckingAccountCalculations(snapshot);
 }

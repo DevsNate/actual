@@ -1,6 +1,6 @@
-export type SemanticPlanMembership = {
+export type SemanticBudgetMembership = {
   id: string;
-  planId: string;
+  budgetId: string;
   budgetVersionId: string;
   principalId: string;
   name: string;
@@ -15,27 +15,27 @@ export type SemanticCatalogSnapshot = {
     principalId: string;
     currentServerKnowledge: number;
   };
-  memberships: SemanticPlanMembership[];
+  memberships: SemanticBudgetMembership[];
 };
 
-export type SemanticPlanEntity = {
+export type SemanticBudgetEntity = {
   entityKind: string;
   entityId: string;
   isTombstone: boolean;
   payload: Readonly<Record<string, unknown>>;
 };
 
-export type SemanticPlanSnapshot = {
-  planId: string;
+export type SemanticBudgetSnapshot = {
+  budgetId: string;
   budgetVersionId: string;
   name: string;
   serverKnowledge: number;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
-  entities: SemanticPlanEntity[];
+  entities: SemanticBudgetEntity[];
 };
 
-export type SemanticCreatePlanResult = {
+export type SemanticCreateBudgetResult = {
   budget_id: string;
   budget_version_id: string;
   catalog_server_knowledge: number;
@@ -43,7 +43,7 @@ export type SemanticCreatePlanResult = {
   replayed: boolean;
 };
 
-export type SemanticPlanLifecycleResult = {
+export type SemanticBudgetLifecycleResult = {
   budget_id: string;
   name?: string;
   deleted?: boolean;
@@ -52,7 +52,7 @@ export type SemanticPlanLifecycleResult = {
   replayed: boolean;
 };
 
-export type SemanticPlanFormats = {
+export type SemanticBudgetFormats = {
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
 };

@@ -24,7 +24,7 @@ describe('stock account gateway', () => {
           name: 'Account Capture 3',
           type: 'checking',
           openingBalance: 345670,
-          planId: 'canonical-plan-1',
+          budgetId: 'canonical-budget-1',
         },
       }),
     };
@@ -44,7 +44,7 @@ describe('stock account gateway', () => {
       });
     expect(service.createUnlinkedCheckingAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
-      planId: 'canonical-plan-1',
+      budgetId: 'canonical-budget-1',
       originDeviceId: 'stock-web-direct-import',
       idempotencyKey: 'stock-account-create:request-1',
       name: 'Account Capture 3',
@@ -85,9 +85,9 @@ function createApp(service: AccountCreationService): express.Express {
     '/api',
     createStockAccountGateway({
       accountCreationService: service,
-      planReader: {
-        readPlanByBudgetVersion: vi.fn().mockResolvedValue({
-          planId: 'canonical-plan-1',
+      budgetReader: {
+        readBudgetByVersion: vi.fn().mockResolvedValue({
+          budgetId: 'canonical-budget-1',
           budgetVersionId: 'plan-1',
           name: 'Plan',
           serverKnowledge: 1,
@@ -96,7 +96,7 @@ function createApp(service: AccountCreationService): express.Express {
           entities: [],
         }),
       },
-      resolvePrincipal: (token) => {
+      resolvePrincipal: token => {
         expect(token).toBe('actual-session');
         return principal;
       },

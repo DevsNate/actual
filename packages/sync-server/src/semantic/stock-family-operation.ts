@@ -49,7 +49,7 @@ export async function handleStockFamilySync(
         membership.principalId === context.principal.id &&
         !membership.isTombstone,
     )
-    .map(membership => membership.planId)
+    .map(membership => membership.budgetId)
     .sort();
 
   return {

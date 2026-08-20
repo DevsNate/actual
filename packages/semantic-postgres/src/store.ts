@@ -2,10 +2,11 @@ import type {
   CatalogCommand,
   CatalogCommandResult,
   CatalogSnapshot,
-  CreatePlanCommand,
-  CreatePlanResult,
-  PlanDeviceAcknowledgement,
-  PlanMembership,
+  CommitUnlinkedAccountCreation,
+  CreateBudgetCommand,
+  CreateBudgetResult,
+  BudgetDeviceAcknowledgement,
+  BudgetMembership,
   PrincipalId,
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
@@ -14,10 +15,10 @@ import { SemanticStoreError } from './errors';
 import type {
   CommitChangeSetInput,
   CommitChangeSetResult,
-  SeedPlanInput,
+  SeedBudgetInput,
 } from './types';
 
-type PlanKnowledgeRow = {
+type BudgetKnowledgeRow = {
   server_knowledge: string;
 };
 
@@ -44,13 +45,13 @@ type CatalogReceiptRow = ReceiptRow;
 
 type DeviceCommand = Pick<
   CommitChangeSetInput,
-  'planId' | 'originDeviceId' | 'idempotencyKey' | 'payloadDigest'
+  'budgetId' | 'originDeviceId' | 'idempotencyKey' | 'payloadDigest'
 >;
 
 type CatalogRow = {
   catalog_server_knowledge: string;
   membership_id: string | null;
-  plan_id: string | null;
+  budget_id: string | null;
   budget_version_id: string | null;
   principal_id: string | null;
   name: string | null;
@@ -63,22 +64,22 @@ type CatalogRow = {
 export class PostgresSemanticStore {
   constructor(private readonly pool: Pool) {}
 
-  async seedPlan(input: SeedPlanInput): Promise<void> {
-    validateSeedPlan(input);
+  async seedBudget(input: SeedBudgetInput): Promise<void> {
+    validateSeedBudget(input);
     await this.transact(async client => {
       await client.query(
-        `INSERT INTO semantic_plans
-           (plan_id, budget_version_id, name)
+        `INSERT INTO semantic_budgets
+           (budget_id, budget_version_id, name)
          VALUES ($1, $2, $3)`,
-        [input.planId, input.budgetVersionId, input.name.trim()],
+        [input.budgetId, input.budgetVersionId, input.name.trim()],
       );
       await client.query(
-        `INSERT INTO semantic_plan_memberships
-           (membership_id, plan_id, principal_id, permissions)
+        `INSERT INTO semantic_budget_memberships
+           (membership_id, budget_id, principal_id, permissions)
          VALUES ($1, $2, $3, $4)`,
         [
           input.membershipId,
-          input.planId,
+          input.budgetId,
           input.principalId,
           input.permissions,
         ],
@@ -95,11 +96,13 @@ export class PostgresSemanticStore {
     });
   }
 
-  async createPlan(command: CreatePlanCommand): Promise<CreatePlanResult> {
-    validateCreatePlanCommand(command);
+  async createBudget(
+    command: CreateBudgetCommand,
+  ): Promise<CreateBudgetResult> {
+    validateCreateBudgetCommand(command);
     return this.transact(async client => {
-      await lockCreatePlanIdempotencyKey(client, command);
-      const replay = await findCreatePlanReceipt(client, command);
+      await lockCreateBudgetIdempotencyKey(client, command);
+      const replay = await findCreateBudgetReceipt(client, command);
       if (replay) {
         return replay;
       }
@@ -114,7 +117,7 @@ export class PostgresSemanticStore {
           `Expected catalog server knowledge ${command.expectedCatalogServerKnowledge}, received ${catalogKnowledge}`,
         );
       }
-      const catalogDeviceKnowledge = await lockCreatePlanCatalogDevice(
+      const catalogDeviceKnowledge = await lockCreateBudgetCatalogDevice(
         client,
         command,
       );
@@ -122,12 +125,12 @@ export class PostgresSemanticStore {
       const nextCatalogKnowledge = catalogKnowledge + 1;
       const budgetKnowledge = 1;
       await client.query(
-        `INSERT INTO semantic_plans
-           (plan_id, budget_version_id, name, server_knowledge,
+        `INSERT INTO semantic_budgets
+           (budget_id, budget_version_id, name, server_knowledge,
             currency_format, date_format)
          VALUES ($1, $2, $3, 0, $4, $5)`,
         [
-          command.planId,
+          command.budgetId,
           command.budgetVersionId,
           command.name.trim(),
           command.currencyFormat,
@@ -135,12 +138,12 @@ export class PostgresSemanticStore {
         ],
       );
       await client.query(
-        `INSERT INTO semantic_plan_memberships
-           (membership_id, plan_id, principal_id, permissions)
+        `INSERT INTO semantic_budget_memberships
+           (membership_id, budget_id, principal_id, permissions)
          VALUES ($1, $2, $3, $4)`,
         [
           command.membershipId,
-          command.planId,
+          command.budgetId,
           command.principalId,
           command.permissions,
         ],
@@ -148,7 +151,7 @@ export class PostgresSemanticStore {
 
       const membershipPayload = {
         id: command.membershipId,
-        planId: command.planId,
+        budgetId: command.budgetId,
         budgetVersionId: command.budgetVersionId,
         principalId: command.principalId,
         name: command.name.trim(),
@@ -164,7 +167,7 @@ export class PostgresSemanticStore {
           endingDeviceKnowledge: catalogDeviceKnowledge,
           expectedServerKnowledge: command.expectedCatalogServerKnowledge,
           schemaVersion: command.schemaVersion,
-          commandKind: 'create-plan',
+          commandKind: 'create-budget',
           idempotencyKey: command.idempotencyKey,
           payloadDigest: command.payloadDigest,
           changes: [
@@ -175,7 +178,7 @@ export class PostgresSemanticStore {
               payload: membershipPayload,
             },
           ],
-          response: command.response,
+          response: command.receipt,
         },
         nextCatalogKnowledge,
       );
@@ -189,7 +192,7 @@ export class PostgresSemanticStore {
 
       const budgetChangeSet: CommitChangeSetInput = {
         changeSetId: command.budgetChangeSetId,
-        planId: command.planId,
+        budgetId: command.budgetId,
         originDeviceId: command.originDeviceId,
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 0,
@@ -199,17 +202,17 @@ export class PostgresSemanticStore {
         idempotencyKey: command.idempotencyKey,
         payloadDigest: command.payloadDigest,
         changes: command.entities,
-        response: command.response,
+        response: command.receipt,
       };
       await insertChangeSet(client, budgetChangeSet, budgetKnowledge);
       await insertEntityChanges(client, budgetChangeSet);
-      await upsertPlanEntities(client, budgetChangeSet, budgetKnowledge);
+      await upsertBudgetEntities(client, budgetChangeSet, budgetKnowledge);
 
       await client.query(
-        `UPDATE semantic_plans
+        `UPDATE semantic_budgets
          SET server_knowledge = $2, updated_at = now()
-         WHERE plan_id = $1`,
-        [command.planId, budgetKnowledge],
+         WHERE budget_id = $1`,
+        [command.budgetId, budgetKnowledge],
       );
       await client.query(
         `UPDATE semantic_catalog_knowledge
@@ -218,12 +221,12 @@ export class PostgresSemanticStore {
         [command.principalId, nextCatalogKnowledge],
       );
       await client.query(
-        `INSERT INTO semantic_devices
-           (plan_id, device_id, server_knowledge_of_device)
+        `INSERT INTO semantic_budget_devices
+           (budget_id, device_id, server_knowledge_of_device)
          VALUES ($1, $2, 0)`,
-        [command.planId, command.originDeviceId],
+        [command.budgetId, command.originDeviceId],
       );
-      await insertCreatePlanReceipts(
+      await insertCreateBudgetReceipts(
         client,
         command,
         nextCatalogKnowledge,
@@ -235,7 +238,7 @@ export class PostgresSemanticStore {
         replayed: false,
         catalogServerKnowledge: nextCatalogKnowledge,
         budgetServerKnowledge: budgetKnowledge,
-        response: command.response,
+        budget: command.receipt,
       };
     });
   }
@@ -243,7 +246,7 @@ export class PostgresSemanticStore {
   async readCatalog(principalId: PrincipalId): Promise<CatalogSnapshot> {
     const result = await this.pool.query<CatalogRow>(
       `SELECT COALESCE(k.server_knowledge, 0) AS catalog_server_knowledge,
-              m.membership_id, m.plan_id, p.budget_version_id,
+              m.membership_id, m.budget_id, p.budget_version_id,
               m.principal_id,
               CASE WHEN m.is_tombstone OR p.is_tombstone
                    THEN 'Unknown' ELSE p.name END AS name,
@@ -256,10 +259,10 @@ export class PostgresSemanticStore {
        FROM (SELECT $1::text AS principal_id) requested
        LEFT JOIN semantic_catalog_knowledge k
          ON k.principal_id = requested.principal_id
-       LEFT JOIN semantic_plan_memberships m
+       LEFT JOIN semantic_budget_memberships m
          ON m.principal_id = requested.principal_id
-       LEFT JOIN semantic_plans p ON p.plan_id = m.plan_id
-       ORDER BY p.created_at, p.plan_id`,
+       LEFT JOIN semantic_budgets p ON p.budget_id = m.budget_id
+       ORDER BY p.created_at, p.budget_id`,
       [principalId],
     );
 
@@ -355,94 +358,23 @@ export class PostgresSemanticStore {
     input: CommitChangeSetInput,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(input);
-    return this.transact(async client => {
-      await lockIdempotencyKey(client, input);
-      const replay = await findReceipt(client, input);
-      if (replay) {
-        return replay;
-      }
+    return this.transact(client => commitChangeSetInTransaction(client, input));
+  }
 
-      const plan = await client.query<PlanKnowledgeRow>(
-        `SELECT server_knowledge
-         FROM semantic_plans
-         WHERE plan_id = $1 AND is_tombstone = false
-         FOR UPDATE`,
-        [input.planId],
-      );
-      if (plan.rowCount !== 1) {
-        throw new SemanticStoreError(
-          'PLAN_NOT_FOUND',
-          `Active plan ${input.planId} was not found`,
-        );
-      }
-      const currentServerKnowledge = toSafeInteger(
-        plan.rows[0].server_knowledge,
-        'plan server knowledge',
-      );
-      if (currentServerKnowledge !== input.expectedServerKnowledge) {
-        throw new SemanticStoreError(
-          'SERVER_KNOWLEDGE_MISMATCH',
-          `Expected server knowledge ${input.expectedServerKnowledge}, received ${currentServerKnowledge}`,
-        );
-      }
-
-      const deviceKnowledge = await lockDeviceKnowledge(client, input);
-      if (deviceKnowledge !== input.startingDeviceKnowledge) {
-        throw new SemanticStoreError(
-          'DEVICE_KNOWLEDGE_MISMATCH',
-          `Expected device knowledge ${input.startingDeviceKnowledge}, received ${deviceKnowledge}`,
-        );
-      }
-
-      const nextServerKnowledge =
-        currentServerKnowledge + input.serverKnowledgeAdvance;
-      await insertChangeSet(client, input, nextServerKnowledge);
-      await insertEntityChanges(client, input);
-      await upsertPlanEntities(client, input, nextServerKnowledge);
-      await client.query(
-        `UPDATE semantic_plans
-         SET server_knowledge = $2, updated_at = now()
-         WHERE plan_id = $1`,
-        [input.planId, nextServerKnowledge],
-      );
-      await client.query(
-        `INSERT INTO semantic_devices
-           (plan_id, device_id, server_knowledge_of_device)
-         VALUES ($1, $2, $3)
-         ON CONFLICT (plan_id, device_id) DO UPDATE SET
-           server_knowledge_of_device = EXCLUDED.server_knowledge_of_device,
-           updated_at = now()`,
-        [input.planId, input.originDeviceId, input.endingDeviceKnowledge],
-      );
-      await client.query(
-        `INSERT INTO semantic_device_receipts
-           (plan_id, device_id, idempotency_key, payload_digest,
-            starting_device_knowledge, ending_device_knowledge,
-            server_knowledge, response)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [
-          input.planId,
-          input.originDeviceId,
-          input.idempotencyKey,
-          input.payloadDigest,
-          input.startingDeviceKnowledge,
-          input.endingDeviceKnowledge,
-          nextServerKnowledge,
-          input.response,
-        ],
-      );
-
-      return {
-        replayed: false,
-        serverKnowledge: nextServerKnowledge,
-        endingDeviceKnowledge: input.endingDeviceKnowledge,
-        response: input.response,
-      };
-    });
+  async commitUnlinkedAccountCreation(
+    command: CommitUnlinkedAccountCreation,
+  ): Promise<CommitChangeSetResult> {
+    validateCanonicalAccountCreation(command);
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        insertCanonicalAccountGroup(client, command),
+      ),
+    );
   }
 
   async acknowledgeDevice(
-    input: PlanDeviceAcknowledgement,
+    input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
     validateDeviceAcknowledgement(input);
     return this.transact(async client => {
@@ -451,20 +383,20 @@ export class PostgresSemanticStore {
       if (replay) {
         return replay;
       }
-      const plan = await client.query<PlanKnowledgeRow>(
-        `SELECT server_knowledge FROM semantic_plans
-         WHERE plan_id = $1 AND is_tombstone = false FOR UPDATE`,
-        [input.planId],
+      const budget = await client.query<BudgetKnowledgeRow>(
+        `SELECT server_knowledge FROM semantic_budgets
+         WHERE budget_id = $1 AND is_tombstone = false FOR UPDATE`,
+        [input.budgetId],
       );
-      if (plan.rowCount !== 1) {
+      if (budget.rowCount !== 1) {
         throw new SemanticStoreError(
-          'PLAN_NOT_FOUND',
-          `Active plan ${input.planId} was not found`,
+          'BUDGET_NOT_FOUND',
+          `Active budget ${input.budgetId} was not found`,
         );
       }
       const serverKnowledge = toSafeInteger(
-        plan.rows[0].server_knowledge,
-        'plan server knowledge',
+        budget.rows[0].server_knowledge,
+        'budget server knowledge',
       );
       if (serverKnowledge !== input.expectedServerKnowledge) {
         throw new SemanticStoreError(
@@ -480,19 +412,19 @@ export class PostgresSemanticStore {
         );
       }
       await client.query(
-        `UPDATE semantic_devices
+        `UPDATE semantic_budget_devices
          SET server_knowledge_of_device = $3, updated_at = now()
-         WHERE plan_id = $1 AND device_id = $2`,
-        [input.planId, input.originDeviceId, input.endingDeviceKnowledge],
+         WHERE budget_id = $1 AND device_id = $2`,
+        [input.budgetId, input.originDeviceId, input.endingDeviceKnowledge],
       );
       await client.query(
-        `INSERT INTO semantic_device_receipts
-           (plan_id, device_id, idempotency_key, payload_digest,
+        `INSERT INTO semantic_budget_device_receipts
+           (budget_id, device_id, idempotency_key, payload_digest,
             starting_device_knowledge, ending_device_knowledge,
             server_knowledge, response)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
         [
-          input.planId,
+          input.budgetId,
           input.originDeviceId,
           input.idempotencyKey,
           input.payloadDigest,
@@ -529,19 +461,161 @@ export class PostgresSemanticStore {
   }
 }
 
-async function lockCreatePlanIdempotencyKey(
+async function commitChangeSetInTransaction(
   client: PoolClient,
-  command: CreatePlanCommand,
+  input: CommitChangeSetInput,
+  writeCanonical?: () => Promise<void>,
+): Promise<CommitChangeSetResult> {
+  await lockIdempotencyKey(client, input);
+  const replay = await findReceipt(client, input);
+  if (replay) {
+    return replay;
+  }
+
+  const budget = await client.query<BudgetKnowledgeRow>(
+    `SELECT server_knowledge
+     FROM semantic_budgets
+     WHERE budget_id = $1 AND is_tombstone = false
+     FOR UPDATE`,
+    [input.budgetId],
+  );
+  if (budget.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'BUDGET_NOT_FOUND',
+      `Active budget ${input.budgetId} was not found`,
+    );
+  }
+  const currentServerKnowledge = toSafeInteger(
+    budget.rows[0].server_knowledge,
+    'budget server knowledge',
+  );
+  if (currentServerKnowledge !== input.expectedServerKnowledge) {
+    throw new SemanticStoreError(
+      'SERVER_KNOWLEDGE_MISMATCH',
+      `Expected server knowledge ${input.expectedServerKnowledge}, received ${currentServerKnowledge}`,
+    );
+  }
+
+  const deviceKnowledge = await lockDeviceKnowledge(client, input);
+  if (deviceKnowledge !== input.startingDeviceKnowledge) {
+    throw new SemanticStoreError(
+      'DEVICE_KNOWLEDGE_MISMATCH',
+      `Expected device knowledge ${input.startingDeviceKnowledge}, received ${deviceKnowledge}`,
+    );
+  }
+
+  const nextServerKnowledge =
+    currentServerKnowledge + input.serverKnowledgeAdvance;
+  await writeCanonical?.();
+  await insertChangeSet(client, input, nextServerKnowledge);
+  await insertEntityChanges(client, input);
+  await upsertBudgetEntities(client, input, nextServerKnowledge);
+  await client.query(
+    `UPDATE semantic_budgets
+     SET server_knowledge = $2, updated_at = now()
+     WHERE budget_id = $1`,
+    [input.budgetId, nextServerKnowledge],
+  );
+  await client.query(
+    `INSERT INTO semantic_budget_devices
+       (budget_id, device_id, server_knowledge_of_device)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (budget_id, device_id) DO UPDATE SET
+       server_knowledge_of_device = EXCLUDED.server_knowledge_of_device,
+       updated_at = now()`,
+    [input.budgetId, input.originDeviceId, input.endingDeviceKnowledge],
+  );
+  await client.query(
+    `INSERT INTO semantic_budget_device_receipts
+       (budget_id, device_id, idempotency_key, payload_digest,
+        starting_device_knowledge, ending_device_knowledge,
+        server_knowledge, response)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      input.budgetId,
+      input.originDeviceId,
+      input.idempotencyKey,
+      input.payloadDigest,
+      input.startingDeviceKnowledge,
+      input.endingDeviceKnowledge,
+      nextServerKnowledge,
+      input.response,
+    ],
+  );
+
+  return {
+    replayed: false,
+    serverKnowledge: nextServerKnowledge,
+    endingDeviceKnowledge: input.endingDeviceKnowledge,
+    response: input.response,
+  };
+}
+
+async function insertCanonicalAccountGroup(
+  client: PoolClient,
+  command: CommitUnlinkedAccountCreation,
+): Promise<void> {
+  const { account, transferPayee, startingBalance } = command.accountGroup;
+  await client.query(
+    `INSERT INTO semantic_accounts
+       (budget_id, account_id, name, account_type, on_budget, is_closed,
+        is_favorite, sortable_index)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [
+      account.budgetId,
+      account.id,
+      account.name,
+      account.type,
+      account.isOnBudget,
+      account.isClosed,
+      account.isFavorite,
+      account.sortOrder,
+    ],
+  );
+  await client.query(
+    `INSERT INTO semantic_payees
+       (budget_id, payee_id, account_id, name, is_enabled)
+     VALUES ($1, $2, $3, $4, $5)`,
+    [
+      transferPayee.budgetId,
+      transferPayee.id,
+      transferPayee.accountId,
+      transferPayee.name,
+      transferPayee.isEnabled,
+    ],
+  );
+  await client.query(
+    `INSERT INTO semantic_transactions
+       (budget_id, transaction_id, account_id, payee_id, category_id,
+        transaction_date, amount_milliunits, is_cleared, is_approved)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      startingBalance.budgetId,
+      startingBalance.id,
+      startingBalance.accountId,
+      startingBalance.payeeId,
+      startingBalance.categoryId,
+      startingBalance.date,
+      startingBalance.amount,
+      startingBalance.isCleared,
+      startingBalance.isApproved,
+    ],
+  );
+}
+
+async function lockCreateBudgetIdempotencyKey(
+  client: PoolClient,
+  command: CreateBudgetCommand,
 ): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
     `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
   ]);
 }
 
-async function findCreatePlanReceipt(
+async function findCreateBudgetReceipt(
   client: PoolClient,
-  command: CreatePlanCommand,
-): Promise<CreatePlanResult | null> {
+  command: CreateBudgetCommand,
+): Promise<CreateBudgetResult | null> {
   const receipt = await client.query<CatalogReceiptRow>(
     `SELECT payload_digest, ending_device_knowledge,
             server_knowledge, response
@@ -557,7 +631,7 @@ async function findCreatePlanReceipt(
   if (row.payload_digest !== command.payloadDigest) {
     throw new SemanticStoreError(
       'IDEMPOTENCY_CONFLICT',
-      'The plan creation idempotency key was already used with a different payload',
+      'The budget creation idempotency key was already used with a different payload',
     );
   }
   return {
@@ -567,13 +641,33 @@ async function findCreatePlanReceipt(
       'catalog server knowledge',
     ),
     budgetServerKnowledge: 1,
-    response: row.response,
+    budget: parseCreatedBudgetReceipt(row.response),
   };
 }
 
-async function lockCreatePlanCatalogDevice(
+function parseCreatedBudgetReceipt(
+  value: Readonly<Record<string, unknown>>,
+): CreateBudgetCommand['receipt'] {
+  if (
+    typeof value.budgetId !== 'string' ||
+    !value.budgetId ||
+    typeof value.budgetVersionId !== 'string' ||
+    !value.budgetVersionId
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'The budget creation replay receipt is malformed',
+    );
+  }
+  return {
+    budgetId: value.budgetId,
+    budgetVersionId: value.budgetVersionId,
+  };
+}
+
+async function lockCreateBudgetCatalogDevice(
   client: PoolClient,
-  command: CreatePlanCommand,
+  command: CreateBudgetCommand,
 ): Promise<number> {
   await client.query(
     `INSERT INTO semantic_catalog_devices
@@ -595,9 +689,9 @@ async function lockCreatePlanCatalogDevice(
   );
 }
 
-async function insertCreatePlanReceipts(
+async function insertCreateBudgetReceipts(
   client: PoolClient,
-  command: CreatePlanCommand,
+  command: CreateBudgetCommand,
   catalogServerKnowledge: number,
   budgetServerKnowledge: number,
   catalogDeviceKnowledge: number,
@@ -616,22 +710,22 @@ async function insertCreatePlanReceipts(
       catalogDeviceKnowledge,
       catalogDeviceKnowledge,
       catalogServerKnowledge,
-      command.response,
+      command.receipt,
     ],
   );
   await client.query(
-    `INSERT INTO semantic_device_receipts
-       (plan_id, device_id, idempotency_key, payload_digest,
+    `INSERT INTO semantic_budget_device_receipts
+       (budget_id, device_id, idempotency_key, payload_digest,
         starting_device_knowledge, ending_device_knowledge,
         server_knowledge, response)
      VALUES ($1, $2, $3, $4, 0, 0, $5, $6)`,
     [
-      command.planId,
+      command.budgetId,
       command.originDeviceId,
       command.idempotencyKey,
       command.payloadDigest,
       budgetServerKnowledge,
-      command.response,
+      command.receipt,
     ],
   );
 }
@@ -781,7 +875,7 @@ async function lockIdempotencyKey(
   input: DeviceCommand,
 ): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
-    `${input.planId}\u001f${input.originDeviceId}\u001f${input.idempotencyKey}`,
+    `${input.budgetId}\u001f${input.originDeviceId}\u001f${input.idempotencyKey}`,
   ]);
 }
 
@@ -792,10 +886,10 @@ async function findReceipt(
   const receipt = await client.query<ReceiptRow>(
     `SELECT payload_digest, ending_device_knowledge,
             server_knowledge, response
-     FROM semantic_device_receipts
-     WHERE plan_id = $1 AND device_id = $2 AND idempotency_key = $3
+     FROM semantic_budget_device_receipts
+     WHERE budget_id = $1 AND device_id = $2 AND idempotency_key = $3
      FOR UPDATE`,
-    [input.planId, input.originDeviceId, input.idempotencyKey],
+    [input.budgetId, input.originDeviceId, input.idempotencyKey],
   );
   const row = receipt.rows[0];
   if (!row) {
@@ -823,18 +917,18 @@ async function lockDeviceKnowledge(
   input: DeviceCommand,
 ): Promise<number> {
   await client.query(
-    `INSERT INTO semantic_devices
-       (plan_id, device_id, server_knowledge_of_device)
+    `INSERT INTO semantic_budget_devices
+       (budget_id, device_id, server_knowledge_of_device)
      VALUES ($1, $2, 0)
-     ON CONFLICT (plan_id, device_id) DO NOTHING`,
-    [input.planId, input.originDeviceId],
+     ON CONFLICT (budget_id, device_id) DO NOTHING`,
+    [input.budgetId, input.originDeviceId],
   );
   const result = await client.query<DeviceKnowledgeRow>(
     `SELECT server_knowledge_of_device
-     FROM semantic_devices
-     WHERE plan_id = $1 AND device_id = $2
+     FROM semantic_budget_devices
+     WHERE budget_id = $1 AND device_id = $2
      FOR UPDATE`,
-    [input.planId, input.originDeviceId],
+    [input.budgetId, input.originDeviceId],
   );
   return toSafeInteger(
     result.rows[0].server_knowledge_of_device,
@@ -848,14 +942,14 @@ async function insertChangeSet(
   serverKnowledge: number,
 ): Promise<void> {
   await client.query(
-    `INSERT INTO semantic_change_sets
-       (change_set_id, plan_id, server_knowledge, origin_device_id,
+    `INSERT INTO semantic_budget_change_sets
+       (change_set_id, budget_id, server_knowledge, origin_device_id,
         starting_device_knowledge, ending_device_knowledge,
         schema_version, idempotency_key, payload_digest)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       input.changeSetId,
-      input.planId,
+      input.budgetId,
       serverKnowledge,
       input.originDeviceId,
       input.startingDeviceKnowledge,
@@ -873,7 +967,7 @@ async function insertEntityChanges(
 ): Promise<void> {
   for (const [ordinal, change] of input.changes.entries()) {
     await client.query(
-      `INSERT INTO semantic_entity_changes
+      `INSERT INTO semantic_budget_entity_changes
          (change_set_id, ordinal, entity_kind, entity_id,
           is_tombstone, payload)
        VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -889,25 +983,25 @@ async function insertEntityChanges(
   }
 }
 
-async function upsertPlanEntities(
+async function upsertBudgetEntities(
   client: PoolClient,
   input: CommitChangeSetInput,
   serverKnowledge: number,
 ): Promise<void> {
   for (const change of input.changes) {
     await client.query(
-      `INSERT INTO semantic_plan_entities
-         (plan_id, entity_kind, entity_id, schema_version,
+      `INSERT INTO semantic_budget_entities
+         (budget_id, entity_kind, entity_id, schema_version,
           is_tombstone, payload, last_server_knowledge)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
-       ON CONFLICT (plan_id, entity_kind, entity_id) DO UPDATE SET
+       ON CONFLICT (budget_id, entity_kind, entity_id) DO UPDATE SET
          schema_version = EXCLUDED.schema_version,
          is_tombstone = EXCLUDED.is_tombstone,
          payload = EXCLUDED.payload,
          last_server_knowledge = EXCLUDED.last_server_knowledge,
          updated_at = now()`,
       [
-        input.planId,
+        input.budgetId,
         change.entityKind,
         change.entityId,
         input.schemaVersion,
@@ -921,7 +1015,7 @@ async function upsertPlanEntities(
 
 type CatalogMembershipRow = CatalogRow & {
   membership_id: string;
-  plan_id: string;
+  budget_id: string;
   budget_version_id: string;
   principal_id: string;
   name: string;
@@ -933,7 +1027,7 @@ type CatalogMembershipRow = CatalogRow & {
 function hasMembership(row: CatalogRow): row is CatalogMembershipRow {
   return (
     row.membership_id !== null &&
-    row.plan_id !== null &&
+    row.budget_id !== null &&
     row.budget_version_id !== null &&
     row.principal_id !== null &&
     row.name !== null &&
@@ -943,10 +1037,10 @@ function hasMembership(row: CatalogRow): row is CatalogMembershipRow {
   );
 }
 
-function mapMembership(row: CatalogMembershipRow): PlanMembership {
+function mapMembership(row: CatalogMembershipRow): BudgetMembership {
   return {
     id: row.membership_id,
-    planId: row.plan_id,
+    budgetId: row.budget_id,
     budgetVersionId: row.budget_version_id,
     principalId: row.principal_id,
     name: row.name,
@@ -965,9 +1059,9 @@ function timestamp(value: Date | string, label: string): string {
   return parsed.toISOString();
 }
 
-function validateSeedPlan(input: SeedPlanInput): void {
+function validateSeedBudget(input: SeedBudgetInput): void {
   if (
-    !input.planId ||
+    !input.budgetId ||
     !input.budgetVersionId ||
     !input.membershipId ||
     !input.principalId ||
@@ -977,12 +1071,46 @@ function validateSeedPlan(input: SeedPlanInput): void {
   ) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'Plan creation contains invalid identity, name, or permissions',
+      'Budget creation contains invalid identity, name, or permissions',
     );
   }
 }
 
-function validateCreatePlanCommand(command: CreatePlanCommand): void {
+function validateCanonicalAccountCreation(
+  command: CommitUnlinkedAccountCreation,
+): void {
+  const { account, transferPayee, startingBalance } = command.accountGroup;
+  const budgetId = command.delivery.budgetId;
+  const validIdentity = (value: string) => Boolean(value.trim());
+  if (
+    !validIdentity(budgetId) ||
+    account.budgetId !== budgetId ||
+    transferPayee.budgetId !== budgetId ||
+    startingBalance.budgetId !== budgetId ||
+    !validIdentity(account.id) ||
+    !validIdentity(transferPayee.id) ||
+    !validIdentity(startingBalance.id) ||
+    transferPayee.accountId !== account.id ||
+    startingBalance.accountId !== account.id ||
+    !validIdentity(startingBalance.payeeId) ||
+    !validIdentity(startingBalance.categoryId) ||
+    !account.name.trim() ||
+    !transferPayee.name.trim() ||
+    account.type !== 'checking' ||
+    account.isOnBudget !== true ||
+    account.isClosed !== false ||
+    !Number.isSafeInteger(account.sortOrder) ||
+    !Number.isSafeInteger(startingBalance.amount) ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(startingBalance.date)
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Account creation failed canonical storage validation',
+    );
+  }
+}
+
+function validateCreateBudgetCommand(command: CreateBudgetCommand): void {
   const validKnowledge =
     Number.isSafeInteger(command.expectedCatalogServerKnowledge) &&
     command.expectedCatalogServerKnowledge >= 0;
@@ -998,7 +1126,7 @@ function validateCreatePlanCommand(command: CreatePlanCommand): void {
   if (
     !command.catalogChangeSetId ||
     !command.budgetChangeSetId ||
-    !command.planId ||
+    !command.budgetId ||
     !command.budgetVersionId ||
     !command.membershipId ||
     !command.principalId ||
@@ -1015,7 +1143,7 @@ function validateCreatePlanCommand(command: CreatePlanCommand): void {
   ) {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
-      'Plan creation failed semantic storage validation',
+      'Budget creation failed semantic storage validation',
     );
   }
 }
@@ -1064,7 +1192,7 @@ function validateChangeSet(input: CommitChangeSetInput): void {
   );
   if (
     !input.changeSetId ||
-    !input.planId ||
+    !input.budgetId ||
     !input.originDeviceId ||
     !input.idempotencyKey ||
     !validKnowledge ||
@@ -1083,9 +1211,11 @@ function validateChangeSet(input: CommitChangeSetInput): void {
   }
 }
 
-function validateDeviceAcknowledgement(input: PlanDeviceAcknowledgement): void {
+function validateDeviceAcknowledgement(
+  input: BudgetDeviceAcknowledgement,
+): void {
   if (
-    !input.planId ||
+    !input.budgetId ||
     !input.originDeviceId ||
     !input.idempotencyKey ||
     !Number.isSafeInteger(input.startingDeviceKnowledge) ||

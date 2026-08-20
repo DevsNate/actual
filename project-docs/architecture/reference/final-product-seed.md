@@ -214,7 +214,7 @@ Responsibilities include:
 - fail-closed unsupported-operation behavior;
 - direct-import account endpoint compatibility.
 
-Current primary sources are `stock-*` modules in `packages/sync-server/src/semantic` plus `stock-plan-bootstrap.ts`.
+Current primary sources are `stock-*` modules in `packages/sync-server/src/semantic` plus `stock-budget-bootstrap.ts`.
 
 **Default disposition:** leave operating in `DevsNate/actual` until a final YNAB adapter is intentionally implemented/extracted. Do not dissolve these rules into the canonical domain.
 
@@ -223,8 +223,8 @@ Current primary sources are `stock-*` modules in `packages/sync-server/src/seman
 Do not copy these into the final repository merely because they currently work:
 
 - `session-principal-adapter.ts`;
-- `packages/loot-core/src/server/semantic-plans/*`;
-- `packages/desktop-client/src/semantic-plans/*`;
+- `packages/loot-core/src/server/semantic-budgets/*`;
+- `packages/desktop-client/src/semantic-budgets/*`;
 - semantic registrations in inherited Actual worker/Redux files;
 - current `/semantic/v1` Express host composition;
 - current `postgres-runtime.ts` composition root;
@@ -330,7 +330,7 @@ Source repository: DevsNate/actual
 Source baseline: Actual v26.8.1 / 063df037...
 Source commits: 6e50cfc, 0ce59af, d6d21b5
 Source files:
-  packages/semantic-core/src/plan.ts
+  packages/semantic-core/src/budget.ts
   packages/semantic-postgres/src/store.ts
 Evidence dependencies:
   infrastructure invariant; exercised by admitted plan/account operations

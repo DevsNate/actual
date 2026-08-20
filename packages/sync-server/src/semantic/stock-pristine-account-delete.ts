@@ -1,7 +1,7 @@
 import type {
-  PlanChangeSetCommand,
-  PlanEntity,
-  PlanSnapshot,
+  BudgetChangeSetCommand,
+  BudgetEntity,
+  BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
@@ -10,13 +10,13 @@ import { projectStockEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 export type StockPristineAccountDelete = {
-  changes: PlanChangeSetCommand['changes'];
+  changes: BudgetChangeSetCommand['changes'];
   changedEntities: Readonly<Record<string, unknown>>;
 };
 
 export function parseStockPristineAccountDelete(
   changedEntities: Record<string, unknown>,
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): StockPristineAccountDelete | null {
   if (
     !hasExactKeys(changedEntities, [
@@ -115,8 +115,8 @@ export function parseStockPristineAccountDelete(
 }
 
 function calculationDeleteDelta(
-  snapshot: PlanSnapshot,
-  changes: readonly PlanEntity[],
+  snapshot: BudgetSnapshot,
+  changes: readonly BudgetEntity[],
 ): Readonly<Record<string, unknown>> {
   const before = projectStockBudgetCalculations(snapshot);
   const changedKeys = new Set(
@@ -205,10 +205,10 @@ function terminalMonthlyAccountCalculation(
 }
 
 function entity(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
   kind: string,
   id: string,
-): PlanEntity | undefined {
+): BudgetEntity | undefined {
   return snapshot.entities.find(
     item => item.entityKind === kind && item.entityId === id,
   );

@@ -12,8 +12,8 @@ const integrationTest = databaseUrl ? describe : describe.skip;
 integrationTest('semantic catalog runtime integration', () => {
   const userId = 'semantic-integration-user';
   const token = 'semantic-integration-session';
-  const planId = 'semantic-integration-plan';
-  let createdPlanId = '';
+  const budgetId = 'semantic-integration-plan';
+  let createdBudgetId = '';
   let createdVersionId = '';
   let createdCurrentMonth = '';
   let createdAccountId = '';
@@ -39,16 +39,16 @@ integrationTest('semantic catalog runtime integration', () => {
     const runtime = await createPostgresSemanticCatalogHandlers(databaseUrl!);
     closeRuntime = runtime.close;
     await seedPool.query(
-      `INSERT INTO semantic_plans
-         (plan_id, budget_version_id, name)
+      `INSERT INTO semantic_budgets
+         (budget_id, budget_version_id, name)
        VALUES ($1, $2, $3)`,
-      [planId, 'semantic-integration-version', 'Semantic Integration Plan'],
+      [budgetId, 'semantic-integration-version', 'Semantic Integration Plan'],
     );
     await seedPool.query(
-      `INSERT INTO semantic_plan_memberships
-         (membership_id, plan_id, principal_id, permissions)
+      `INSERT INTO semantic_budget_memberships
+         (membership_id, budget_id, principal_id, permissions)
        VALUES ($1, $2, $3, $4)`,
-      ['semantic-integration-membership', planId, userId, 7],
+      ['semantic-integration-membership', budgetId, userId, 7],
     );
     await seedPool.query(
       `INSERT INTO semantic_catalog_knowledge
@@ -60,12 +60,12 @@ integrationTest('semantic catalog runtime integration', () => {
     const migrations = await seedPool.query<{ count: string }>(
       'SELECT count(*) FROM semantic_schema_migrations',
     );
-    expect(migrations.rows[0]?.count).toBe('4');
+    expect(migrations.rows[0]?.count).toBe('6');
 
     const app = express();
     app.use('/semantic/v1', runtime.handlers);
     app.use('/api/v1', runtime.stockHandlers);
-    app.use('/api', runtime.stockPlanHandlers);
+    app.use('/api', runtime.stockBudgetLifecycleHandlers);
     app.use('/api', runtime.stockAccountHandlers);
     testApp = app;
   });
@@ -98,7 +98,7 @@ integrationTest('semantic catalog runtime integration', () => {
         memberships: [
           {
             id: 'semantic-integration-membership',
-            planId,
+            budgetId,
             budgetVersionId: 'semantic-integration-version',
             principalId: userId,
             name: 'Semantic Integration Plan',
@@ -146,7 +146,7 @@ integrationTest('semantic catalog runtime integration', () => {
         ce_user_budgets: [
           {
             id: 'semantic-integration-membership',
-            budget_id: planId,
+            budget_id: budgetId,
             budget_version_id: 'semantic-integration-version',
             user_id: userId,
             budget_name: 'Semantic Integration Plan',
@@ -187,14 +187,14 @@ integrationTest('semantic catalog runtime integration', () => {
     createdVersionId = response.body.id as string;
     expect(createdVersionId).toBeTruthy();
 
-    const createdPlan = await seedPool!.query<{ plan_id: string }>(
-      `SELECT plan_id
-         FROM semantic_plans
+    const createdBudget = await seedPool!.query<{ budget_id: string }>(
+      `SELECT budget_id
+         FROM semantic_budgets
         WHERE budget_version_id = $1`,
       [createdVersionId],
     );
-    createdPlanId = createdPlan.rows[0]?.plan_id ?? '';
-    expect(createdPlanId).toBeTruthy();
+    createdBudgetId = createdBudget.rows[0]?.budget_id ?? '';
+    expect(createdBudgetId).toBeTruthy();
 
     const counts = await seedPool!.query<{
       entity_count: string;
@@ -202,10 +202,10 @@ integrationTest('semantic catalog runtime integration', () => {
       budget_receipts: string;
     }>(
       `SELECT
-         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_budget_entities WHERE budget_id = $1) AS entity_count,
          (SELECT count(*) FROM semantic_catalog_command_receipts WHERE principal_id = $2) AS catalog_receipts,
-         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS budget_receipts`,
-      [createdPlanId, userId],
+         (SELECT count(*) FROM semantic_budget_device_receipts WHERE budget_id = $1) AS budget_receipts`,
+      [createdBudgetId, userId],
     );
     expect(counts.rows[0]).toEqual({
       entity_count: '58',
@@ -346,10 +346,10 @@ integrationTest('semantic catalog runtime integration', () => {
       receipts: string;
     }>(
       `SELECT
-         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
-         (SELECT count(*) FROM semantic_change_sets WHERE plan_id = $1) AS change_sets,
-         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS receipts`,
-      [createdPlanId],
+         (SELECT count(*) FROM semantic_budget_entities WHERE budget_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_budget_change_sets WHERE budget_id = $1) AS change_sets,
+         (SELECT count(*) FROM semantic_budget_device_receipts WHERE budget_id = $1) AS receipts`,
+      [createdBudgetId],
     );
     expect(counts.rows[0]).toEqual({
       entity_count: '60',
@@ -398,7 +398,7 @@ integrationTest('semantic catalog runtime integration', () => {
     };
     const createAccount = () =>
       request(testApp)
-        .post(`/semantic/v1/plans/${createdPlanId}/accounts`)
+        .post(`/semantic/v1/budgets/${createdBudgetId}/accounts`)
         .set('x-actual-token', token)
         .set('x-semantic-device-id', 'semantic-web-device')
         .set('idempotency-key', 'semantic-account-create')
@@ -413,7 +413,7 @@ integrationTest('semantic catalog runtime integration', () => {
           name: 'Account Capture 1',
           type: 'checking',
           openingBalance: 123450,
-          planId: createdPlanId,
+          budgetId: createdBudgetId,
         },
         budget_server_knowledge: 4,
         replayed: false,
@@ -429,17 +429,26 @@ integrationTest('semantic catalog runtime integration', () => {
     });
 
     const counts = await seedPool!.query<{
+      accounts: string;
+      payees: string;
+      transactions: string;
       entity_count: string;
       change_sets: string;
       receipts: string;
     }>(
       `SELECT
-         (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
-         (SELECT count(*) FROM semantic_change_sets WHERE plan_id = $1) AS change_sets,
-         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS receipts`,
-      [createdPlanId],
+         (SELECT count(*) FROM semantic_accounts WHERE budget_id = $1) AS accounts,
+         (SELECT count(*) FROM semantic_payees WHERE budget_id = $1) AS payees,
+         (SELECT count(*) FROM semantic_transactions WHERE budget_id = $1) AS transactions,
+         (SELECT count(*) FROM semantic_budget_entities WHERE budget_id = $1) AS entity_count,
+         (SELECT count(*) FROM semantic_budget_change_sets WHERE budget_id = $1) AS change_sets,
+         (SELECT count(*) FROM semantic_budget_device_receipts WHERE budget_id = $1) AS receipts`,
+      [createdBudgetId],
     );
     expect(counts.rows[0]).toEqual({
+      accounts: '1',
+      payees: '1',
+      transactions: '1',
       entity_count: '63',
       change_sets: '3',
       receipts: '3',
@@ -518,14 +527,14 @@ integrationTest('semantic catalog runtime integration', () => {
 
   test('renames both projections and tombstones only catalog membership', async () => {
     const rename = await request(testApp)
-      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .patch(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'semantic-rename-request')
       .send({ name: 'Semantic Renamed Plan' })
       .expect(200);
     expect(rename.body.data).toMatchObject({
-      budget_id: createdPlanId,
+      budget_id: createdBudgetId,
       name: 'Semantic Renamed Plan',
       catalog_server_knowledge: 3,
       budget_server_knowledge: 5,
@@ -533,7 +542,7 @@ integrationTest('semantic catalog runtime integration', () => {
     });
 
     const replay = await request(testApp)
-      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .patch(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'semantic-rename-request')
@@ -545,7 +554,7 @@ integrationTest('semantic catalog runtime integration', () => {
       replayed: true,
     });
     await request(testApp)
-      .patch(`/semantic/v1/plans/${createdPlanId}`)
+      .patch(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'semantic-rename-request')
@@ -556,49 +565,49 @@ integrationTest('semantic catalog runtime integration', () => {
       });
 
     const renamed = await seedPool!.query<{
-      plan_name: string;
+      budget_name_value: string;
       budget_name: string;
       catalog_changes: string;
       budget_changes: string;
     }>(
-      `SELECT p.name AS plan_name,
+      `SELECT p.name AS budget_name_value,
               e.payload->>'budgetName' AS budget_name,
               (SELECT count(*) FROM semantic_catalog_change_sets
                WHERE principal_id = $2) AS catalog_changes,
-              (SELECT count(*) FROM semantic_change_sets
-               WHERE plan_id = $1) AS budget_changes
-       FROM semantic_plans p
-       JOIN semantic_plan_entities e
-         ON e.plan_id = p.plan_id AND e.entity_kind = 'be_budget'
-       WHERE p.plan_id = $1`,
-      [createdPlanId, userId],
+              (SELECT count(*) FROM semantic_budget_change_sets
+               WHERE budget_id = $1) AS budget_changes
+       FROM semantic_budgets p
+       JOIN semantic_budget_entities e
+         ON e.budget_id = p.budget_id AND e.entity_kind = 'be_budget'
+       WHERE p.budget_id = $1`,
+      [createdBudgetId, userId],
     );
     expect(renamed.rows[0]).toEqual({
-      plan_name: 'Semantic Renamed Plan',
+      budget_name_value: 'Semantic Renamed Plan',
       budget_name: 'Semantic Renamed Plan',
       catalog_changes: '2',
       budget_changes: '4',
     });
     const materialized = await request(testApp)
-      .get(`/semantic/v1/plans/${createdPlanId}`)
+      .get(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .expect(200);
     expect(materialized.body.data).toMatchObject({
-      planId: createdPlanId,
+      budgetId: createdBudgetId,
       name: 'Semantic Renamed Plan',
       serverKnowledge: 5,
     });
     expect(materialized.body.data.entities).toHaveLength(63);
 
     await request(testApp)
-      .delete(`/semantic/v1/plans/${createdPlanId}`)
+      .delete(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'semantic-delete-request')
       .expect(200, {
         status: 'ok',
         data: {
-          budget_id: createdPlanId,
+          budget_id: createdBudgetId,
           deleted: true,
           catalog_server_knowledge: 4,
           budget_server_knowledge: null,
@@ -606,7 +615,7 @@ integrationTest('semantic catalog runtime integration', () => {
         },
       });
     const deleteReplay = await request(testApp)
-      .delete(`/semantic/v1/plans/${createdPlanId}`)
+      .delete(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'semantic-delete-request')
@@ -623,37 +632,38 @@ integrationTest('semantic catalog runtime integration', () => {
       .expect(200);
     expect(
       catalog.body.data.memberships.find(
-        (membership: { planId: string }) => membership.planId === createdPlanId,
+        (membership: { budgetId: string }) =>
+          membership.budgetId === createdBudgetId,
       ),
     ).toMatchObject({
       name: 'Unknown',
       isTombstone: true,
     });
     const retained = await seedPool!.query<{
-      plan_tombstone: boolean;
+      budget_tombstone: boolean;
       entity_count: string;
       budget_knowledge: string;
     }>(
-      `SELECT p.is_tombstone AS plan_tombstone,
-              (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_count,
+      `SELECT p.is_tombstone AS budget_tombstone,
+              (SELECT count(*) FROM semantic_budget_entities WHERE budget_id = $1) AS entity_count,
               p.server_knowledge AS budget_knowledge
-       FROM semantic_plans p WHERE p.plan_id = $1`,
-      [createdPlanId],
+       FROM semantic_budgets p WHERE p.budget_id = $1`,
+      [createdBudgetId],
     );
     expect(retained.rows[0]).toEqual({
-      plan_tombstone: false,
+      budget_tombstone: false,
       entity_count: '63',
       budget_knowledge: '5',
     });
     await request(testApp)
-      .get(`/semantic/v1/plans/${createdPlanId}`)
+      .get(`/semantic/v1/budgets/${createdBudgetId}`)
       .set('x-actual-token', token)
-      .expect(404, { status: 'error', reason: 'plan-not-found' });
+      .expect(404, { status: 'error', reason: 'budget-not-found' });
   });
 
   test('serves the captured direct-import account route through PostgreSQL', async () => {
     const plan = await request(testApp)
-      .post('/semantic/v1/plans')
+      .post('/semantic/v1/budgets')
       .set('x-actual-token', token)
       .set('x-semantic-device-id', 'semantic-web-device')
       .set('idempotency-key', 'stock-account-plan')
@@ -667,7 +677,7 @@ integrationTest('semantic catalog runtime integration', () => {
         date_format: { format: 'MM/DD/YYYY' },
       })
       .expect(201);
-    const directPlanId = plan.body.data.budget_id as string;
+    const directBudgetId = plan.body.data.budget_id as string;
     const directVersionId = plan.body.data.budget_version_id as string;
 
     const created = await request(testApp)
@@ -711,12 +721,12 @@ integrationTest('semantic catalog runtime integration', () => {
 
     const persisted = await seedPool!.query<{ count: string }>(
       `SELECT count(*)
-       FROM semantic_plan_entities
-       WHERE plan_id = $1
+       FROM semantic_budget_entities
+       WHERE budget_id = $1
          AND ((entity_kind = 'be_accounts' AND entity_id = ANY($2))
            OR (entity_kind = 'be_payees' AND payload->>'accountId' = ANY($2))
            OR (entity_kind = 'be_transactions' AND payload->>'accountId' = ANY($2)))`,
-      [directPlanId, [created.body.id, second.body.id]],
+      [directBudgetId, [created.body.id, second.body.id]],
     );
     expect(persisted.rows[0]?.count).toBe('6');
 

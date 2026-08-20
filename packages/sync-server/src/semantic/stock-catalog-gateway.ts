@@ -1,13 +1,14 @@
 import { AuthenticationError } from '@actual-app/semantic-core';
 import type {
   AuthenticatedPrincipal,
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
   CatalogCommandWriter,
   CatalogReader,
 } from '@actual-app/semantic-core';
 import express from 'express';
 
-import type { PlanLifecycleService } from './plan-lifecycle-service';
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
+import { handleStockBudgetDelete } from './stock-budget-delete-operation';
 import { handleStockBudgetSync } from './stock-budget-operation';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { handleStockCatalogSync } from './stock-catalog-operation';
@@ -15,14 +16,13 @@ import { handleStockFamilySync } from './stock-family-operation';
 import { handleStockInitialUserData } from './stock-initial-user-operation';
 import { operationError, STOCK_API_VERSION } from './stock-operation';
 import type { StockOperationResponse } from './stock-operation';
-import { handleStockPlanDelete } from './stock-plan-delete-operation';
 
 export type StockCatalogGatewayDependencies = {
   catalogReader: CatalogReader;
   catalogWriter: CatalogCommandWriter;
-  planReader: BudgetVersionPlanReader;
+  budgetReader: BudgetVersionReader;
   changeWriter: StockBudgetChangeWriter;
-  planLifecycleService: PlanLifecycleService;
+  budgetLifecycleService: BudgetLifecycleService;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
@@ -77,18 +77,19 @@ export function createStockCatalogGateway(
               ? await handleStockCatalogSync(context, {
                   catalogReader: dependencies.catalogReader,
                   catalogWriter: dependencies.catalogWriter,
-                  planLifecycleService: dependencies.planLifecycleService,
+                  budgetLifecycleService: dependencies.budgetLifecycleService,
                 })
               : operation === 'syncBudgetData'
                 ? await handleStockBudgetSync(context, {
-                    planReader: dependencies.planReader,
+                    budgetReader: dependencies.budgetReader,
                     changeWriter: dependencies.changeWriter,
                   })
                 : operation === 'deleteBudget'
-                  ? await handleStockPlanDelete(context, {
+                  ? await handleStockBudgetDelete(context, {
                       catalogReader: dependencies.catalogReader,
-                      planReader: dependencies.planReader,
-                      planLifecycleService: dependencies.planLifecycleService,
+                      budgetReader: dependencies.budgetReader,
+                      budgetLifecycleService:
+                        dependencies.budgetLifecycleService,
                     })
                   : operationError(501, 'unsupported_operation');
       send(response, result);

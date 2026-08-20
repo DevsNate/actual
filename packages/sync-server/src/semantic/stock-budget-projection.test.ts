@@ -1,12 +1,12 @@
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { projectStockBudgetSource } from './stock-budget-projection';
 
 describe('stock budget source projection', () => {
   test('projects the admitted PLAN-001 bootstrap without losing identities', () => {
     let sequence = 0;
-    const entities = buildStockPlanBootstrap({
-      planId: 'plan-1',
+    const entities = buildStockBudgetBootstrap({
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       principalId: 'user-1',
       name: 'Plan',
@@ -22,7 +22,7 @@ describe('stock budget source projection', () => {
     });
 
     const result = projectStockBudgetSource({
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       name: 'Plan',
       serverKnowledge: 1,
@@ -137,7 +137,7 @@ describe('stock budget source projection', () => {
 
   test('preserves unknown nested fields while converting wire casing', () => {
     const result = projectStockBudgetSource({
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       name: 'Plan',
       serverKnowledge: 1,
@@ -165,7 +165,7 @@ describe('stock budget source projection', () => {
 
   test('retains an opened-budget prior month without moving month boundaries', () => {
     const result = projectStockBudgetSource({
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       name: 'Plan',
       serverKnowledge: 2,
@@ -210,7 +210,7 @@ describe('stock budget source projection', () => {
 
   test('projects account and transaction relationships without canonical metadata', () => {
     const result = projectStockBudgetSource({
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       name: 'Plan',
       serverKnowledge: 3,
@@ -269,7 +269,7 @@ describe('stock budget source projection', () => {
   test('fails closed on ambiguous or malformed entity projections', () => {
     expect(() =>
       projectStockBudgetSource({
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         budgetVersionId: 'version-1',
         name: 'Plan',
         serverKnowledge: 1,

@@ -2,36 +2,36 @@ import type { AuthenticatedPrincipal } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
 
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import { authenticateSemanticRequest } from './catalog-api';
-import type { PlanLifecycleService } from './plan-lifecycle-service';
 
 type Dependencies = {
-  planLifecycleService: PlanLifecycleService;
+  budgetLifecycleService: BudgetLifecycleService;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
-export function createSemanticPlanLifecycleHandlers(
+export function createSemanticBudgetLifecycleHandlers(
   dependencies: Dependencies,
 ) {
   const handlers = express.Router();
   handlers.use(express.json({ limit: '16kb' }));
 
-  handlers.patch('/plans/:planId', async (request, response) => {
+  handlers.patch('/budgets/:budgetId', async (request, response) => {
     const context = requestContext(request, response, dependencies);
     const name = isRecord(request.body) ? request.body.name : null;
     if (!context || typeof name !== 'string' || !name.trim()) {
       if (context) {
         response.status(400).send({
           status: 'error',
-          reason: 'invalid-plan-rename-request',
+          reason: 'invalid-budget-rename-request',
         });
       }
       return;
     }
     await execute(response, () =>
-      dependencies.planLifecycleService.renamePlan({
+      dependencies.budgetLifecycleService.renameBudget({
         principalId: context.principal.id,
-        planId: context.planId,
+        budgetId: context.budgetId,
         originDeviceId: context.deviceId,
         idempotencyKey: context.idempotencyKey,
         name: name.trim(),
@@ -39,15 +39,15 @@ export function createSemanticPlanLifecycleHandlers(
     );
   });
 
-  handlers.delete('/plans/:planId', async (request, response) => {
+  handlers.delete('/budgets/:budgetId', async (request, response) => {
     const context = requestContext(request, response, dependencies);
     if (!context) {
       return;
     }
     await execute(response, () =>
-      dependencies.planLifecycleService.deletePlan({
+      dependencies.budgetLifecycleService.deleteBudget({
         principalId: context.principal.id,
-        planId: context.planId,
+        budgetId: context.budgetId,
         originDeviceId: context.deviceId,
         idempotencyKey: context.idempotencyKey,
       }),
@@ -72,15 +72,15 @@ function requestContext(
   }
   const deviceId = request.get('x-semantic-device-id')?.trim() ?? '';
   const idempotencyKey = request.get('idempotency-key')?.trim() ?? '';
-  const planId = request.params.planId?.trim() ?? '';
-  if (!deviceId || !idempotencyKey || !planId) {
+  const budgetId = request.params.budgetId?.trim() ?? '';
+  if (!deviceId || !idempotencyKey || !budgetId) {
     response.status(400).send({
       status: 'error',
-      reason: 'invalid-plan-lifecycle-request',
+      reason: 'invalid-budget-lifecycle-request',
     });
     return null;
   }
-  return { principal, deviceId, idempotencyKey, planId };
+  return { principal, deviceId, idempotencyKey, budgetId };
 }
 
 async function execute(
@@ -89,7 +89,7 @@ async function execute(
     replayed: boolean;
     catalogServerKnowledge: number;
     budgetServerKnowledge: number | null;
-    response: Readonly<Record<string, unknown>>;
+    budget: import('@actual-app/semantic-core').BudgetLifecycleReceipt;
   }>,
 ) {
   try {
@@ -97,7 +97,10 @@ async function execute(
     response.status(200).send({
       status: 'ok',
       data: {
-        ...value.response,
+        budget_id: value.budget.budgetId,
+        ...(value.budget.kind === 'renamed'
+          ? { name: value.budget.name }
+          : { deleted: true }),
         catalog_server_knowledge: value.catalogServerKnowledge,
         budget_server_knowledge: value.budgetServerKnowledge,
         replayed: value.replayed,
@@ -111,10 +114,10 @@ async function execute(
       });
       return;
     }
-    console.error('Semantic plan lifecycle command failed', error);
+    console.error('Semantic budget lifecycle command failed', error);
     response.status(500).send({
       status: 'error',
-      reason: 'semantic-plan-lifecycle-unavailable',
+      reason: 'semantic-budget-lifecycle-unavailable',
     });
   }
 }

@@ -33,7 +33,7 @@ No caller may select a different principal. Authentication failures return
 partial catalog.
 
 ```http
-POST /semantic/v1/plans
+POST /semantic/v1/budgets
 X-Actual-Token: <retained Actual session token>
 X-Semantic-Device-Id: <stable caller device identity>
 Idempotency-Key: <stable request identity>
@@ -50,14 +50,14 @@ Creation stores the authenticated owner's membership and the evidence-backed
 PLAN-001 bootstrap atomically. An identical retry returns the original plan
 and budget-version identities; conflicting reuse returns `409`.
 
-`GET /semantic/v1/plans/:planId` is the authorized materialization boundary.
+`GET /semantic/v1/budgets/:budgetId` is the authorized materialization boundary.
 It returns canonical plan metadata, knowledge, and entity snapshots only while
 the authenticated principal has a live membership. A deleted membership
 returns `404` even though the retained canonical cache still exists.
 
 ```http
-PATCH /semantic/v1/plans/:planId
-DELETE /semantic/v1/plans/:planId
+PATCH /semantic/v1/budgets/:budgetId
+DELETE /semantic/v1/budgets/:budgetId
 X-Actual-Token: <retained Actual session token>
 X-Semantic-Device-Id: <stable caller device identity>
 Idempotency-Key: <stable request identity>
@@ -78,4 +78,4 @@ endpoints.
 
 The atomic command boundary and the distinction between membership,
 materialization, and selection are defined in
-[`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md).
+[`semantic-budget-lifecycle.md`](semantic-budget-lifecycle.md).

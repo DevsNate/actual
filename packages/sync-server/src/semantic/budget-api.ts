@@ -1,26 +1,26 @@
 import type {
   AuthenticatedPrincipal,
-  PlanReader,
+  BudgetReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
 
+import type { BudgetCreationService } from './budget-creation-service';
 import { authenticateSemanticRequest } from './catalog-api';
-import type { PlanCreationService } from './plan-creation-service';
 
-export type SemanticPlanApiDependencies = {
-  planCreationService: PlanCreationService;
-  planReader: PlanReader;
+export type SemanticBudgetApiDependencies = {
+  budgetCreationService: BudgetCreationService;
+  budgetReader: BudgetReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
-export function createSemanticPlanHandlers(
-  dependencies: SemanticPlanApiDependencies,
+export function createSemanticBudgetHandlers(
+  dependencies: SemanticBudgetApiDependencies,
 ): express.Router {
   const handlers = express.Router();
   handlers.use(express.json({ limit: '64kb' }));
 
-  handlers.get('/plans/:planId', async (request, response) => {
+  handlers.get('/budgets/:budgetId', async (request, response) => {
     const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
@@ -29,34 +29,37 @@ export function createSemanticPlanHandlers(
     if (!principal) {
       return;
     }
-    const planId = request.params.planId?.trim() ?? '';
-    if (!planId) {
+    const budgetId = request.params.budgetId?.trim() ?? '';
+    if (!budgetId) {
       response.status(400).send({
         status: 'error',
-        reason: 'invalid-plan-read-request',
+        reason: 'invalid-budget-read-request',
       });
       return;
     }
     try {
-      const plan = await dependencies.planReader.readPlan(principal.id, planId);
-      if (!plan) {
+      const budget = await dependencies.budgetReader.readBudget(
+        principal.id,
+        budgetId,
+      );
+      if (!budget) {
         response.status(404).send({
           status: 'error',
-          reason: 'plan-not-found',
+          reason: 'budget-not-found',
         });
         return;
       }
-      response.status(200).send({ status: 'ok', data: plan });
+      response.status(200).send({ status: 'ok', data: budget });
     } catch (error) {
-      console.error('Semantic plan read failed', error);
+      console.error('Semantic budget read failed', error);
       response.status(500).send({
         status: 'error',
-        reason: 'semantic-plan-read-unavailable',
+        reason: 'semantic-budget-read-unavailable',
       });
     }
   });
 
-  handlers.post('/plans', async (request, response) => {
+  handlers.post('/budgets', async (request, response) => {
     const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
@@ -68,17 +71,17 @@ export function createSemanticPlanHandlers(
 
     const idempotencyKey = request.get('idempotency-key')?.trim() ?? '';
     const originDeviceId = request.get('x-semantic-device-id')?.trim() ?? '';
-    const body = parseCreatePlanBody(request.body);
+    const body = parseCreateBudgetBody(request.body);
     if (!body || !idempotencyKey || !originDeviceId) {
       response.status(400).send({
         status: 'error',
-        reason: 'invalid-plan-creation-request',
+        reason: 'invalid-budget-creation-request',
       });
       return;
     }
 
     try {
-      const result = await dependencies.planCreationService.createPlan({
+      const result = await dependencies.budgetCreationService.createBudget({
         principalId: principal.id,
         originDeviceId,
         idempotencyKey,
@@ -89,7 +92,8 @@ export function createSemanticPlanHandlers(
       response.status(result.replayed ? 200 : 201).send({
         status: 'ok',
         data: {
-          ...result.response,
+          budget_id: result.budget.budgetId,
+          budget_version_id: result.budget.budgetVersionId,
           catalog_server_knowledge: result.catalogServerKnowledge,
           budget_server_knowledge: result.budgetServerKnowledge,
           replayed: result.replayed,
@@ -108,10 +112,10 @@ export function createSemanticPlanHandlers(
         });
         return;
       }
-      console.error('Semantic plan creation failed', error);
+      console.error('Semantic budget creation failed', error);
       response.status(500).send({
         status: 'error',
-        reason: 'semantic-plan-creation-unavailable',
+        reason: 'semantic-budget-creation-unavailable',
       });
     }
   });
@@ -119,13 +123,13 @@ export function createSemanticPlanHandlers(
   return handlers;
 }
 
-type CreatePlanBody = {
+type CreateBudgetBody = {
   name: string;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
 };
 
-function parseCreatePlanBody(value: unknown): CreatePlanBody | null {
+function parseCreateBudgetBody(value: unknown): CreateBudgetBody | null {
   if (!isRecord(value)) {
     return null;
   }

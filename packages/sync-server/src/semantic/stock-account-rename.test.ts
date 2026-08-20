@@ -1,4 +1,4 @@
-import type { PlanSnapshot } from '@actual-app/semantic-core';
+import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
 import { parseStockAccountRenameDelta } from './stock-account-rename';
 import { projectStockEntity } from './stock-budget-projection';
@@ -69,9 +69,9 @@ describe('stock account rename delta', () => {
   });
 });
 
-function fixture(): PlanSnapshot {
+function fixture(): BudgetSnapshot {
   return {
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     budgetVersionId: 'version-1',
     name: 'Plan',
     serverKnowledge: 36,

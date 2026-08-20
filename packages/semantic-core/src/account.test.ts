@@ -4,7 +4,7 @@ describe('canonical unlinked account', () => {
   test('builds one account, transfer payee, and Starting Balance relationship', () => {
     expect(
       buildUnlinkedCheckingAccount({
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         accountId: 'account-1',
         transferPayeeId: 'payee-1',
         startingBalanceId: 'transaction-1',
@@ -18,7 +18,7 @@ describe('canonical unlinked account', () => {
     ).toEqual({
       account: {
         id: 'account-1',
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         name: 'Everyday checking',
         type: 'checking',
         isOnBudget: true,
@@ -28,14 +28,14 @@ describe('canonical unlinked account', () => {
       },
       transferPayee: {
         id: 'payee-1',
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         accountId: 'account-1',
         name: 'Transfer : Everyday checking',
         isEnabled: true,
       },
       startingBalance: {
         id: 'transaction-1',
-        planId: 'plan-1',
+        budgetId: 'plan-1',
         accountId: 'account-1',
         payeeId: 'starting-balance-payee',
         categoryId: 'immediate-income',

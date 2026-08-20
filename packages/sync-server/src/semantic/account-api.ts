@@ -17,7 +17,7 @@ export function createSemanticAccountHandlers(
 ): express.Router {
   const handlers = express.Router();
   handlers.use(express.json({ limit: '64kb' }));
-  handlers.post('/plans/:planId/accounts', async (request, response) => {
+  handlers.post('/budgets/:budgetId/accounts', async (request, response) => {
     const principal = authenticateSemanticRequest(
       request.get('x-actual-token'),
       response,
@@ -26,11 +26,11 @@ export function createSemanticAccountHandlers(
     if (!principal) {
       return;
     }
-    const planId = request.params.planId?.trim() ?? '';
+    const budgetId = request.params.budgetId?.trim() ?? '';
     const originDeviceId = request.get('x-semantic-device-id')?.trim() ?? '';
     const idempotencyKey = request.get('idempotency-key')?.trim() ?? '';
     const body = parseNativeUnlinkedCheckingAccountBody(request.body);
-    if (!planId || !originDeviceId || !idempotencyKey || !body) {
+    if (!budgetId || !originDeviceId || !idempotencyKey || !body) {
       response.status(400).send({
         status: 'error',
         reason: 'invalid-account-creation-request',
@@ -43,7 +43,7 @@ export function createSemanticAccountHandlers(
         await dependencies.accountCreationService.createUnlinkedCheckingAccount(
           {
             principalId: principal.id,
-            planId,
+            budgetId,
             originDeviceId,
             idempotencyKey,
             ...body,
@@ -59,7 +59,7 @@ export function createSemanticAccountHandlers(
       });
     } catch (error) {
       if (error instanceof AccountCreationError) {
-        response.status(error.code === 'plan-not-found' ? 404 : 400).send({
+        response.status(error.code === 'budget-not-found' ? 404 : 400).send({
           status: 'error',
           reason: error.code,
         });

@@ -11,11 +11,20 @@ Checking-account creation now crosses one typed domain boundary. The
 stock-direct-import and retained semantic HTTP adapters parse their own wire
 formats, translate them into the canonical unlinked-account intent, and project
 their own responses. `account-creation-service.ts` owns orchestration only;
-`account-plan-entity-adapter.ts` is the sole mapping from the canonical account,
-transfer-payee, and Starting Balance group into persisted plan entities.
+`account-budget-entity-adapter.ts` is the sole mapping from the canonical account,
+transfer-payee, and Starting Balance group into persisted YNAB compatibility
+projections. Those `be_*` projections are delivery state, not the canonical
+account model.
+
+Migration 0006 persists the admitted aggregate in typed
+`semantic_accounts`, `semantic_payees`, and `semantic_transactions` tables.
+`commitUnlinkedAccountCreation` writes those canonical rows together with the
+compatibility projections, ordered knowledge, and exact receipt in one
+PostgreSQL transaction. Exact replay returns the stored receipt without
+duplicating either representation.
 
 The stock adapter also resolves the external `budget_version_id` carried by the
-deployed Web route to the canonical internal `plan_id`. Neither identity leaks
+deployed Web route to the canonical internal `budget_id`. Neither identity leaks
 into the other's role. Atomic knowledge, receipts, and replay remain owned by
 PostgreSQL.
 
@@ -50,7 +59,7 @@ one live Immediate Income system category. It creates in one change set:
 2. one enabled account-bound transfer payee with the captured defaults; and
 3. one cleared, accepted Starting Balance transaction in Immediate Income.
 
-Canonical identities are deterministic from plan plus idempotency key. The
+Canonical identities are deterministic from budget plus idempotency key. The
 receipt owns exact replay. Reusing a key with another payload fails, and an
 later requests use distinct command keys and identities. A browser-root
 bootstrap with three controlled accounts proves one independent group per
@@ -114,13 +123,13 @@ relationships fail closed.
 
 ## Transport boundary
 
-`POST /semantic/v1/plans/:planId/accounts` is the retained Actual-session
+`POST /semantic/v1/budgets/:budgetId/accounts` is the retained Actual-session
 semantic adapter over the shared command. The stock-shaped adapter is mounted
 at `POST /api/direct_import/budgets/:budgetVersionId/accounts`; it accepts the
 captured `Authorization: Token token=<session>` wrapper and API-version header,
 delegates authentication to Actual's retained session authority, and returns
-the exact flat HTTP 201 acknowledgement. Neither transport constructs plan
-entities itself.
+the exact flat HTTP 201 acknowledgement. Neither transport constructs budget
+projections itself.
 
 After the acknowledgement, an older valid stock cursor receives an
 entity-knowledge-indexed read delta instead of a conflict. A cursor ahead of

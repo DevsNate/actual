@@ -1,13 +1,13 @@
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
-import { projectStockFreshPlanCalculations } from './stock-budget-calculations';
+import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
 
 function createSnapshot() {
   let sequence = 0;
   const entities = [
-    ...buildStockPlanBootstrap({
-      planId: 'plan-1',
+    ...buildStockBudgetBootstrap({
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       principalId: 'user-1',
       name: 'Plan',
@@ -19,7 +19,7 @@ function createSnapshot() {
     }),
   ];
   return {
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     budgetVersionId: 'version-1',
     name: 'Plan',
     serverKnowledge: 1,
@@ -29,9 +29,9 @@ function createSnapshot() {
   };
 }
 
-describe('stock fresh-plan calculations', () => {
+describe('stock fresh-budget calculations', () => {
   test('projects the exact admitted calculated bootstrap defaults', () => {
-    const result = projectStockFreshPlanCalculations(createSnapshot());
+    const result = projectStockFreshBudgetCalculations(createSnapshot());
 
     expect(result.be_monthly_budget_calculations).toHaveLength(2);
     expect(result.be_monthly_subcategory_budget_calculations).toHaveLength(28);
@@ -60,7 +60,7 @@ describe('stock fresh-plan calculations', () => {
   });
 
   test('uses the captured deterministic identity transformations', () => {
-    const result = projectStockFreshPlanCalculations(createSnapshot());
+    const result = projectStockFreshBudgetCalculations(createSnapshot());
 
     expect(
       result.be_monthly_budget_calculations.every(
@@ -81,7 +81,7 @@ describe('stock fresh-plan calculations', () => {
   test('fails closed when non-pristine state would require inferred formulas', () => {
     const snapshot = createSnapshot();
     expect(() =>
-      projectStockFreshPlanCalculations({
+      projectStockFreshBudgetCalculations({
         ...snapshot,
         entities: [
           ...snapshot.entities,

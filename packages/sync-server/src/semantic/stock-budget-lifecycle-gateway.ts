@@ -2,16 +2,16 @@ import type { AuthenticatedPrincipal } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
 
-import type { PlanCreationService } from './plan-creation-service';
+import type { BudgetCreationService } from './budget-creation-service';
 import { authenticateStockTokenRequest } from './stock-auth';
 import { STOCK_API_VERSION } from './stock-operation';
 
 type Dependencies = {
-  planCreationService: PlanCreationService;
+  budgetCreationService: BudgetCreationService;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
-export function createStockPlanGateway(
+export function createStockBudgetGateway(
   dependencies: Dependencies,
 ): express.Router {
   const handlers = express.Router();
@@ -32,15 +32,15 @@ export function createStockPlanGateway(
     const originDeviceId = request.get('x-ynab-device-id')?.trim() ?? '';
     const clientRequestId =
       request.get('x-ynab-client-request-id')?.trim() ?? '';
-    const body = parseStockPlanBody(request.body);
+    const body = parseStockBudgetBody(request.body);
     if (!originDeviceId || !clientRequestId || !body) {
-      response.status(400).send({ error: { id: 'invalid_plan_request' } });
+      response.status(400).send({ error: { id: 'invalid_budget_request' } });
       return;
     }
     response.set('x-ynab-client-request-id', clientRequestId);
 
     try {
-      const result = await dependencies.planCreationService.createPlan({
+      const result = await dependencies.budgetCreationService.createBudget({
         principalId: principal.id,
         originDeviceId,
         idempotencyKey: clientRequestId,
@@ -49,7 +49,7 @@ export function createStockPlanGateway(
         dateFormat: body.dateFormat,
       });
       response.status(result.replayed ? 200 : 201).send({
-        id: result.response.budget_version_id,
+        id: result.budget.budgetVersionId,
       });
     } catch (error) {
       if (error instanceof SemanticStoreError) {
@@ -63,21 +63,23 @@ export function createStockPlanGateway(
         });
         return;
       }
-      console.error('Stock plan creation failed', error);
-      response.status(500).send({ error: { id: 'plan_creation_unavailable' } });
+      console.error('Stock budget creation failed', error);
+      response
+        .status(500)
+        .send({ error: { id: 'budget_creation_unavailable' } });
     }
   });
 
   return handlers;
 }
 
-type StockPlanBody = {
+type StockBudgetBody = {
   name: string;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
 };
 
-function parseStockPlanBody(value: unknown): StockPlanBody | null {
+function parseStockBudgetBody(value: unknown): StockBudgetBody | null {
   if (!isRecord(value) || !isRecord(value.budget)) {
     return null;
   }

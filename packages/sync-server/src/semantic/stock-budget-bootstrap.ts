@@ -1,4 +1,4 @@
-import type { PlanSnapshot } from '@actual-app/semantic-core';
+import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
 import {
@@ -71,7 +71,7 @@ const deltaArrayTables = [
 ] as const;
 
 export function buildStockBudgetBootstrap(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): Readonly<Record<string, unknown>> {
   const source = projectStockBudgetSource(snapshot);
   if (!source.firstMonth || !source.lastMonth) {
@@ -102,28 +102,28 @@ export function buildStockBudgetBootstrap(
 }
 
 export function buildStockBudgetBackfill(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): Readonly<Record<string, unknown>> {
   const source = projectStockBudgetSource(snapshot);
   if (!source.firstMonth || !source.lastMonth) {
     throw new Error('Stock budget backfill requires a current month');
   }
   return {
-    ...Object.fromEntries(backfillArrayTables.map((table) => [table, []])),
+    ...Object.fromEntries(backfillArrayTables.map(table => [table, []])),
     first_month: source.firstMonth,
     last_month: source.lastMonth,
   };
 }
 
 export function buildStockBudgetEmptyDelta(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): Readonly<Record<string, unknown>> {
   const source = projectStockBudgetSource(snapshot);
   if (!source.firstMonth || !source.lastMonth) {
     throw new Error('Stock budget delta requires a current month');
   }
   return {
-    ...Object.fromEntries(deltaArrayTables.map((table) => [table, []])),
+    ...Object.fromEntries(deltaArrayTables.map(table => [table, []])),
     be_budget: null,
     be_expected_income: null,
     first_month: source.firstMonth,
@@ -142,10 +142,10 @@ const calculationSensitiveKinds = new Set([
 const deltaArrayTableSet = new Set<string>(deltaArrayTables);
 
 export function buildStockBudgetReadDelta(
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
   afterServerKnowledge: number,
 ): Readonly<Record<string, unknown>> {
-  const changed = snapshot.entities.filter((entity) => {
+  const changed = snapshot.entities.filter(entity => {
     if (entity.lastServerKnowledge === undefined) {
       throw new Error('Stock delta projection requires entity knowledge');
     }
@@ -173,7 +173,7 @@ export function buildStockBudgetReadDelta(
   }
 
   if (
-    changed.some((entity) => calculationSensitiveKinds.has(entity.entityKind))
+    changed.some(entity => calculationSensitiveKinds.has(entity.entityKind))
   ) {
     Object.assign(result, projectStockBudgetCalculations(snapshot));
   }

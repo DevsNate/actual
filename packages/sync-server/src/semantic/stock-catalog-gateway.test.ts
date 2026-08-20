@@ -1,6 +1,6 @@
 import type {
   AuthenticatedPrincipal,
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
   CatalogCommandWriter,
   CatalogReader,
 } from '@actual-app/semantic-core';
@@ -8,7 +8,7 @@ import { AuthenticationError } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
-import type { PlanLifecycleService } from './plan-lifecycle-service';
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
@@ -22,17 +22,17 @@ const principal: AuthenticatedPrincipal = {
 function app(
   catalogReader: CatalogReader,
   resolvePrincipal: (token: string) => AuthenticatedPrincipal = () => principal,
-  planReader: BudgetVersionPlanReader = {
-    readPlanByBudgetVersion: vi.fn(),
+  budgetReader: BudgetVersionReader = {
+    readBudgetByVersion: vi.fn(),
   },
   changeWriter: StockBudgetChangeWriter = {
     commitChangeSet: vi.fn(),
     acknowledgeDevice: vi.fn(),
   },
   catalogWriter: CatalogCommandWriter = { commitCatalogCommand: vi.fn() },
-  planLifecycleService: PlanLifecycleService = {
-    renamePlan: vi.fn(),
-    deletePlan: vi.fn(),
+  budgetLifecycleService: BudgetLifecycleService = {
+    renameBudget: vi.fn(),
+    deleteBudget: vi.fn(),
   },
 ) {
   const result = express();
@@ -41,9 +41,9 @@ function app(
     createStockCatalogGateway({
       catalogReader,
       catalogWriter,
-      planReader,
+      budgetReader,
       changeWriter,
-      planLifecycleService,
+      budgetLifecycleService,
       resolvePrincipal,
     }),
   );
@@ -125,7 +125,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'My Plan',
@@ -298,7 +298,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'Old Plan',
@@ -310,14 +310,14 @@ describe('stock catalog gateway', () => {
         ],
       }),
     };
-    const planLifecycleService: PlanLifecycleService = {
-      renamePlan: vi.fn().mockResolvedValue({
+    const budgetLifecycleService: BudgetLifecycleService = {
+      renameBudget: vi.fn().mockResolvedValue({
         replayed: false,
         catalogServerKnowledge: 5,
         budgetServerKnowledge: 30,
         response: {},
       }),
-      deletePlan: vi.fn(),
+      deleteBudget: vi.fn(),
     };
 
     const response = await stockRequest(
@@ -327,7 +327,7 @@ describe('stock catalog gateway', () => {
         undefined,
         undefined,
         undefined,
-        planLifecycleService,
+        budgetLifecycleService,
       ),
       syncRequest({
         device_knowledge_of_server: 4,
@@ -357,9 +357,9 @@ describe('stock catalog gateway', () => {
       current_server_knowledge: 5,
       changed_entities: {},
     });
-    expect(planLifecycleService.renamePlan).toHaveBeenCalledWith({
+    expect(budgetLifecycleService.renameBudget).toHaveBeenCalledWith({
       principalId: 'user-1',
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       originDeviceId: 'device-1',
       idempotencyKey: 'request-1',
       name: 'Renamed Plan',
@@ -374,7 +374,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'Plan',
@@ -386,9 +386,9 @@ describe('stock catalog gateway', () => {
         ],
       }),
     };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue({
-        planId: 'plan-1',
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue({
+        budgetId: 'plan-1',
         budgetVersionId: 'version-1',
         name: 'Plan',
         serverKnowledge: 4,
@@ -397,9 +397,9 @@ describe('stock catalog gateway', () => {
         entities: [],
       }),
     };
-    const planLifecycleService: PlanLifecycleService = {
-      renamePlan: vi.fn(),
-      deletePlan: vi.fn().mockResolvedValue({
+    const budgetLifecycleService: BudgetLifecycleService = {
+      renameBudget: vi.fn(),
+      deleteBudget: vi.fn().mockResolvedValue({
         replayed: false,
         catalogServerKnowledge: 5,
         budgetServerKnowledge: null,
@@ -411,10 +411,10 @@ describe('stock catalog gateway', () => {
       app(
         catalogReader,
         undefined,
-        planReader,
+        budgetReader,
         undefined,
         undefined,
-        planLifecycleService,
+        budgetLifecycleService,
       ),
       {
         operation_name: 'deleteBudget',
@@ -422,9 +422,9 @@ describe('stock catalog gateway', () => {
       },
     ).expect(200, { error: null, shared_user_budget_ids: null });
 
-    expect(planLifecycleService.deletePlan).toHaveBeenCalledWith({
+    expect(budgetLifecycleService.deleteBudget).toHaveBeenCalledWith({
       principalId: 'user-1',
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       originDeviceId: 'device-1',
       idempotencyKey: 'request-1',
     });
@@ -437,7 +437,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'Unknown',
@@ -449,12 +449,12 @@ describe('stock catalog gateway', () => {
         ],
       }),
     };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue(null),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue(null),
     };
-    const planLifecycleService: PlanLifecycleService = {
-      renamePlan: vi.fn(),
-      deletePlan: vi.fn().mockResolvedValue({
+    const budgetLifecycleService: BudgetLifecycleService = {
+      renameBudget: vi.fn(),
+      deleteBudget: vi.fn().mockResolvedValue({
         replayed: true,
         catalogServerKnowledge: 5,
         budgetServerKnowledge: null,
@@ -466,10 +466,10 @@ describe('stock catalog gateway', () => {
       app(
         catalogReader,
         undefined,
-        planReader,
+        budgetReader,
         undefined,
         undefined,
-        planLifecycleService,
+        budgetLifecycleService,
       ),
       {
         operation_name: 'deleteBudget',
@@ -477,13 +477,13 @@ describe('stock catalog gateway', () => {
       },
     ).expect(200, { error: null, shared_user_budget_ids: null });
 
-    expect(planReader.readPlanByBudgetVersion).toHaveBeenCalledWith(
+    expect(budgetReader.readBudgetByVersion).toHaveBeenCalledWith(
       'user-1',
       'version-1',
     );
-    expect(planLifecycleService.deletePlan).toHaveBeenCalledWith({
+    expect(budgetLifecycleService.deleteBudget).toHaveBeenCalledWith({
       principalId: 'user-1',
-      planId: 'plan-1',
+      budgetId: 'plan-1',
       originDeviceId: 'device-1',
       idempotencyKey: 'request-1',
     });
@@ -496,7 +496,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'My Plan',
@@ -508,9 +508,9 @@ describe('stock catalog gateway', () => {
         ],
       }),
     };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn().mockResolvedValue({
-        planId: 'plan-1',
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn().mockResolvedValue({
+        budgetId: 'plan-1',
         budgetVersionId: 'version-1',
         name: 'My Plan',
         serverKnowledge: 2,
@@ -521,7 +521,7 @@ describe('stock catalog gateway', () => {
     };
 
     const response = await stockRequest(
-      app(catalogReader, undefined, planReader),
+      app(catalogReader, undefined, budgetReader),
       initialUserRequest(),
     ).expect(200);
 
@@ -556,12 +556,12 @@ describe('stock catalog gateway', () => {
         memberships: [],
       }),
     };
-    const planReader: BudgetVersionPlanReader = {
-      readPlanByBudgetVersion: vi.fn(),
+    const budgetReader: BudgetVersionReader = {
+      readBudgetByVersion: vi.fn(),
     };
 
     const response = await stockRequest(
-      app(catalogReader, undefined, planReader),
+      app(catalogReader, undefined, budgetReader),
       initialUserRequest(),
     ).expect(200);
     expect(response.body).toMatchObject({
@@ -579,7 +579,7 @@ describe('stock catalog gateway', () => {
     });
     expect(response.body).not.toHaveProperty('user_budget');
     expect(response.body).not.toHaveProperty('budget_version');
-    expect(planReader.readPlanByBudgetVersion).not.toHaveBeenCalled();
+    expect(budgetReader.readBudgetByVersion).not.toHaveBeenCalled();
   });
 
   test('projects the captured family envelope from live memberships', async () => {
@@ -589,7 +589,7 @@ describe('stock catalog gateway', () => {
         memberships: [
           {
             id: 'membership-1',
-            planId: 'plan-1',
+            budgetId: 'plan-1',
             budgetVersionId: 'version-1',
             principalId: 'user-1',
             name: 'My Plan',

@@ -17,13 +17,13 @@ async function capturePostError(promise: Promise<unknown>) {
   }
 }
 
-describe('semantic plan HTTP boundary', () => {
+describe('semantic budget HTTP boundary', () => {
   beforeEach(() => mockedFetch.mockReset());
 
   it('sends authentication, device identity, and idempotency headers', async () => {
     mockedFetch.mockResolvedValue(
       new Response(
-        JSON.stringify({ status: 'ok', data: { budget_id: 'plan-1' } }),
+        JSON.stringify({ status: 'ok', data: { budget_id: 'budget-1' } }),
         { status: 201 },
       ),
     );
@@ -34,15 +34,15 @@ describe('semantic plan HTTP boundary', () => {
     });
 
     await expect(
-      request('plans', {
+      request('budgets', {
         method: 'POST',
         body: { name: 'Plan' },
         idempotencyKey: 'command-1',
       }),
-    ).resolves.toEqual({ budget_id: 'plan-1' });
+    ).resolves.toEqual({ budget_id: 'budget-1' });
 
     expect(mockedFetch).toHaveBeenCalledWith(
-      new URL('https://budget.test/semantic/v1/plans'),
+      new URL('https://budget.test/semantic/v1/budgets'),
       expect.objectContaining({
         method: 'POST',
         body: JSON.stringify({ name: 'Plan' }),
@@ -69,7 +69,7 @@ describe('semantic plan HTTP boundary', () => {
     });
 
     const error = await capturePostError(
-      request('plans', {
+      request('budgets', {
         method: 'POST',
         idempotencyKey: 'reused',
       }),

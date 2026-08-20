@@ -1,15 +1,15 @@
 import type {
   AuthenticatedPrincipal,
   CatalogReader,
-  CreatePlanCommand,
-  PlanCreator,
-  PlanReader,
+  CreateBudgetCommand,
+  BudgetCreator,
+  BudgetReader,
 } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
-import { createSemanticPlanHandlers } from './plan-api';
-import { createPlanCreationService } from './plan-creation-service';
+import { createSemanticBudgetHandlers } from './budget-api';
+import { createBudgetCreationService } from './budget-creation-service';
 
 const principal: AuthenticatedPrincipal = {
   id: 'principal-1',
@@ -20,10 +20,10 @@ const principal: AuthenticatedPrincipal = {
 
 describe('semantic plan API', () => {
   test('reads only an authenticated principal plan snapshot', async () => {
-    const planCreator: PlanCreator = { createPlan: vi.fn() };
-    const planReader: PlanReader = {
-      readPlan: vi.fn().mockResolvedValue({
-        planId: 'plan-1',
+    const budgetCreator: BudgetCreator = { createBudget: vi.fn() };
+    const budgetReader: BudgetReader = {
+      readBudget: vi.fn().mockResolvedValue({
+        budgetId: 'plan-1',
         budgetVersionId: 'version-1',
         name: 'Plan',
         serverKnowledge: 2,
@@ -32,31 +32,34 @@ describe('semantic plan API', () => {
         entities: [],
       }),
     };
-    const app = createApp(planCreator, undefined, planReader);
+    const app = createApp(budgetCreator, undefined, budgetReader);
     await request(app)
-      .get('/semantic/v1/plans/plan-1')
+      .get('/semantic/v1/budgets/plan-1')
       .set('x-actual-token', 'actual-session')
       .expect(200);
-    expect(planReader.readPlan).toHaveBeenCalledWith('principal-1', 'plan-1');
+    expect(budgetReader.readBudget).toHaveBeenCalledWith(
+      'principal-1',
+      'plan-1',
+    );
   });
 
   test('creates the complete PLAN-001 bootstrap for the authenticated principal', async () => {
-    let command: CreatePlanCommand | undefined;
-    const planCreator: PlanCreator = {
-      createPlan: vi.fn(async value => {
+    let command: CreateBudgetCommand | undefined;
+    const budgetCreator: BudgetCreator = {
+      createBudget: vi.fn(async value => {
         command = value;
         return {
           replayed: false,
           catalogServerKnowledge: 8,
           budgetServerKnowledge: 1,
-          response: value.response,
+          budget: value.receipt,
         };
       }),
     };
-    const app = createApp(planCreator);
+    const app = createApp(budgetCreator);
 
     await request(app)
-      .post('/semantic/v1/plans')
+      .post('/semantic/v1/budgets')
       .set('x-actual-token', 'actual-session')
       .set('x-semantic-device-id', 'web-device-1')
       .set('idempotency-key', 'request-1')
@@ -77,7 +80,7 @@ describe('semantic plan API', () => {
       });
 
     expect(command).toMatchObject({
-      planId: 'id-1',
+      budgetId: 'id-1',
       budgetVersionId: 'id-2',
       membershipId: 'id-3',
       principalId: 'principal-1',
@@ -100,8 +103,8 @@ describe('semantic plan API', () => {
   });
 
   test('requires authentication, device identity, idempotency, and formats', async () => {
-    const planCreator: PlanCreator = { createPlan: vi.fn() };
-    const app = createApp(planCreator, token => {
+    const budgetCreator: BudgetCreator = { createBudget: vi.fn() };
+    const app = createApp(budgetCreator, token => {
       if (!token) {
         throw new Error('unexpected authentication error in fixture');
       }
@@ -109,23 +112,23 @@ describe('semantic plan API', () => {
     });
 
     await request(app)
-      .post('/semantic/v1/plans')
+      .post('/semantic/v1/budgets')
       .set('x-actual-token', 'actual-session')
       .send({ name: 'Plan' })
       .expect(400, {
         status: 'error',
-        reason: 'invalid-plan-creation-request',
+        reason: 'invalid-budget-creation-request',
       });
-    expect(planCreator.createPlan).not.toHaveBeenCalled();
+    expect(budgetCreator.createBudget).not.toHaveBeenCalled();
   });
 });
 
 function createApp(
-  planCreator: PlanCreator,
+  budgetCreator: BudgetCreator,
   resolvePrincipal:
     | ((sessionToken: string) => AuthenticatedPrincipal)
     | undefined = () => principal,
-  planReader: PlanReader = { readPlan: vi.fn().mockResolvedValue(null) },
+  budgetReader: BudgetReader = { readBudget: vi.fn().mockResolvedValue(null) },
 ): express.Express {
   let nextId = 0;
   const catalogReader: CatalogReader = {
@@ -138,17 +141,17 @@ function createApp(
     }),
   };
   const app = express();
-  const planCreationService = createPlanCreationService({
+  const budgetCreationService = createBudgetCreationService({
     catalogReader,
-    planCreator,
+    budgetCreator,
     allocateId: () => `id-${++nextId}`,
     now: () => new Date('2026-08-16T12:00:00.000Z'),
   });
   app.use(
     '/semantic/v1',
-    createSemanticPlanHandlers({
-      planCreationService,
-      planReader,
+    createSemanticBudgetHandlers({
+      budgetCreationService,
+      budgetReader,
       resolvePrincipal: resolvePrincipal ?? (() => principal),
     }),
   );

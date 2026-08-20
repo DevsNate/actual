@@ -1,68 +1,75 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import type {
-  PlanLifecycleResult,
-  PlanLifecycleWriter,
+  BudgetLifecycleResult,
+  BudgetLifecycleWriter,
 } from '@actual-app/semantic-core';
 
 type Context = {
   principalId: string;
-  planId: string;
+  budgetId: string;
   originDeviceId: string;
   idempotencyKey: string;
   catalogDeviceKnowledge?: { starting: number; ending: number };
 };
 
-export type PlanLifecycleService = {
-  renamePlan(
+export type BudgetLifecycleService = {
+  renameBudget(
     context: Context & {
       name: string;
       budgetDeviceKnowledge?: { starting: number; ending: number };
     },
-  ): Promise<PlanLifecycleResult>;
-  deletePlan(context: Context): Promise<PlanLifecycleResult>;
+  ): Promise<BudgetLifecycleResult>;
+  deleteBudget(context: Context): Promise<BudgetLifecycleResult>;
 };
 
-export function createPlanLifecycleService({
-  planLifecycleWriter,
+export function createBudgetLifecycleService({
+  budgetLifecycleWriter,
   allocateId = randomUUID,
 }: {
-  planLifecycleWriter: PlanLifecycleWriter;
+  budgetLifecycleWriter: BudgetLifecycleWriter;
   allocateId?: () => string;
-}): PlanLifecycleService {
+}): BudgetLifecycleService {
   return {
-    renamePlan(context) {
-      const response = { budget_id: context.planId, name: context.name };
-      return planLifecycleWriter.renamePlan({
+    renameBudget(context) {
+      const receipt = {
+        budgetId: context.budgetId,
+        kind: 'renamed' as const,
+        name: context.name,
+      };
+      return budgetLifecycleWriter.renameBudget({
         catalogChangeSetId: allocateId(),
         budgetChangeSetId: allocateId(),
         principalId: context.principalId,
-        planId: context.planId,
+        budgetId: context.budgetId,
         originDeviceId: context.originDeviceId,
         schemaVersion: 1,
         idempotencyKey: context.idempotencyKey,
-        payloadDigest: digest('rename-plan', context, {
+        payloadDigest: digest('rename-budget', context, {
           name: context.name,
         }),
         newName: context.name,
         catalogDeviceKnowledge: context.catalogDeviceKnowledge,
         budgetDeviceKnowledge: context.budgetDeviceKnowledge,
-        response,
+        receipt,
       });
     },
 
-    deletePlan(context) {
-      const response = { budget_id: context.planId, deleted: true };
-      return planLifecycleWriter.deletePlan({
+    deleteBudget(context) {
+      const receipt = {
+        budgetId: context.budgetId,
+        kind: 'deleted' as const,
+      };
+      return budgetLifecycleWriter.deleteBudget({
         catalogChangeSetId: allocateId(),
         principalId: context.principalId,
-        planId: context.planId,
+        budgetId: context.budgetId,
         originDeviceId: context.originDeviceId,
         schemaVersion: 1,
         idempotencyKey: context.idempotencyKey,
-        payloadDigest: digest('delete-plan', context, {}),
+        payloadDigest: digest('delete-budget', context, {}),
         catalogDeviceKnowledge: context.catalogDeviceKnowledge,
-        response,
+        receipt,
       });
     },
   };
@@ -70,7 +77,7 @@ export function createPlanLifecycleService({
 
 function digest(
   commandKind: string,
-  context: Pick<Context, 'principalId' | 'planId'>,
+  context: Pick<Context, 'principalId' | 'budgetId'>,
   payload: Readonly<Record<string, unknown>>,
 ) {
   return createHash('sha256')
@@ -78,7 +85,7 @@ function digest(
       JSON.stringify({
         commandKind,
         principalId: context.principalId,
-        planId: context.planId,
+        budgetId: context.budgetId,
         payload,
       }),
     )

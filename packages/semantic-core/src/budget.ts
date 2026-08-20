@@ -1,6 +1,6 @@
 import type { PrincipalId } from './auth';
 
-export type PlanEntity = {
+export type BudgetEntity = {
   entityKind: string;
   entityId: string;
   isTombstone: boolean;
@@ -9,9 +9,9 @@ export type PlanEntity = {
   lastServerKnowledge?: number;
 };
 
-export type PlanChangeSetCommand = {
+export type BudgetChangeSetCommand = {
   changeSetId: string;
-  planId: string;
+  budgetId: string;
   originDeviceId: string;
   startingDeviceKnowledge: number;
   endingDeviceKnowledge: number;
@@ -20,23 +20,25 @@ export type PlanChangeSetCommand = {
   schemaVersion: number;
   idempotencyKey: string;
   payloadDigest: string;
-  changes: readonly PlanEntity[];
+  changes: readonly BudgetEntity[];
   response: Readonly<Record<string, unknown>>;
 };
 
-export type PlanChangeSetResult = {
+export type BudgetChangeSetResult = {
   replayed: boolean;
   serverKnowledge: number;
   endingDeviceKnowledge: number;
   response: Readonly<Record<string, unknown>>;
 };
 
-export type PlanChangeWriter = {
-  commitChangeSet(command: PlanChangeSetCommand): Promise<PlanChangeSetResult>;
+export type BudgetChangeWriter = {
+  commitChangeSet(
+    command: BudgetChangeSetCommand,
+  ): Promise<BudgetChangeSetResult>;
 };
 
-export type PlanDeviceAcknowledgement = {
-  planId: string;
+export type BudgetDeviceAcknowledgement = {
+  budgetId: string;
   originDeviceId: string;
   startingDeviceKnowledge: number;
   endingDeviceKnowledge: number;
@@ -46,16 +48,16 @@ export type PlanDeviceAcknowledgement = {
   response: Readonly<Record<string, unknown>>;
 };
 
-export type PlanDeviceAcknowledgementWriter = {
+export type BudgetDeviceAcknowledgementWriter = {
   acknowledgeDevice(
-    command: PlanDeviceAcknowledgement,
-  ): Promise<PlanChangeSetResult>;
+    command: BudgetDeviceAcknowledgement,
+  ): Promise<BudgetChangeSetResult>;
 };
 
-export type CreatePlanCommand = {
+export type CreateBudgetCommand = {
   catalogChangeSetId: string;
   budgetChangeSetId: string;
-  planId: string;
+  budgetId: string;
   budgetVersionId: string;
   membershipId: string;
   principalId: PrincipalId;
@@ -68,41 +70,46 @@ export type CreatePlanCommand = {
   permissions: number;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
-  entities: readonly PlanEntity[];
-  response: Readonly<Record<string, unknown>>;
+  entities: readonly BudgetEntity[];
+  receipt: CreatedBudget;
 };
 
-export type CreatePlanResult = {
+export type CreatedBudget = {
+  budgetId: string;
+  budgetVersionId: string;
+};
+
+export type CreateBudgetResult = {
   replayed: boolean;
   catalogServerKnowledge: number;
   budgetServerKnowledge: number;
-  response: Readonly<Record<string, unknown>>;
+  budget: CreatedBudget;
 };
 
-export type PlanCreator = {
-  createPlan(command: CreatePlanCommand): Promise<CreatePlanResult>;
+export type BudgetCreator = {
+  createBudget(command: CreateBudgetCommand): Promise<CreateBudgetResult>;
 };
 
-export type PlanSnapshot = {
-  planId: string;
+export type BudgetSnapshot = {
+  budgetId: string;
   budgetVersionId: string;
   name: string;
   serverKnowledge: number;
   currencyFormat: Readonly<Record<string, unknown>>;
   dateFormat: Readonly<Record<string, unknown>>;
-  entities: readonly PlanEntity[];
+  entities: readonly BudgetEntity[];
 };
 
-export type PlanReader = {
-  readPlan(
+export type BudgetReader = {
+  readBudget(
     principalId: PrincipalId,
-    planId: string,
-  ): Promise<PlanSnapshot | null>;
+    budgetId: string,
+  ): Promise<BudgetSnapshot | null>;
 };
 
-export type BudgetVersionPlanReader = {
-  readPlanByBudgetVersion(
+export type BudgetVersionReader = {
+  readBudgetByVersion(
     principalId: PrincipalId,
     budgetVersionId: string,
-  ): Promise<PlanSnapshot | null>;
+  ): Promise<BudgetSnapshot | null>;
 };

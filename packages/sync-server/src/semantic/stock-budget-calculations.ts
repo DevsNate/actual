@@ -1,6 +1,6 @@
-import type { PlanEntity, PlanSnapshot } from '@actual-app/semantic-core';
+import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-export type StockFreshPlanCalculations = {
+export type StockFreshBudgetCalculations = {
   be_monthly_budget_calculations: readonly Readonly<Record<string, unknown>>[];
   be_monthly_subcategory_budget_calculations: readonly Readonly<
     Record<string, unknown>
@@ -18,10 +18,10 @@ const calculationSensitiveKinds = new Set([
   'be_transactions',
 ]);
 
-export function projectStockFreshPlanCalculations(
-  snapshot: PlanSnapshot,
-): StockFreshPlanCalculations {
-  assertPristinePlan(snapshot.entities);
+export function projectStockFreshBudgetCalculations(
+  snapshot: BudgetSnapshot,
+): StockFreshBudgetCalculations {
+  assertPristineBudget(snapshot.entities);
 
   const monthlyBudgets = entitiesOfKind(
     snapshot.entities,
@@ -47,27 +47,29 @@ export function projectStockFreshPlanCalculations(
   };
 }
 
-function assertPristinePlan(entities: readonly PlanEntity[]): void {
+function assertPristineBudget(entities: readonly BudgetEntity[]): void {
   for (const entity of entities) {
     if (entity.isTombstone) {
-      throw new Error('Fresh-plan calculations do not accept tombstones');
+      throw new Error('Fresh-budget calculations do not accept tombstones');
     }
     if (calculationSensitiveKinds.has(entity.entityKind)) {
       throw new Error(
-        `Fresh-plan calculations do not support ${entity.entityKind}`,
+        `Fresh-budget calculations do not support ${entity.entityKind}`,
       );
     }
     if (
       entity.entityKind === 'be_monthly_subcategory_budgets' &&
       entity.payload.budgeted !== 0
     ) {
-      throw new Error('Fresh-plan calculations require zero budgeted amounts');
+      throw new Error(
+        'Fresh-budget calculations require zero budgeted amounts',
+      );
     }
   }
 }
 
 function projectMonthlyBudget(
-  entity: PlanEntity,
+  entity: BudgetEntity,
 ): Readonly<Record<string, unknown>> {
   const id = replaceIdentityPrefix(entity.entityId, 'mb/', 'mbc/');
   return {
@@ -96,7 +98,7 @@ function projectMonthlyBudget(
 }
 
 function projectMonthlyCategoryBudget(
-  entity: PlanEntity,
+  entity: BudgetEntity,
   monthlyBudgetIds: ReadonlySet<string>,
 ): Readonly<Record<string, unknown>> {
   const monthlyBudgetId = requireString(
@@ -153,9 +155,9 @@ function projectMonthlyCategoryBudget(
 }
 
 function entitiesOfKind(
-  entities: readonly PlanEntity[],
+  entities: readonly BudgetEntity[],
   entityKind: string,
-): readonly PlanEntity[] {
+): readonly BudgetEntity[] {
   return entities
     .filter(entity => entity.entityKind === entityKind)
     .sort((left, right) => left.entityId.localeCompare(right.entityId));
@@ -174,7 +176,7 @@ function replaceIdentityPrefix(
 
 function requireString(value: unknown, field: string): string {
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Fresh-plan calculation requires ${field}`);
+    throw new Error(`Fresh-budget calculation requires ${field}`);
   }
   return value;
 }

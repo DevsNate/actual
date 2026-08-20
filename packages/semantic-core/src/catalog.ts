@@ -1,11 +1,11 @@
 import type { PrincipalId } from './auth';
 
-export type PlanId = string;
+export type BudgetId = string;
 export type BudgetVersionId = string;
 
-export type PlanMembership = {
+export type BudgetMembership = {
   id: string;
-  planId: PlanId;
+  budgetId: BudgetId;
   budgetVersionId: BudgetVersionId;
   principalId: PrincipalId;
   name: string;
@@ -22,7 +22,7 @@ export type CatalogKnowledge = {
 
 export type CatalogSnapshot = {
   knowledge: CatalogKnowledge;
-  memberships: readonly PlanMembership[];
+  memberships: readonly BudgetMembership[];
 };
 
 export type CatalogReader = {

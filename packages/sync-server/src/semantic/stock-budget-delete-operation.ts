@@ -1,21 +1,21 @@
 import type {
-  BudgetVersionPlanReader,
+  BudgetVersionReader,
   CatalogReader,
 } from '@actual-app/semantic-core';
 
-import type { PlanLifecycleService } from './plan-lifecycle-service';
+import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import { operationError, parseRequestData } from './stock-operation';
 import type {
   StockOperationContext,
   StockOperationResponse,
 } from './stock-operation';
 
-export async function handleStockPlanDelete(
+export async function handleStockBudgetDelete(
   context: StockOperationContext,
   dependencies: {
     catalogReader: CatalogReader;
-    planReader: BudgetVersionPlanReader;
-    planLifecycleService: PlanLifecycleService;
+    budgetReader: BudgetVersionReader;
+    budgetLifecycleService: BudgetLifecycleService;
   },
 ): Promise<StockOperationResponse> {
   const request = parseRequestData(context.requestData);
@@ -38,16 +38,16 @@ export async function handleStockPlanDelete(
   if (!membership) {
     return operationError(403, 'user_does_not_have_write_permissions');
   }
-  const snapshot = await dependencies.planReader.readPlanByBudgetVersion(
+  const snapshot = await dependencies.budgetReader.readBudgetByVersion(
     context.principal.id,
     request.budget_version_id,
   );
   if (!snapshot && !membership.isTombstone) {
     return operationError(403, 'user_does_not_have_write_permissions');
   }
-  await dependencies.planLifecycleService.deletePlan({
+  await dependencies.budgetLifecycleService.deleteBudget({
     principalId: context.principal.id,
-    planId: membership.planId,
+    budgetId: membership.budgetId,
     originDeviceId: context.deviceId,
     idempotencyKey: context.clientRequestId,
   });

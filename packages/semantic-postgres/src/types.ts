@@ -1,30 +1,30 @@
 import type {
   CatalogCommand,
   CatalogCommandResult,
-  CreatePlanCommand,
-  CreatePlanResult,
-  PlanChangeSetCommand,
-  PlanChangeSetResult,
-  PlanEntity,
+  CreateBudgetCommand,
+  CreateBudgetResult,
+  BudgetChangeSetCommand,
+  BudgetChangeSetResult,
+  BudgetEntity,
 } from '@actual-app/semantic-core';
 
 export type {
   CatalogCommand,
   CatalogCommandResult,
-  CreatePlanCommand,
-  CreatePlanResult,
-  PlanChangeSetCommand,
-  PlanChangeSetResult,
+  CreateBudgetCommand,
+  CreateBudgetResult,
+  BudgetChangeSetCommand,
+  BudgetChangeSetResult,
 };
 
-export type CommitChangeSetInput = PlanChangeSetCommand;
+export type CommitChangeSetInput = BudgetChangeSetCommand;
 
-export type CommitChangeSetResult = PlanChangeSetResult;
+export type CommitChangeSetResult = BudgetChangeSetResult;
 
-export type EntityChangeInput = PlanEntity;
+export type EntityChangeInput = BudgetEntity;
 
-export type SeedPlanInput = {
-  planId: string;
+export type SeedBudgetInput = {
+  budgetId: string;
   budgetVersionId: string;
   membershipId: string;
   principalId: string;

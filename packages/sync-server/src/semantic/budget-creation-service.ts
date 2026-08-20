@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 import type {
   CatalogReader,
-  CreatePlanCommand,
-  CreatePlanResult,
-  PlanCreator,
+  CreateBudgetCommand,
+  CreateBudgetResult,
+  BudgetCreator,
 } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
-export type CreatePlanInput = {
+export type CreateBudgetInput = {
   principalId: string;
   originDeviceId: string;
   idempotencyKey: string;
@@ -17,43 +17,40 @@ export type CreatePlanInput = {
   dateFormat: Readonly<Record<string, unknown>>;
 };
 
-export type PlanCreationService = {
-  createPlan(input: CreatePlanInput): Promise<CreatePlanResult>;
+export type BudgetCreationService = {
+  createBudget(input: CreateBudgetInput): Promise<CreateBudgetResult>;
 };
 
 type Dependencies = {
   catalogReader: CatalogReader;
-  planCreator: PlanCreator;
+  budgetCreator: BudgetCreator;
   allocateId(): string;
   now(): Date;
 };
 
-export function createPlanCreationService(
-  dependencies: Pick<Dependencies, 'catalogReader' | 'planCreator'> &
+export function createBudgetCreationService(
+  dependencies: Pick<Dependencies, 'catalogReader' | 'budgetCreator'> &
     Partial<Pick<Dependencies, 'allocateId' | 'now'>>,
-): PlanCreationService {
+): BudgetCreationService {
   const resolved: Dependencies = {
     allocateId: randomUUID,
     now: () => new Date(),
     ...dependencies,
   };
   return {
-    async createPlan(input) {
+    async createBudget(input) {
       const catalog = await resolved.catalogReader.readCatalog(
         input.principalId,
       );
-      const planId = resolved.allocateId();
+      const budgetId = resolved.allocateId();
       const budgetVersionId = resolved.allocateId();
       const membershipId = resolved.allocateId();
       const now = resolved.now();
-      const response = {
-        budget_id: planId,
-        budget_version_id: budgetVersionId,
-      };
-      const command: CreatePlanCommand = {
+      const receipt = { budgetId, budgetVersionId };
+      const command: CreateBudgetCommand = {
         catalogChangeSetId: resolved.allocateId(),
         budgetChangeSetId: resolved.allocateId(),
-        planId,
+        budgetId,
         budgetVersionId,
         membershipId,
         principalId: input.principalId,
@@ -67,8 +64,8 @@ export function createPlanCreationService(
         permissions: 1,
         currencyFormat: input.currencyFormat,
         dateFormat: input.dateFormat,
-        entities: buildStockPlanBootstrap({
-          planId,
+        entities: buildStockBudgetBootstrap({
+          budgetId,
           budgetVersionId,
           principalId: input.principalId,
           name: input.name,
@@ -78,18 +75,18 @@ export function createPlanCreationService(
           createdAtMilliseconds: now.getTime(),
           allocateId: () => resolved.allocateId(),
         }),
-        response,
+        receipt,
       };
-      return resolved.planCreator.createPlan(command);
+      return resolved.budgetCreator.createBudget(command);
     },
   };
 }
 
-function digest(input: CreatePlanInput) {
+function digest(input: CreateBudgetInput) {
   return createHash('sha256')
     .update(
       JSON.stringify({
-        commandKind: 'create-plan',
+        commandKind: 'create-budget',
         principalId: input.principalId,
         name: input.name,
         currencyFormat: input.currencyFormat,

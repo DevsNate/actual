@@ -2,11 +2,11 @@ import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import type {
-  BudgetVersionPlanReader,
-  PlanChangeSetCommand,
-  PlanChangeWriter,
-  PlanDeviceAcknowledgementWriter,
-  PlanSnapshot,
+  BudgetVersionReader,
+  BudgetChangeSetCommand,
+  BudgetChangeWriter,
+  BudgetDeviceAcknowledgementWriter,
+  BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
 import { parseStockAccountRenameDelta } from './stock-account-rename';
@@ -30,11 +30,11 @@ import type {
 } from './stock-operation';
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
 
-export type StockBudgetChangeWriter = PlanChangeWriter &
-  PlanDeviceAcknowledgementWriter;
+export type StockBudgetChangeWriter = BudgetChangeWriter &
+  BudgetDeviceAcknowledgementWriter;
 
 type StockBudgetSyncDependencies = {
-  planReader: BudgetVersionPlanReader;
+  budgetReader: BudgetVersionReader;
   changeWriter: StockBudgetChangeWriter;
 };
 
@@ -47,7 +47,7 @@ export async function handleStockBudgetSync(
     return operationError(400, 'invalid_budget_request');
   }
 
-  const snapshot = await dependencies.planReader.readPlanByBudgetVersion(
+  const snapshot = await dependencies.budgetReader.readBudgetByVersion(
     context.principal.id,
     syncRequest.budgetVersionId,
   );
@@ -102,7 +102,7 @@ export async function handleStockBudgetSync(
   }
 
   if (
-    parsePlanRenameConvergence(syncRequest.changedEntities, snapshot) &&
+    parseBudgetRenameConvergence(syncRequest.changedEntities, snapshot) &&
     syncRequest.endingDeviceKnowledge > syncRequest.startingDeviceKnowledge &&
     syncRequest.deviceKnowledgeOfServer === snapshot.serverKnowledge - 1
   ) {
@@ -112,7 +112,7 @@ export async function handleStockBudgetSync(
       buildStockBudgetEmptyDelta(snapshot),
     );
     const acknowledged = await dependencies.changeWriter.acknowledgeDevice({
-      planId: snapshot.planId,
+      budgetId: snapshot.budgetId,
       originDeviceId: context.deviceId,
       startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
       endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
@@ -159,8 +159,8 @@ export async function handleStockBudgetSync(
     accountDelete?.changedEntities ?? buildStockBudgetEmptyDelta(snapshot),
   );
   const committed = await dependencies.changeWriter.commitChangeSet({
-    changeSetId: `stock-budget:${snapshot.planId}:${context.clientRequestId}`,
-    planId: snapshot.planId,
+    changeSetId: `stock-budget:${snapshot.budgetId}:${context.clientRequestId}`,
+    budgetId: snapshot.budgetId,
     originDeviceId: context.deviceId,
     startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
     endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
@@ -231,9 +231,9 @@ function parseBudgetSyncRequest(value: string): BudgetSyncRequest | null {
 
 function parseOpenedBudgetDelta(
   changedEntities: Record<string, unknown>,
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
   principalId: string,
-): PlanChangeSetCommand['changes'] | null {
+): BudgetChangeSetCommand['changes'] | null {
   if (
     !hasExactKeys(changedEntities, [
       'be_monthly_budgets',
@@ -319,16 +319,16 @@ function parseOpenedBudgetDelta(
   ];
 }
 
-function parsePlanRenameConvergence(
+function parseBudgetRenameConvergence(
   changedEntities: Record<string, unknown>,
-  snapshot: PlanSnapshot,
+  snapshot: BudgetSnapshot,
 ): boolean {
   if (!hasExactKeys(changedEntities, ['be_budget'])) {
     return false;
   }
   const outgoing = changedEntities.be_budget;
   const current = snapshot.entities.find(
-    (entity) =>
+    entity =>
       entity.entityKind === 'be_budget' &&
       entity.entityId === snapshot.budgetVersionId &&
       !entity.isTombstone,
@@ -359,14 +359,14 @@ function successResponse(
   };
 }
 
-function currentBootstrapMonth(snapshot: PlanSnapshot): string {
+function currentBootstrapMonth(snapshot: BudgetSnapshot): string {
   const months = snapshot.entities
     .filter(
-      (entity) =>
+      entity =>
         entity.entityKind === 'be_monthly_budgets' &&
         entity.payload.bootstrapRole !== 'opened-budget-prior-month',
     )
-    .map((entity) => entity.payload.month)
+    .map(entity => entity.payload.month)
     .filter((month): month is string => typeof month === 'string')
     .sort();
   if (!months[0]) {

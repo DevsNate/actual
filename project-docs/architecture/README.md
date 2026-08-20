@@ -16,9 +16,10 @@ client compatibility boundary:
 5. [`evidence-gap-matrix.md`](evidence-gap-matrix.md)
 6. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
 7. [`ember-web-migration.md`](ember-web-migration.md) — superseded experiment
-8. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
+8. [`semantic-budget-lifecycle.md`](semantic-budget-lifecycle.md)
 9. [`semantic-docker-development.md`](semantic-docker-development.md)
 10. [`semantic-account-creation.md`](semantic-account-creation.md)
+11. [`semantic-postgres-contract-audit.md`](semantic-postgres-contract-audit.md)
 
 The `reference/` subdirectory contains repository-audit and promotion-planning
 records. Those documents preserve provenance and repository-boundary analysis,

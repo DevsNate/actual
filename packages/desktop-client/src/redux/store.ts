@@ -36,9 +36,9 @@ import {
   reducer as prefsSliceReducer,
 } from '#prefs/prefsSlice';
 import {
-  name as semanticPlansSliceName,
-  reducer as semanticPlansSliceReducer,
-} from '#semantic-plans/semanticPlansSlice';
+  name as semanticBudgetsSliceName,
+  reducer as semanticBudgetsSliceReducer,
+} from '#semantic-budgets/semanticBudgetsSlice';
 import {
   name as transactionsSliceName,
   reducer as transactionsSliceReducer,
@@ -56,7 +56,7 @@ const rootReducer = combineReducers({
   [modalsSliceName]: modalsSliceReducer,
   [notificationsSliceName]: notificationsSliceReducer,
   [prefsSliceName]: prefsSliceReducer,
-  [semanticPlansSliceName]: semanticPlansSliceReducer,
+  [semanticBudgetsSliceName]: semanticBudgetsSliceReducer,
   [transactionsSliceName]: transactionsSliceReducer,
   [usersSliceName]: usersSliceReducer,
 });

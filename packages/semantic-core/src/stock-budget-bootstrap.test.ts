@@ -1,9 +1,9 @@
-import { buildStockPlanBootstrap } from './stock-plan-bootstrap';
+import { buildStockBudgetBootstrap } from './stock-budget-bootstrap';
 
 describe('PLAN-001 stock plan bootstrap', () => {
   test('reproduces the admitted server bootstrap cardinalities and defaults', () => {
-    const entities = buildStockPlanBootstrap({
-      planId: 'plan-1',
+    const entities = buildStockBudgetBootstrap({
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       principalId: 'principal-1',
       name: 'Plan Create Trace',
@@ -49,8 +49,8 @@ describe('PLAN-001 stock plan bootstrap', () => {
 
   test('rejects malformed or impossible creation dates', () => {
     const create = (createdOn: string) =>
-      buildStockPlanBootstrap({
-        planId: 'plan-1',
+      buildStockBudgetBootstrap({
+        budgetId: 'plan-1',
         budgetVersionId: 'version-1',
         principalId: 'principal-1',
         name: 'Plan',

@@ -1,5 +1,5 @@
-import type { PlanEntity, PlanSnapshot } from '@actual-app/semantic-core';
-import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
+import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
+import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { projectStockEntity } from './stock-budget-projection';
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
@@ -78,11 +78,11 @@ describe('stock pristine account delete', () => {
   });
 });
 
-function fixture(): PlanSnapshot {
+function fixture(): BudgetSnapshot {
   let sequence = 0;
   const entities = [
-    ...buildStockPlanBootstrap({
-      planId: 'plan-1',
+    ...buildStockBudgetBootstrap({
+      budgetId: 'plan-1',
       budgetVersionId: 'version-1',
       principalId: 'principal-1',
       name: 'Plan',
@@ -102,7 +102,7 @@ function fixture(): PlanSnapshot {
   addAccount(entities, startingPayee, immediateIncome, '1', 123450, 0);
   addAccount(entities, startingPayee, immediateIncome, '2', 345670, 1);
   return {
-    planId: 'plan-1',
+    budgetId: 'plan-1',
     budgetVersionId: 'version-1',
     name: 'Plan',
     serverKnowledge: 37,
@@ -113,9 +113,9 @@ function fixture(): PlanSnapshot {
 }
 
 function addAccount(
-  entities: PlanEntity[],
-  startingPayee: PlanEntity,
-  immediateIncome: PlanEntity,
+  entities: BudgetEntity[],
+  startingPayee: BudgetEntity,
+  immediateIncome: BudgetEntity,
   suffix: string,
   amount: number,
   sortableIndex: number,
@@ -205,11 +205,15 @@ function addAccount(
   );
 }
 
-function tombstone(entity: PlanEntity): Readonly<Record<string, unknown>> {
+function tombstone(entity: BudgetEntity): Readonly<Record<string, unknown>> {
   return { ...projectStockEntity(entity), is_tombstone: true };
 }
 
-function find(snapshot: PlanSnapshot, kind: string, id: string): PlanEntity {
+function find(
+  snapshot: BudgetSnapshot,
+  kind: string,
+  id: string,
+): BudgetEntity {
   return snapshot.entities.find(
     entity => entity.entityKind === kind && entity.entityId === id,
   )!;
