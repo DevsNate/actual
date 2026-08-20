@@ -11,10 +11,12 @@ boundary:
 
 1. [`product-objective.md`](product-objective.md)
 2. [`selective-fork-decision.md`](selective-fork-decision.md)
-3. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
-4. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
-5. [`semantic-docker-development.md`](semantic-docker-development.md)
-6. [`semantic-account-creation.md`](semantic-account-creation.md)
+3. [`ember-web-migration.md`](ember-web-migration.md)
+4. [`evidence-gap-matrix.md`](evidence-gap-matrix.md)
+5. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
+6. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
+7. [`semantic-docker-development.md`](semantic-docker-development.md)
+8. [`semantic-account-creation.md`](semantic-account-creation.md)
 
 The `reference/` subdirectory contains repository-audit and promotion-planning
 records. Those documents preserve provenance and repository-boundary analysis,

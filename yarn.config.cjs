@@ -11,6 +11,11 @@ const { defineConfig } = require('@yarnpkg/types');
  * @param {import('@yarnpkg/types').Yarn.Constraints.Context} context
  */
 function enforceConsistentDependencies({ Yarn }) {
+  const independentToolchains = new Map([
+    // Ember 7's compiler plugins require Babel 7 while the React application
+    // has moved to Babel 8. Keep this exception scoped to the Ember workspace.
+    ['@babel/core', new Set(['@actual-app/ynab-web'])],
+  ]);
   /** @type {Map<string, Map<string, Array<import('@yarnpkg/types').Yarn.Constraints.Workspace>>>} */
   const dependencyVersions = new Map();
 
@@ -18,6 +23,8 @@ function enforceConsistentDependencies({ Yarn }) {
     for (const type of ['dependencies', 'devDependencies']) {
       for (const dep of Yarn.dependencies({ workspace, type })) {
         if (dep.range.startsWith('workspace:')) continue;
+        if (independentToolchains.get(dep.ident)?.has(workspace.ident))
+          continue;
 
         if (!dependencyVersions.has(dep.ident)) {
           dependencyVersions.set(dep.ident, new Map());

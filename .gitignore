@@ -37,6 +37,8 @@ packages/desktop-electron/loot-core
 packages/desktop-client/service-worker
 packages/plugins-service/dist
 packages/component-library/dist
+packages/ynab-web/dist
+packages/ynab-web/tmp
 packages/loot-core/lib-dist
 **/.tsbuildinfo
 packages/sync-server/coverage

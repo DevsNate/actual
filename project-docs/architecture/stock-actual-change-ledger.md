@@ -24,7 +24,7 @@ v26.8.1. The baseline commit is
 | ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger    |
 | ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                 |
 | ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services               |
-| ACTUAL-007 | React application shell                  | Keep and reshape   | admitted       | YNAB-compatible UI over semantic web API          |
+| ACTUAL-007 | React application shell                  | Replace gradually  | migrating      | Clean Ember UI over semantic web API              |
 | ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                          |
 | ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands    |
 | ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                     |
@@ -145,18 +145,30 @@ API` contains the expiry correction and first route integration.
 
 ### ACTUAL-007 — React application
 
-- **Disposition:** Keep and reshape.
+- **Disposition:** Retain during migration, then replace the budgeting UI.
 - **Stock locations:** `packages/desktop-client` and
   `packages/component-library`.
-- **Reason:** The open-source React foundation avoids recreating routing,
-  accessibility, localization, responsive behavior, and basic components.
-- **Replacement boundary:** The data layer calls the semantic web API. UI
-  workflows and appearance are recreated from captured stock behavior.
+- **Reason:** React remains useful as a working fallback and as a reference for
+  reusable accessibility, localization, theme, and asset infrastructure. The
+  deep current-Web inspection, however, established an Ember route/service/
+  editor organization that maps more directly to the evidence-backed final UI.
+- **Replacement boundary:** A clean Ember workspace calls the semantic Web API
+  and retained Actual authentication. It does not import React, CRDT, database,
+  stock-minified, or iOS-wire modules. React routes remain reachable only until
+  equivalent Ember vertical slices pass conformance.
 - **Portability correction:** The component-library theme documentation now
   shares the lowercase `src/themes` directory used by its CSS package exports.
   Stock tracked the documentation under `src/Themes`, which succeeds on a
   case-insensitive macOS checkout but breaks the Linux production build.
-- **Status:** admitted.
+- **Evidence:** Deep client inspection dated 2026-08-19 and
+  `project-docs/architecture/ember-web-migration.md`.
+- **Implementation:** `packages/ynab-web` provides an isolated Ember 7
+  workspace, strict semantic catalog parser, in-memory retained-session port,
+  semantic API service, plan routes, and a forbidden-import boundary test.
+- **Verification:** Package formatting/template lint, strict Ember typecheck,
+  browser unit tests, production build, and repository typecheck pass.
+- **Status:** migrating; the scaffold is implemented and React remains
+  unchanged as the fallback.
 
 ### ACTUAL-008 — Import, export, and backups
 

@@ -1,0 +1,21 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+}
+
+.app-shell {
+  margin: 0 auto;
+  max-width: 72rem;
+  padding: 2rem;
+}
+
+.plan-list ul {
+  display: grid;
+  gap: 0.75rem;
+  list-style: none;
+  padding: 0;
+}
