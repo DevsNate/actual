@@ -81,9 +81,13 @@ export async function handleStockCatalogSync(
     return { status: 200, body: result.response };
   }
 
+  const initialBootstrap =
+    syncRequest.startingDeviceKnowledge === 0 &&
+    syncRequest.deviceKnowledgeOfServer === 0;
   const changed =
+    initialBootstrap ||
     syncRequest.deviceKnowledgeOfServer <
-    catalog.knowledge.currentServerKnowledge;
+      catalog.knowledge.currentServerKnowledge;
   const memberships = changed ? catalog.memberships.map(projectMembership) : [];
   return {
     status: 200,

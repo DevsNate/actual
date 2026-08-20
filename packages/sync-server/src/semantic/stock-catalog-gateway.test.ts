@@ -191,6 +191,34 @@ describe('stock catalog gateway', () => {
     });
   });
 
+  test('bootstraps the principal when a new empty catalog is at knowledge zero', async () => {
+    const catalogReader: CatalogReader = {
+      readCatalog: vi.fn().mockResolvedValue({
+        knowledge: { principalId: 'user-1', currentServerKnowledge: 0 },
+        memberships: [],
+      }),
+    };
+
+    const response = await stockRequest(
+      app(catalogReader),
+      syncRequest({ device_knowledge_of_server: 0 }),
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 0,
+      changed_entities: {
+        ce_users: [
+          {
+            id: 'user-1',
+            email: 'person@example.com',
+          },
+        ],
+        ce_user_budgets: [],
+        ce_user_settings: [],
+      },
+    });
+  });
+
   test('durably acknowledges the captured one-time user setting write', async () => {
     const catalogReader: CatalogReader = {
       readCatalog: vi.fn().mockResolvedValue({
@@ -314,17 +342,37 @@ describe('stock catalog gateway', () => {
     });
   });
 
-  test('fails closed when initial-user data has no live readable plan', async () => {
+  test('boots the stock empty-plan picker without inventing a plan', async () => {
     const catalogReader: CatalogReader = {
       readCatalog: vi.fn().mockResolvedValue({
         knowledge: { principalId: 'user-1', currentServerKnowledge: 4 },
         memberships: [],
       }),
     };
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn(),
+    };
 
-    await stockRequest(app(catalogReader), initialUserRequest()).expect(409, {
-      error: { id: 'initial_budget_unavailable' },
+    const response = await stockRequest(
+      app(catalogReader, undefined, planReader),
+      initialUserRequest(),
+    ).expect(200);
+    expect(response.body).toMatchObject({
+      error: null,
+      session_token: 'session',
+      castle_user_jwt: '',
+      helpscout_user_hash: null,
+      user_help_access_initial_jwt: '',
+      user: {
+        id: 'user-1',
+        email: 'person@example.com',
+        first_name: 'Person',
+        required_privacy_policy_version: '4-26',
+      },
     });
+    expect(response.body).not.toHaveProperty('user_budget');
+    expect(response.body).not.toHaveProperty('budget_version');
+    expect(planReader.readPlanByBudgetVersion).not.toHaveBeenCalled();
   });
 
   test('projects the captured family envelope from live memberships', async () => {

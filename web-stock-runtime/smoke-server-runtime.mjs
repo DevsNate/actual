@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.STOCK_WEB_SMOKE_URL ?? 'http://127.0.0.1:5007';
+const expectEmptyPicker = process.env.STOCK_WEB_SMOKE_EMPTY === 'true';
 const runtimeRoot =
   process.env.ACTUAL_STOCK_WEB_RUNTIME_ROOT ??
   fileURLToPath(new URL('./vendor/current/', import.meta.url));
@@ -39,29 +40,31 @@ if (typeof sessionToken !== 'string' || !sessionToken) {
   throw new Error('Actual login did not return a session token');
 }
 
-const plan = await requestJson('/semantic/v1/plans', {
-  method: 'POST',
-  headers: {
-    'content-type': 'application/json',
-    'idempotency-key': 'stock-runtime-smoke-plan',
-    'x-actual-token': sessionToken,
-    'x-semantic-device-id': 'stock-runtime-smoke-device',
-  },
-  body: JSON.stringify({
-    name: 'Stock Runtime Smoke',
-    currency_format: {
-      iso_code: 'USD',
-      example_format: '123,456.78',
-      decimal_digits: 2,
-      decimal_separator: '.',
-      group_separator: ',',
-      currency_symbol: '$',
-      display_symbol: true,
-      symbol_first: true,
-    },
-    date_format: { format: 'MM/DD/YYYY' },
-  }),
-});
+const plan = expectEmptyPicker
+  ? null
+  : await requestJson('/semantic/v1/plans', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'idempotency-key': 'stock-runtime-smoke-plan',
+        'x-actual-token': sessionToken,
+        'x-semantic-device-id': 'stock-runtime-smoke-device',
+      },
+      body: JSON.stringify({
+        name: 'Stock Runtime Smoke',
+        currency_format: {
+          iso_code: 'USD',
+          example_format: '123,456.78',
+          decimal_digits: 2,
+          decimal_separator: '.',
+          group_separator: ',',
+          currency_symbol: '$',
+          display_symbol: true,
+          symbol_first: true,
+        },
+        date_format: { format: 'MM/DD/YYYY' },
+      }),
+    });
 
 const stockLogin = await fetch(`${baseUrl}/stock-web/login`, {
   method: 'POST',
@@ -160,6 +163,11 @@ if (browserPlanVisible) {
   await planLink.click({ force: true });
   await page.waitForTimeout(15000);
 }
+const emptyPickerVisible =
+  (await page.getByRole('button', { name: 'Create New Plan' }).count()) > 0;
+const browserBodyText = expectEmptyPicker
+  ? (await page.locator('body').innerText()).slice(0, 2000)
+  : '';
 const browserPath = new URL(page.url()).pathname;
 await browser.close();
 
@@ -175,10 +183,12 @@ const unexpectedResponses = nonOkResponses.filter(
 const assertions = {
   bootstrapHttp: bootstrap.response.status,
   loginHttp: login.response.status,
-  planHttp: plan.response.status,
+  planHttp: plan?.response.status ?? null,
   stockLoginHttp: stockLogin.status,
   shellHttp: shell.status,
-  planIdPresent: typeof plan.body.data?.budget_id === 'string',
+  planCreationMatchesMode: expectEmptyPicker
+    ? plan === null
+    : typeof plan?.body.data?.budget_id === 'string',
   projectOriginPresent: html.includes(baseUrl),
   capturedOriginAbsent: !html.includes(
     '"YNAB_SERVER_URL":"https://app.ynab.com"',
@@ -191,13 +201,20 @@ const assertions = {
   browserCalledInitialUser: catalogOperations.includes('getInitialUserData'),
   browserCalledCatalogSync: catalogOperations.includes('syncCatalogData'),
   browserCalledFamilySync: catalogOperations.includes('syncFamilyData'),
-  browserCalledBudgetSync: catalogOperations.includes('syncBudgetData'),
+  budgetSyncMatchesMode: expectEmptyPicker
+    ? !catalogOperations.includes('syncBudgetData')
+    : catalogOperations.includes('syncBudgetData'),
   browserCalledUser: firstPartyRequests.includes('/api/v2/user'),
   browserFirstPartyFailures: failedRequests.length,
   browserPageErrors: pageErrors.length,
   browserUnexpectedConsoleErrors: unexpectedConsoleErrors.length,
   browserUnexpectedResponses: unexpectedResponses.length,
-  browserPlanVisible,
+  browserPlanStateMatchesMode: expectEmptyPicker
+    ? emptyPickerVisible && !browserPlanVisible
+    : browserPlanVisible,
+  browserPathMatchesMode: expectEmptyPicker
+    ? browserPath.startsWith('/users/budgets')
+    : browserPath.endsWith('/budget'),
   browserPath,
   catalogOperations: [...new Set(catalogOperations)],
 };
@@ -212,6 +229,7 @@ if (
   throw new Error(
     `Stock runtime assertion failed: ${JSON.stringify({
       assertions,
+      browserBodyText,
       consoleErrors: unexpectedConsoleErrors.slice(0, 8),
       pageErrors: pageErrors.slice(0, 8),
       nonOkResponses: unexpectedResponses,

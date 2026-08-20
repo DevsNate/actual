@@ -38,7 +38,10 @@ export async function handleStockInitialUserData(
         left.id.localeCompare(right.id),
     )[0];
   if (!membership) {
-    return operationError(409, 'initial_budget_unavailable');
+    return {
+      status: 200,
+      body: initialUserBody(context),
+    };
   }
 
   const plan = await dependencies.planReader.readPlanByBudgetVersion(
@@ -52,12 +55,7 @@ export async function handleStockInitialUserData(
   return {
     status: 200,
     body: {
-      error: null,
-      session_token: context.sessionToken,
-      castle_user_jwt: '',
-      helpscout_user_hash: null,
-      user_help_access_initial_jwt: '',
-      user: projectStockUser(context.principal),
+      ...initialUserBody(context),
       user_budget: {
         id: membership.id,
         budget_id: membership.planId,
@@ -76,6 +74,17 @@ export async function handleStockInitialUserData(
         is_tombstone: false,
       },
     },
+  };
+}
+
+function initialUserBody(context: StockOperationContext) {
+  return {
+    error: null,
+    session_token: context.sessionToken,
+    castle_user_jwt: '',
+    helpscout_user_hash: null,
+    user_help_access_initial_jwt: '',
+    user: projectStockUser(context.principal),
   };
 }
 
