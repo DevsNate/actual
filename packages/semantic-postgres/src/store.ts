@@ -12,6 +12,7 @@ import type {
   CommitCanonicalOrdinaryTransactionMutation,
   CommitCanonicalPristineAccountDeletion,
   CommitCanonicalSplitTransactionMutation,
+  CommitCanonicalTransferMutation,
   CommitUnlinkedAccountCreation,
   CreateBudgetCommand,
   CreateBudgetResult,
@@ -21,6 +22,7 @@ import type { Pool, PoolClient } from 'pg';
 
 import { SemanticStoreError } from './errors';
 import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
+import { writeCanonicalTransferMutation } from './transfer-store';
 import type {
   CommitChangeSetInput,
   CommitChangeSetResult,
@@ -475,6 +477,17 @@ export class PostgresSemanticStore {
     return this.transact(client =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalSplitTransactionMutation(client, command),
+      ),
+    );
+  }
+
+  async commitTransferMutation(
+    command: CommitCanonicalTransferMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalTransferMutation(client, command),
       ),
     );
   }

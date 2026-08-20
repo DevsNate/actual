@@ -69,8 +69,16 @@ export function projectStockCheckingAccountCalculations(
         group => group.startingBalance.entityId === transaction.entityId,
       ) &&
       transaction.payload.payeeId !== balanceAdjustmentPayee.entityId &&
-      transaction.payload.subCategoryId !== splitCategory.entityId,
+      transaction.payload.subCategoryId !== splitCategory.entityId &&
+      transaction.payload.transferAccountId === null &&
+      transaction.payload.transferTransactionId === null,
   );
+  const transferTransactions = liveTransactions.filter(
+    transaction =>
+      typeof transaction.payload.transferAccountId === 'string' ||
+      typeof transaction.payload.transferTransactionId === 'string',
+  );
+  validateTransferCalculationState(transferTransactions, accounts);
   const balanceAdjustments = liveTransactions.filter(
     transaction =>
       transaction.payload.payeeId === balanceAdjustmentPayee.entityId,
@@ -502,8 +510,43 @@ function accountTotals(
     cleared,
     uncleared,
     count: rows.length,
-    warningCount: rows.some(row => row.payload.subCategoryId === null) ? 1 : 0,
+    warningCount: rows.some(
+      row =>
+        row.payload.subCategoryId === null &&
+        row.payload.transferAccountId === null,
+    )
+      ? 1
+      : 0,
   };
+}
+
+function validateTransferCalculationState(
+  transfers: readonly BudgetEntity[],
+  accounts: readonly BudgetEntity[],
+) {
+  const byId = new Map(transfers.map(item => [item.entityId, item]));
+  if (transfers.length % 2 !== 0) {
+    throw new Error('Transfers require complete reciprocal pairs');
+  }
+  for (const leg of transfers) {
+    const reciprocal = byId.get(String(leg.payload.transferTransactionId));
+    if (
+      !reciprocal ||
+      reciprocal === leg ||
+      !accounts.some(item => item.entityId === leg.payload.accountId) ||
+      leg.payload.transferAccountId !== reciprocal.payload.accountId ||
+      reciprocal.payload.transferAccountId !== leg.payload.accountId ||
+      reciprocal.payload.transferTransactionId !== leg.entityId ||
+      leg.payload.subCategoryId !== null ||
+      reciprocal.payload.subCategoryId !== null ||
+      leg.payload.date !== reciprocal.payload.date ||
+      leg.payload.memo !== reciprocal.payload.memo ||
+      !Number.isSafeInteger(leg.payload.amount) ||
+      leg.payload.amount !== -Number(reciprocal.payload.amount)
+    ) {
+      throw new Error('Unsupported reciprocal transfer calculation state');
+    }
+  }
 }
 
 function monthlyAccountCalculation(

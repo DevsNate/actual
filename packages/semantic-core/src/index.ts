@@ -6,3 +6,4 @@ export * from './category';
 export * from './catalog';
 export * from './split-transaction';
 export * from './transaction';
+export * from './transfer';

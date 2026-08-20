@@ -336,3 +336,6 @@ Migration 0010 cuts over SPLIT-001/002 into a typed split-parent transaction
 and ordered child-line table. Account impact remains on the parent, category
 impact remains on the children, and the stock `be_transaction_groups` envelope
 is not canonical storage.
+Migration 0011 cuts over TR-003/TR-004 into an atomic reciprocal transfer
+aggregate. Each leg retains its own identity and account impact while explicit
+reciprocal relationships remain typed canonical facts.

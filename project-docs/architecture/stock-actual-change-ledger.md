@@ -680,3 +680,23 @@ Copy this block for a new architectural delta:
   TypeScript, clean PostgreSQL create/replay/edit/delete readback, and the
   authenticated runtime migration suite.
 - **Status:** implemented.
+
+### ADD-017 — Canonical ordinary-transfer aggregate
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/transfer.ts`,
+  `packages/sync-server/src/semantic/stock-transfer.ts`,
+  `packages/semantic-postgres/src/transfer-store.ts`, and migration
+  `0011_canonical_transfer.sql`.
+- **Observed stock behavior:** TR-004 creates and edits two complete reciprocal
+  legs; TR-003 deletes both identities atomically and replay remains terminal.
+- **Fork behavior:** A strict stock adapter emits one typed pair command.
+  PostgreSQL commits both legs and the receipt atomically. Each account receives
+  its own leg while the pair has no category or uncategorized budget impact.
+- **Boundary:** Only the captured two-account ordinary lifecycle is admitted.
+  One-sided repair, credit-card policy, schedules, splits, categories, and
+  malformed reciprocal relationships fail closed.
+- **Verification:** Focused positive/adversarial adapter tests, strict
+  TypeScript, clean PostgreSQL create/replay/edit/delete readback, and the
+  authenticated eleven-migration runtime suite.
+- **Status:** implemented.

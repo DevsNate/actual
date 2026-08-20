@@ -1260,6 +1260,187 @@ integrationTest('PostgresSemanticStore integration', () => {
     });
   });
 
+  test('persists a reciprocal transfer with replay, pair edit, and deletion', async () => {
+    const budgetId = 'transfer-budget';
+    const deviceId = 'transfer-device';
+    await store.seedBudget({
+      budgetId,
+      budgetVersionId: 'transfer-version',
+      membershipId: 'transfer-membership',
+      principalId: 'transfer-principal',
+      name: 'Transfer budget',
+      permissions: 7,
+    });
+    const createAccount = async (
+      accountId: string,
+      payeeId: string,
+      balanceId: string,
+      expectedServerKnowledge: number,
+      sortOrder: number,
+    ) => {
+      await store.commitUnlinkedAccountCreation({
+        accountGroup: buildUnlinkedCheckingAccount({
+          budgetId,
+          accountId,
+          transferPayeeId: payeeId,
+          startingBalanceId: balanceId,
+          startingBalancePayeeId: 'transfer-starting-payee',
+          immediateIncomeCategoryId: 'transfer-income',
+          name: accountId,
+          openingBalance: 10000,
+          openingDate: '2026-08-16',
+          sortOrder,
+        }),
+        delivery: {
+          changeSetId: `change-${accountId}`,
+          budgetId,
+          originDeviceId: deviceId,
+          startingDeviceKnowledge: 0,
+          endingDeviceKnowledge: 0,
+          expectedServerKnowledge,
+          serverKnowledgeAdvance: 2,
+          schemaVersion: 44,
+          idempotencyKey: `request-${accountId}`,
+          payloadDigest: String(sortOrder + 1).repeat(64),
+          changes: [],
+          response: {},
+        },
+      });
+    };
+    await createAccount(
+      'transfer-checking',
+      'payee-checking',
+      'balance-checking',
+      0,
+      0,
+    );
+    await createAccount(
+      'transfer-savings',
+      'payee-savings',
+      'balance-savings',
+      2,
+      1,
+    );
+
+    const legs = (amount: number, memo: string) =>
+      [
+        {
+          id: 'transfer-out',
+          budgetId,
+          accountId: 'transfer-checking',
+          payeeId: 'payee-savings',
+          reciprocalAccountId: 'transfer-savings',
+          reciprocalTransactionId: 'transfer-in',
+          date: '2026-08-16',
+          amount: -amount,
+          memo,
+          cleared: 'Uncleared' as const,
+          accepted: true,
+        },
+        {
+          id: 'transfer-in',
+          budgetId,
+          accountId: 'transfer-savings',
+          payeeId: 'payee-checking',
+          reciprocalAccountId: 'transfer-checking',
+          reciprocalTransactionId: 'transfer-out',
+          date: '2026-08-16',
+          amount,
+          memo,
+          cleared: 'Cleared' as const,
+          accepted: true,
+        },
+      ] as const;
+    const create = {
+      mutation: { kind: 'create' as const, legs: legs(12340, 'Transfer 1') },
+      delivery: {
+        changeSetId: 'transfer-create-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 8,
+        expectedServerKnowledge: 4,
+        serverKnowledgeAdvance: 2 as const,
+        schemaVersion: 44,
+        idempotencyKey: 'transfer-create-request',
+        payloadDigest: '3'.repeat(64),
+        changes: [],
+        response: { accepted: true },
+      },
+    };
+    await expect(store.commitTransferMutation(create)).resolves.toMatchObject({
+      replayed: false,
+      serverKnowledge: 6,
+    });
+    await expect(store.commitTransferMutation(create)).resolves.toMatchObject({
+      replayed: true,
+      serverKnowledge: 6,
+    });
+    await store.commitTransferMutation({
+      mutation: {
+        kind: 'update',
+        budgetId,
+        legs: legs(23450, 'Transfer 2'),
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'transfer-update-change',
+        startingDeviceKnowledge: 8,
+        endingDeviceKnowledge: 10,
+        expectedServerKnowledge: 6,
+        idempotencyKey: 'transfer-update-request',
+        payloadDigest: '4'.repeat(64),
+      },
+    });
+    await store.commitTransferMutation({
+      mutation: {
+        kind: 'delete',
+        budgetId,
+        transactionIds: ['transfer-out', 'transfer-in'],
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'transfer-delete-change',
+        startingDeviceKnowledge: 10,
+        endingDeviceKnowledge: 18,
+        expectedServerKnowledge: 8,
+        idempotencyKey: 'transfer-delete-request',
+        payloadDigest: '5'.repeat(64),
+      },
+    });
+    const terminal = await pool.query(
+      `SELECT transaction_id, amount_milliunits::text AS amount, memo,
+              is_tombstone, payee_id, transfer_account_id,
+              reciprocal_transaction_id, transaction_kind
+       FROM semantic_transactions
+       WHERE budget_id = $1 AND transaction_id IN ('transfer-out', 'transfer-in')
+       ORDER BY transaction_id`,
+      [budgetId],
+    );
+    expect(terminal.rows).toEqual([
+      {
+        transaction_id: 'transfer-in',
+        amount: '23450',
+        memo: 'Transfer 2',
+        is_tombstone: true,
+        payee_id: null,
+        transfer_account_id: null,
+        reciprocal_transaction_id: null,
+        transaction_kind: 'transfer',
+      },
+      {
+        transaction_id: 'transfer-out',
+        amount: '-23450',
+        memo: 'Transfer 2',
+        is_tombstone: true,
+        payee_id: null,
+        transfer_account_id: null,
+        reciprocal_transaction_id: null,
+        transaction_kind: 'transfer',
+      },
+    ]);
+  });
+
   test('commits and exactly replays an isolated catalog command', async () => {
     const operation = {
       changeSetId: 'catalog-change-integration',
