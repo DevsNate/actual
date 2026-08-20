@@ -5,6 +5,31 @@ capture and `ACCOUNT-003` rename capture into canonical application commands.
 It does not generalize account types, linked accounts, account close/reopen, or
 arbitrary transaction writes.
 
+## Structural audit before further account admission
+
+The first Checking-account slice proves the captured behavior, but its current
+implementation is not yet the final account-domain boundary. Further account
+features are paused until these ownership issues are corrected:
+
+- `account-creation-service.ts` is shared by both transports, but it constructs
+  stock `be_accounts`, `be_payees`, and `be_transactions` representations
+  directly instead of producing a canonical account operation;
+- the native semantic HTTP adapter reuses the stock direct-import body parser,
+  coupling the native API to a captured YNAB request shape;
+- account rename and pristine delete are parsed and committed inside the
+  generic schema-44 budget-sync handler rather than calling the same account
+  application service as creation; and
+- the generic budget-sync handler currently selects account behavior and
+  server-knowledge advancement, which will become a monolith if later account,
+  transaction, transfer, schedule, and target cases are added there.
+
+The correction is source-first: define canonical account intents and one
+account application boundary, route create/rename/delete through it, keep
+schema-44 parsing and projection in stock adapters, and leave atomic knowledge
+and replay enforcement in PostgreSQL. Close/reopen, additional account types,
+and linked accounts may be admitted only after that refactor. No compatibility
+exception will be added to bypass it.
+
 ## Evidence boundary
 
 The governing fixture is
