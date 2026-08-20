@@ -10,6 +10,7 @@ import type {
   BudgetVersionReader,
   CategoryMutationWriter,
   OrdinaryTransactionMutationWriter,
+  SplitTransactionMutationWriter,
 } from '@actual-app/semantic-core';
 
 import { parseStockAccountLifecycleDelta } from './stock-account-lifecycle';
@@ -35,12 +36,14 @@ import type {
 } from './stock-operation';
 import { parseStockOrdinaryMutation } from './stock-ordinary-transaction';
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
+import { parseStockSplitMutation } from './stock-split-transaction';
 
 export type StockBudgetChangeWriter = BudgetChangeWriter &
   BudgetDeviceAcknowledgementWriter &
   AccountLifecycleWriter &
   CategoryMutationWriter &
-  OrdinaryTransactionMutationWriter;
+  OrdinaryTransactionMutationWriter &
+  Partial<SplitTransactionMutationWriter>;
 
 type StockBudgetSyncDependencies = {
   budgetReader: BudgetVersionReader;
@@ -163,13 +166,23 @@ export async function handleStockBudgetSync(
     categoryMutation
       ? null
       : parseStockOrdinaryMutation(syncRequest.changedEntities, snapshot);
+  const splitMutation =
+    openedBudgetChanges ||
+    accountRename ||
+    accountDelete ||
+    accountLifecycle ||
+    categoryMutation ||
+    ordinaryMutation
+      ? null
+      : parseStockSplitMutation(syncRequest.changedEntities, snapshot);
   const changes =
     openedBudgetChanges ??
     accountRename?.changes ??
     accountDelete?.changes ??
     accountLifecycle?.changes ??
     categoryMutation?.changes ??
-    ordinaryMutation?.changes;
+    ordinaryMutation?.changes ??
+    splitMutation?.changes;
   if (!changes) {
     return operationError(501, 'unsupported_budget_delta');
   }
@@ -177,6 +190,7 @@ export async function handleStockBudgetSync(
     syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge !==
     (categoryMutation?.expectedDeviceAdvance ??
       ordinaryMutation?.expectedDeviceAdvance ??
+      splitMutation?.expectedDeviceAdvance ??
       changes.length)
   ) {
     return operationError(400, 'invalid_budget_knowledge_range');
@@ -185,6 +199,7 @@ export async function handleStockBudgetSync(
   const serverKnowledgeAdvance =
     categoryMutation?.serverKnowledgeAdvance ??
     ordinaryMutation?.serverKnowledgeAdvance ??
+    splitMutation?.serverKnowledgeAdvance ??
     (accountDelete || accountLifecycle ? 2 : 1);
   const nextServerKnowledge =
     syncRequest.deviceKnowledgeOfServer + serverKnowledgeAdvance;
@@ -195,6 +210,7 @@ export async function handleStockBudgetSync(
       accountLifecycle?.changedEntities ??
       categoryMutation?.changedEntities ??
       ordinaryMutation?.changedEntities ??
+      splitMutation?.changedEntities ??
       buildStockBudgetEmptyDelta(snapshot),
   );
   const delivery: BudgetChangeSetCommand = {
@@ -213,45 +229,56 @@ export async function handleStockBudgetSync(
     changes,
     response: response.body,
   };
+  if (
+    splitMutation &&
+    !dependencies.changeWriter.commitSplitTransactionMutation
+  ) {
+    return operationError(501, 'unsupported_budget_delta');
+  }
   const committed = categoryMutation
     ? await dependencies.changeWriter.commitCategoryMutation({
         mutation: categoryMutation.mutation,
         delivery,
       })
-    : ordinaryMutation?.mutationDomain === 'transaction'
-      ? await dependencies.changeWriter.commitOrdinaryTransactionMutation({
-          mutation: ordinaryMutation.mutation,
+    : splitMutation && dependencies.changeWriter.commitSplitTransactionMutation
+      ? await dependencies.changeWriter.commitSplitTransactionMutation({
+          mutation: splitMutation.mutation,
           delivery,
         })
-      : ordinaryMutation?.mutationDomain === 'payee'
-        ? await dependencies.changeWriter.commitOrdinaryPayeeMutation({
+      : ordinaryMutation?.mutationDomain === 'transaction'
+        ? await dependencies.changeWriter.commitOrdinaryTransactionMutation({
             mutation: ordinaryMutation.mutation,
             delivery,
           })
-        : accountRename
-          ? await dependencies.changeWriter.commitAccountRename({
-              rename: accountRename.rename,
+        : ordinaryMutation?.mutationDomain === 'payee'
+          ? await dependencies.changeWriter.commitOrdinaryPayeeMutation({
+              mutation: ordinaryMutation.mutation,
               delivery,
             })
-          : accountDelete
-            ? await dependencies.changeWriter.commitPristineAccountDeletion({
-                deletion: accountDelete.deletion,
+          : accountRename
+            ? await dependencies.changeWriter.commitAccountRename({
+                rename: accountRename.rename,
                 delivery,
               })
-            : accountLifecycle?.kind === 'close'
-              ? await dependencies.changeWriter.commitAccountClose({
-                  budgetId: snapshot.budgetId,
-                  accountId: accountLifecycle.accountId,
-                  adjustment: accountLifecycle.adjustment,
+            : accountDelete
+              ? await dependencies.changeWriter.commitPristineAccountDeletion({
+                  deletion: accountDelete.deletion,
                   delivery,
                 })
-              : accountLifecycle?.kind === 'reopen'
-                ? await dependencies.changeWriter.commitAccountReopen({
+              : accountLifecycle?.kind === 'close'
+                ? await dependencies.changeWriter.commitAccountClose({
                     budgetId: snapshot.budgetId,
                     accountId: accountLifecycle.accountId,
+                    adjustment: accountLifecycle.adjustment,
                     delivery,
                   })
-                : await dependencies.changeWriter.commitChangeSet(delivery);
+                : accountLifecycle?.kind === 'reopen'
+                  ? await dependencies.changeWriter.commitAccountReopen({
+                      budgetId: snapshot.budgetId,
+                      accountId: accountLifecycle.accountId,
+                      delivery,
+                    })
+                  : await dependencies.changeWriter.commitChangeSet(delivery);
   return { status: 200, body: committed.response };
 }
 

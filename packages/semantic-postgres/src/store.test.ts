@@ -587,4 +587,26 @@ describe('semantic foundation migration', () => {
     expect(migration).not.toContain('be_subcategories');
     expect(migration).not.toContain('be_monthly_subcategory_budgets');
   });
+
+  test('stores split parents and ordered lines as one canonical aggregate', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0010_canonical_split_transaction.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain("'split_parent'");
+    expect(migration).toContain('CREATE TABLE semantic_split_lines');
+    expect(migration).toContain(
+      'UNIQUE (budget_id, transaction_id, sort_order)',
+    );
+    expect(migration).toContain(
+      'REFERENCES semantic_transactions(budget_id, transaction_id)',
+    );
+    expect(migration).not.toContain('be_subtransactions');
+  });
 });

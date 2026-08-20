@@ -8,6 +8,7 @@ export { semanticCanonicalAccountDomainMigration } from './canonical-account-dom
 export { semanticAccountLifecycleMigration } from './account-lifecycle-migration';
 export { semanticCanonicalCategoryDomainMigration } from './canonical-category-domain-migration';
 export { semanticCanonicalOrdinaryTransactionMigration } from './canonical-ordinary-transaction-migration';
+export { semanticCanonicalSplitTransactionMigration } from './canonical-split-transaction-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

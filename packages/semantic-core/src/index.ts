@@ -4,4 +4,5 @@ export * from './budget';
 export * from './budget-lifecycle';
 export * from './category';
 export * from './catalog';
+export * from './split-transaction';
 export * from './transaction';

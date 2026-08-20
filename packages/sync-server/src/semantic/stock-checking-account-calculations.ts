@@ -48,11 +48,28 @@ export function projectStockCheckingAccountCalculations(
   const liveTransactions = snapshot.entities.filter(
     entity => entity.entityKind === 'be_transactions' && !entity.isTombstone,
   );
+  const liveSplitLines = snapshot.entities.filter(
+    entity => entity.entityKind === 'be_subtransactions' && !entity.isTombstone,
+  );
+  const splitCategory = exactlyOne(
+    snapshot.entities.filter(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        entity.payload.internalName === 'Category/__Split__',
+    ),
+    'be_subcategories',
+  );
+  const splitParents = liveTransactions.filter(
+    transaction => transaction.payload.subCategoryId === splitCategory.entityId,
+  );
+  validateSplitCalculationState(splitParents, liveSplitLines, accounts);
   const ordinaryTransactions = liveTransactions.filter(
     transaction =>
       !groups.some(
         group => group.startingBalance.entityId === transaction.entityId,
-      ) && transaction.payload.payeeId !== balanceAdjustmentPayee.entityId,
+      ) &&
+      transaction.payload.payeeId !== balanceAdjustmentPayee.entityId &&
+      transaction.payload.subCategoryId !== splitCategory.entityId,
   );
   const balanceAdjustments = liveTransactions.filter(
     transaction =>
@@ -73,6 +90,7 @@ export function projectStockCheckingAccountCalculations(
         !entity.isTombstone &&
         entity.entityKind !== 'be_accounts' &&
         entity.entityKind !== 'be_transactions' &&
+        entity.entityKind !== 'be_subtransactions' &&
         !(
           entity.entityKind === 'be_payees' &&
           accountIds.has(String(entity.payload.accountId))
@@ -118,6 +136,20 @@ export function projectStockCheckingAccountCalculations(
       sum + ordinaryTransactionAmount(transaction, accounts, currentMonth),
     0,
   );
+  const splitOutflows = new Map<string, number>();
+  for (const line of liveSplitLines) {
+    const categoryId = requireString(line.payload.subCategoryId);
+    splitOutflows.set(
+      categoryId,
+      (splitOutflows.get(categoryId) ?? 0) +
+        requireInteger(line.payload.amount),
+    );
+  }
+  const splitAmount = [...splitOutflows.values()].reduce(
+    (sum, amount) => sum + amount,
+    0,
+  );
+  const totalCashOutflows = uncategorizedAmount + splitAmount;
   if (
     !Number.isSafeInteger(incomeAmount) ||
     !Number.isSafeInteger(uncategorizedAmount)
@@ -136,20 +168,20 @@ export function projectStockCheckingAccountCalculations(
             : 0,
         cash_outflows:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? uncategorizedAmount
+            ? totalCashOutflows
             : 0,
         balance:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? uncategorizedAmount
+            ? totalCashOutflows
             : 0,
         over_spent:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? Math.min(0, uncategorizedAmount)
+            ? Math.min(0, totalCashOutflows)
             : 0,
         available_to_budget:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
             ? incomeAmount
-            : incomeAmount + uncategorizedAmount,
+            : incomeAmount + totalCashOutflows,
         uncategorized_cash_outflows:
           row.entities_monthly_budget_id === monthlyBudgets[0].entityId
             ? uncategorizedAmount
@@ -188,6 +220,29 @@ export function projectStockCheckingAccountCalculations(
               balance_previous_month: uncategorizedAmount,
               budgeted_average: 0,
               spent_average: uncategorizedAmount,
+              payment_average: 0,
+            };
+          }
+        }
+        const categoryOutflow =
+          splitOutflows.get(String(source.payload.subCategoryId)) ?? 0;
+        if (categoryOutflow !== 0) {
+          if (source.payload.monthlyBudgetId === monthlyBudgets[0].entityId) {
+            return {
+              ...row,
+              cash_outflows: categoryOutflow,
+              balance: categoryOutflow,
+              unbudgeted_cash_outflows: categoryOutflow,
+              goal_overall_outflows: categoryOutflow,
+            };
+          }
+          if (source.payload.monthlyBudgetId === monthlyBudgets[1].entityId) {
+            return {
+              ...row,
+              spent_previous_month: categoryOutflow,
+              balance_previous_month: categoryOutflow,
+              budgeted_average: 0,
+              spent_average: categoryOutflow,
               payment_average: 0,
             };
           }
@@ -260,6 +315,49 @@ export function projectStockCheckingAccountCalculations(
       ];
     }),
   };
+}
+
+function validateSplitCalculationState(
+  parents: readonly BudgetEntity[],
+  lines: readonly BudgetEntity[],
+  accounts: readonly BudgetEntity[],
+): void {
+  const linesByParent = new Map<string, BudgetEntity[]>();
+  for (const line of lines) {
+    const parentId = requireString(line.payload.transactionId);
+    const current = linesByParent.get(parentId) ?? [];
+    current.push(line);
+    linesByParent.set(parentId, current);
+  }
+  for (const parent of parents) {
+    const children = (linesByParent.get(parent.entityId) ?? []).sort(
+      (left, right) =>
+        requireInteger(left.payload.sortableIndex) -
+        requireInteger(right.payload.sortableIndex),
+    );
+    if (
+      children.length !== 2 ||
+      children.some(
+        (line, index) =>
+          requireInteger(line.payload.sortableIndex) !== index ||
+          line.payload.cashAmount !== line.payload.amount ||
+          line.payload.creditAmount !== 0 ||
+          line.payload.transferAccountId !== null ||
+          line.payload.transferTransactionId !== null,
+      ) ||
+      children.reduce(
+        (sum, line) => sum + requireInteger(line.payload.amount),
+        0,
+      ) !== parent.payload.amount ||
+      !accounts.some(account => account.entityId === parent.payload.accountId)
+    ) {
+      throw new Error('Unsupported split transaction calculation state');
+    }
+    linesByParent.delete(parent.entityId);
+  }
+  if (linesByParent.size !== 0) {
+    throw new Error('Split lines require one live split parent');
+  }
 }
 
 function checkingAccountGroup(
@@ -455,6 +553,13 @@ function exactlyOne(
 function requireNonnegativeInteger(value: unknown): number {
   if (!Number.isSafeInteger(value) || Number(value) < 0) {
     throw new Error('Starting balance must be a nonnegative integer');
+  }
+  return Number(value);
+}
+
+function requireInteger(value: unknown): number {
+  if (!Number.isSafeInteger(value)) {
+    throw new Error('Checking-account calculation requires an integer');
   }
   return Number(value);
 }

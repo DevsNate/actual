@@ -131,6 +131,11 @@ const payloadRules: Readonly<
       masterCategoryId: 'entities_master_category_id',
     },
   ),
+  be_subtransactions: rule(['budgetVersionId'], {
+    transactionId: 'entities_transaction_id',
+    payeeId: 'entities_payee_id',
+    subCategoryId: 'entities_subcategory_id',
+  }),
   be_transactions: rule(['budgetVersionId'], {
     accountId: 'entities_account_id',
     payeeId: 'entities_payee_id',

@@ -332,3 +332,7 @@ Migration 0009 cuts over the narrow PAYEE-001 ordinary transaction/payee
 aggregate. It preserves exact grouped stock rows only in compatibility
 projection while typed payee and transaction facts are authoritative for the
 admitted create/delete/rename lifecycle.
+Migration 0010 cuts over SPLIT-001/002 into a typed split-parent transaction
+and ordered child-line table. Account impact remains on the parent, category
+impact remains on the children, and the stock `be_transaction_groups` envelope
+is not canonical storage.

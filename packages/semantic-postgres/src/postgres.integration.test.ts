@@ -1004,6 +1004,262 @@ integrationTest('PostgresSemanticStore integration', () => {
     });
   });
 
+  test('atomically commits, edits, deletes, and replays a split aggregate', async () => {
+    const budgetId = 'split-budget';
+    const deviceId = 'split-device';
+    await store.seedBudget({
+      budgetId,
+      budgetVersionId: 'split-version',
+      membershipId: 'split-membership',
+      principalId: 'split-principal',
+      name: 'Split budget',
+      permissions: 7,
+    });
+    const accountGroup = buildUnlinkedCheckingAccount({
+      budgetId,
+      accountId: 'split-account',
+      transferPayeeId: 'split-transfer-payee',
+      startingBalanceId: 'split-starting-balance',
+      startingBalancePayeeId: 'split-starting-balance-payee',
+      immediateIncomeCategoryId: 'split-immediate-income',
+      name: 'Checking',
+      openingBalance: 100000,
+      openingDate: '2026-08-16',
+      sortOrder: 0,
+    });
+    await store.commitUnlinkedAccountCreation({
+      accountGroup,
+      delivery: {
+        changeSetId: 'split-account-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 0,
+        expectedServerKnowledge: 0,
+        serverKnowledgeAdvance: 2,
+        schemaVersion: 44,
+        idempotencyKey: 'split-account-request',
+        payloadDigest: '7'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_accounts',
+            entityId: 'split-account',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_payees',
+            entityId: 'split-transfer-payee',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'split-starting-balance',
+            isTombstone: false,
+            payload: {},
+          },
+        ],
+        response: { created: true },
+      },
+    });
+    const canonicalPayee = (id: string) => ({
+      id,
+      budgetId,
+      name: id,
+      isEnabled: true,
+      autoFillCategoryId: null,
+      autoFillUserDefinedCategoryId: null,
+      autoFillMemo: null,
+      autoFillAmount: 0,
+      autoFillCategoryEnabled: true,
+      autoFillMemoEnabled: false,
+      autoFillAmountEnabled: false,
+      renameOnImportEnabled: true,
+      internalName: null,
+    });
+    const create = {
+      mutation: {
+        kind: 'create' as const,
+        payees: [
+          canonicalPayee('split-parent-payee'),
+          canonicalPayee('split-line-payee'),
+        ],
+        parent: {
+          id: 'split-parent',
+          budgetId,
+          accountId: 'split-account',
+          payeeId: 'split-parent-payee',
+          categoryId: 'split-category',
+          date: '2026-08-16',
+          amount: -100000,
+          memo: 'Split',
+          cleared: 'Uncleared' as const,
+          accepted: true,
+          checkNumber: null,
+          flag: null,
+        },
+        lines: [
+          {
+            id: 'split-line-1',
+            budgetId,
+            transactionId: 'split-parent',
+            payeeId: 'split-line-payee',
+            categoryId: 'category-1',
+            amount: -40000,
+            memo: null,
+            sortOrder: 0,
+          },
+          {
+            id: 'split-line-2',
+            budgetId,
+            transactionId: 'split-parent',
+            payeeId: null,
+            categoryId: 'category-2',
+            amount: -60000,
+            memo: null,
+            sortOrder: 1,
+          },
+        ],
+      },
+      delivery: {
+        changeSetId: 'split-create-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 5,
+        expectedServerKnowledge: 2,
+        serverKnowledgeAdvance: 2 as const,
+        schemaVersion: 44,
+        idempotencyKey: 'split-create-request',
+        payloadDigest: '8'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_payees',
+            entityId: 'split-parent-payee',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_payees',
+            entityId: 'split-line-payee',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'split-parent',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_subtransactions',
+            entityId: 'split-line-1',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_subtransactions',
+            entityId: 'split-line-2',
+            isTombstone: false,
+            payload: {},
+          },
+        ],
+        response: { accepted: true },
+      },
+    };
+    await expect(
+      store.commitSplitTransactionMutation(create),
+    ).resolves.toMatchObject({ replayed: false, serverKnowledge: 4 });
+    await expect(
+      store.commitSplitTransactionMutation(create),
+    ).resolves.toMatchObject({ replayed: true, serverKnowledge: 4 });
+    await store.commitSplitTransactionMutation({
+      mutation: {
+        kind: 'update-parent-payee',
+        budgetId,
+        transactionId: 'split-parent',
+        expectedPayeeId: 'split-parent-payee',
+        payeeId: 'split-line-payee',
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'split-payee-change',
+        startingDeviceKnowledge: 5,
+        endingDeviceKnowledge: 6,
+        expectedServerKnowledge: 4,
+        serverKnowledgeAdvance: 1,
+        idempotencyKey: 'split-payee-request',
+        payloadDigest: '9'.repeat(64),
+        changes: [],
+      },
+    });
+    await store.commitSplitTransactionMutation({
+      mutation: {
+        kind: 'update-line-category',
+        budgetId,
+        transactionId: 'split-parent',
+        lineId: 'split-line-1',
+        expectedCategoryId: 'category-1',
+        categoryId: 'category-3',
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'split-category-change',
+        startingDeviceKnowledge: 6,
+        endingDeviceKnowledge: 7,
+        expectedServerKnowledge: 5,
+        serverKnowledgeAdvance: 2,
+        idempotencyKey: 'split-category-request',
+        payloadDigest: 'a'.repeat(64),
+        changes: [],
+      },
+    });
+    await store.commitSplitTransactionMutation({
+      mutation: {
+        kind: 'delete',
+        budgetId,
+        transactionId: 'split-parent',
+        lineIds: ['split-line-1', 'split-line-2'],
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'split-delete-change',
+        startingDeviceKnowledge: 7,
+        endingDeviceKnowledge: 10,
+        expectedServerKnowledge: 7,
+        serverKnowledgeAdvance: 2,
+        idempotencyKey: 'split-delete-request',
+        payloadDigest: 'b'.repeat(64),
+        changes: [],
+      },
+    });
+    const terminal = await pool.query(
+      `SELECT t.payee_id, t.transaction_kind, t.is_tombstone AS parent_tombstone,
+              array_agg(l.category_id ORDER BY l.sort_order) AS categories,
+              bool_and(l.is_tombstone) AS lines_tombstoned,
+              b.server_knowledge::text AS server_knowledge,
+              d.server_knowledge_of_device::text AS device_knowledge
+       FROM semantic_transactions t
+       JOIN semantic_split_lines l ON l.budget_id = t.budget_id AND l.transaction_id = t.transaction_id
+       JOIN semantic_budgets b ON b.budget_id = t.budget_id
+       JOIN semantic_budget_devices d ON d.budget_id = t.budget_id AND d.device_id = $2
+       WHERE t.budget_id = $1 AND t.transaction_id = 'split-parent'
+       GROUP BY t.payee_id, t.transaction_kind, t.is_tombstone, b.server_knowledge,
+                d.server_knowledge_of_device`,
+      [budgetId, deviceId],
+    );
+    expect(terminal.rows[0]).toEqual({
+      payee_id: 'split-line-payee',
+      transaction_kind: 'split_parent',
+      parent_tombstone: true,
+      categories: ['category-3', 'category-2'],
+      lines_tombstoned: true,
+      server_knowledge: '9',
+      device_knowledge: '10',
+    });
+  });
+
   test('commits and exactly replays an isolated catalog command', async () => {
     const operation = {
       changeSetId: 'catalog-change-integration',

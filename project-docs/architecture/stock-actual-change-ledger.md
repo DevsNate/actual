@@ -654,3 +654,29 @@ Copy this block for a new architectural delta:
   create/replay/delete/rename/delete readback, and authenticated runtime
   migration tests.
 - **Status:** implemented.
+
+### ADD-016 — Canonical split transaction aggregate
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/split-transaction.ts`,
+  `packages/sync-server/src/semantic/stock-split-transaction.ts`, its bounded
+  `stock-split-codec.ts`, `packages/semantic-postgres/src/split-transaction-store.ts`,
+  and `packages/semantic-postgres/migrations/0010_canonical_split_transaction.sql`.
+- **Observed stock behavior:** SPLIT-001/002 create one account-impacting parent
+  and exactly two ordered category-impacting children. The server normalizes
+  parent and child `cash_amount` values, accepts a parent-payee-only edit or one
+  child-category-only edit as a full-group resend, and tombstones all three
+  rows atomically on deletion.
+- **Fork behavior:** A dedicated stock adapter emits a typed split aggregate.
+  PostgreSQL stores the parent and ordered lines separately, while stock rows,
+  calculation deltas, knowledge, and replay receipts remain compatibility
+  concerns at the transaction boundary. Account totals count the parent once;
+  category activity comes from the children.
+- **Boundary:** Only the captured two-child create shapes, SPLIT-001 parent
+  payee edit, SPLIT-001 single-child category edit, and SPLIT-001 exact delete
+  are admitted. Amount/date/memo edits, variable child counts, transfers,
+  payments, schedules, imports, and partial tombstones fail closed.
+- **Verification:** Focused positive/adversarial adapter tests, strict
+  TypeScript, clean PostgreSQL create/replay/edit/delete readback, and the
+  authenticated runtime migration suite.
+- **Status:** implemented.
