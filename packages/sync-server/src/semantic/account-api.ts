@@ -5,6 +5,7 @@ import express from 'express';
 import type { AccountCreationService } from './account-creation-service';
 import { AccountCreationError } from './account-creation-service';
 import { authenticateSemanticRequest } from './catalog-api';
+import { parseNativeUnlinkedCheckingAccountBody } from './native-account-operation';
 
 type Dependencies = {
   accountCreationService: AccountCreationService;
@@ -28,7 +29,7 @@ export function createSemanticAccountHandlers(
     const planId = request.params.planId?.trim() ?? '';
     const originDeviceId = request.get('x-semantic-device-id')?.trim() ?? '';
     const idempotencyKey = request.get('idempotency-key')?.trim() ?? '';
-    const body = parseStockCheckingAccountBody(request.body);
+    const body = parseNativeUnlinkedCheckingAccountBody(request.body);
     if (!planId || !originDeviceId || !idempotencyKey || !body) {
       response.status(400).send({
         status: 'error',
@@ -39,17 +40,19 @@ export function createSemanticAccountHandlers(
 
     try {
       const result =
-        await dependencies.accountCreationService.createCheckingAccount({
-          principalId: principal.id,
-          planId,
-          originDeviceId,
-          idempotencyKey,
-          ...body,
-        });
+        await dependencies.accountCreationService.createUnlinkedCheckingAccount(
+          {
+            principalId: principal.id,
+            planId,
+            originDeviceId,
+            idempotencyKey,
+            ...body,
+          },
+        );
       response.status(result.replayed ? 200 : 201).send({
         status: 'ok',
         data: {
-          ...result.response,
+          account: result.response,
           budget_server_knowledge: result.serverKnowledge,
           replayed: result.replayed,
         },
@@ -77,47 +80,4 @@ export function createSemanticAccountHandlers(
     }
   });
   return handlers;
-}
-
-export type StockCheckingAccountBody = {
-  name: string;
-  balance: number;
-  startingBalanceDate: string;
-};
-
-export function parseStockCheckingAccountBody(
-  value: unknown,
-): StockCheckingAccountBody | null {
-  if (!isRecord(value)) {
-    return null;
-  }
-  if (
-    typeof value.name !== 'string' ||
-    !value.name.trim() ||
-    value.type !== 'Checking' ||
-    !Number.isSafeInteger(value.balance) ||
-    typeof value.starting_balance_date !== 'string' ||
-    value.debt_interest_rates !==
-      JSON.stringify({
-        [value.starting_balance_date.slice(0, 7) + '-01']: 0,
-      }) ||
-    value.debt_minimum_payments !==
-      JSON.stringify({
-        [value.starting_balance_date.slice(0, 7) + '-01']: 0,
-      }) ||
-    value.debt_escrow_amounts !== null ||
-    value.paired_sub_category !== null ||
-    value.is_migrating_to_debt_account !== false
-  ) {
-    return null;
-  }
-  return {
-    name: value.name.trim(),
-    balance: Number(value.balance),
-    startingBalanceDate: value.starting_balance_date,
-  };
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

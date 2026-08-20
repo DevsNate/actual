@@ -5,6 +5,8 @@ export type PlanEntity = {
   entityId: string;
   isTombstone: boolean;
   payload: Readonly<Record<string, unknown>>;
+  /** Server knowledge at which this persisted projection last changed. */
+  lastServerKnowledge?: number;
 };
 
 export type PlanChangeSetCommand = {

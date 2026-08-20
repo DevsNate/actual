@@ -5,6 +5,7 @@ import type {
 import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 
 import { createAccountCreationService } from './account-creation-service';
+import { stockAccountPlanEntityAdapter } from './account-plan-entity-adapter';
 
 function fixture() {
   let sequence = 0;
@@ -25,7 +26,7 @@ function fixture() {
         dateFormat: {},
         createdOn: '2026-08-17',
         createdAtMilliseconds: Date.UTC(2026, 7, 17),
-        allocateId: label => `${label}:${sequence++}`,
+        allocateId: (label) => `${label}:${sequence++}`,
       }),
     ],
   };
@@ -35,8 +36,9 @@ function fixture() {
   let command: PlanChangeSetCommand | undefined;
   const service = createAccountCreationService({
     planReader,
+    entityAdapter: stockAccountPlanEntityAdapter,
     changeWriter: {
-      commitChangeSet: vi.fn(async value => {
+      commitChangeSet: vi.fn(async (value) => {
         command = value;
         return {
           replayed: false,
@@ -56,21 +58,22 @@ const input = {
   originDeviceId: 'web-device-1',
   idempotencyKey: 'account-create-1',
   name: 'Account Capture 1',
-  balance: 123450,
-  startingBalanceDate: '2026-08-17',
+  openingBalance: 123450,
+  openingDate: '2026-08-17',
 };
 
 describe('account creation service', () => {
   test('commits the admitted account, transfer payee, and starting balance atomically', async () => {
     const { service, getCommand } = fixture();
-    const result = await service.createCheckingAccount(input);
+    const result = await service.createUnlinkedCheckingAccount(input);
     const command = getCommand();
 
     expect(result.response).toMatchObject({
-      account_name: 'Account Capture 1',
-      account_type: 'Checking',
-      balance_millicents: 123450,
-      budget_id: input.planId,
+      accountId: expect.any(String),
+      name: 'Account Capture 1',
+      type: 'checking',
+      openingBalance: 123450,
+      planId: input.planId,
     });
     expect(command).toMatchObject({
       planId: input.planId,
@@ -82,15 +85,15 @@ describe('account creation service', () => {
     });
     expect(command?.changes).toHaveLength(3);
     const account = command?.changes.find(
-      entity => entity.entityKind === 'be_accounts',
+      (entity) => entity.entityKind === 'be_accounts',
     );
     const transferPayee = command?.changes.find(
-      entity =>
+      (entity) =>
         entity.entityKind === 'be_payees' &&
         entity.payload.accountId === account?.entityId,
     );
     const startingBalance = command?.changes.find(
-      entity => entity.entityKind === 'be_transactions',
+      (entity) => entity.entityKind === 'be_transactions',
     );
     expect(account?.payload).toMatchObject({
       accountName: 'Account Capture 1',
@@ -129,27 +132,37 @@ describe('account creation service', () => {
       payload: { sortableIndex: 0 },
     });
     await expect(
-      first.service.createCheckingAccount(input),
+      first.service.createUnlinkedCheckingAccount(input),
     ).resolves.toMatchObject({
-      response: { account_name: 'Account Capture 1' },
+      response: { name: 'Account Capture 1' },
     });
     expect(
       first
         .getCommand()
-        ?.changes.find(entity => entity.entityKind === 'be_accounts')?.payload
+        ?.changes.find((entity) => entity.entityKind === 'be_accounts')?.payload
         .sortableIndex,
     ).toBe(1);
 
     const second = fixture();
     second.snapshot.entities.push(
       second.snapshot.entities.find(
-        entity => entity.payload.internalName === 'StartingBalancePayee',
+        (entity) => entity.payload.internalName === 'StartingBalancePayee',
       )!,
     );
     await expect(
-      second.service.createCheckingAccount(input),
+      second.service.createUnlinkedCheckingAccount(input),
     ).rejects.toMatchObject({
       code: 'starting-balance-payee-unavailable',
     });
+  });
+
+  test('rejects calendar dates that JavaScript would otherwise normalize', async () => {
+    const { service } = fixture();
+    await expect(
+      service.createUnlinkedCheckingAccount({
+        ...input,
+        openingDate: '2026-02-31',
+      }),
+    ).rejects.toMatchObject({ code: 'invalid-account-creation-request' });
   });
 });

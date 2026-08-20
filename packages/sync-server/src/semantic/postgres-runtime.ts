@@ -12,6 +12,7 @@ import { Pool } from 'pg';
 
 import { createSemanticAccountHandlers } from './account-api';
 import { createAccountCreationService } from './account-creation-service';
+import { stockAccountPlanEntityAdapter } from './account-plan-entity-adapter';
 import { createSemanticCatalogHandlers } from './catalog-api';
 import { createSemanticPlanHandlers } from './plan-api';
 import { createPlanCreationService } from './plan-creation-service';
@@ -49,6 +50,7 @@ export async function createPostgresSemanticCatalogHandlers(
   const accountCreationService = createAccountCreationService({
     planReader,
     changeWriter: store,
+    entityAdapter: stockAccountPlanEntityAdapter,
   });
   const planLifecycleService = createPlanLifecycleService({
     planLifecycleWriter: lifecycleStore,
@@ -86,6 +88,7 @@ export async function createPostgresSemanticCatalogHandlers(
   });
   const stockAccountHandlers = createStockAccountGateway({
     accountCreationService,
+    planReader,
     resolvePrincipal: resolveActualPrincipal,
   });
   const stockPlanHandlers = createStockPlanGateway({

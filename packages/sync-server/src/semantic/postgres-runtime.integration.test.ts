@@ -392,14 +392,9 @@ integrationTest('semantic catalog runtime integration', () => {
   test('creates and replays the admitted unlinked Checking account group', async () => {
     const body = {
       name: 'Account Capture 1',
-      type: 'Checking',
-      balance: 123450,
-      starting_balance_date: '2026-08-17',
-      debt_interest_rates: '{"2026-08-01":0}',
-      debt_minimum_payments: '{"2026-08-01":0}',
-      debt_escrow_amounts: null,
-      paired_sub_category: null,
-      is_migrating_to_debt_account: false,
+      type: 'checking',
+      openingBalance: 123450,
+      openingDate: '2026-08-17',
     };
     const createAccount = () =>
       request(testApp)
@@ -413,15 +408,18 @@ integrationTest('semantic catalog runtime integration', () => {
     expect(first.body).toMatchObject({
       status: 'ok',
       data: {
-        account_name: 'Account Capture 1',
-        account_type: 'Checking',
-        balance_millicents: 123450,
-        budget_id: createdPlanId,
+        account: {
+          accountId: expect.any(String),
+          name: 'Account Capture 1',
+          type: 'checking',
+          openingBalance: 123450,
+          planId: createdPlanId,
+        },
         budget_server_knowledge: 4,
         replayed: false,
       },
     });
-    createdAccountId = first.body.data.id as string;
+    createdAccountId = first.body.data.account.accountId as string;
     expect(createdAccountId).toMatch(/^[0-9a-f-]{36}$/u);
 
     const replay = await createAccount().expect(200);
@@ -673,8 +671,8 @@ integrationTest('semantic catalog runtime integration', () => {
     const directVersionId = plan.body.data.budget_version_id as string;
 
     const created = await request(testApp)
-      .post(`/api/direct_import/budgets/${directPlanId}/accounts`)
-      .set('authorization', `Token ${token}`)
+      .post(`/api/direct_import/budgets/${directVersionId}/accounts`)
+      .set('authorization', `Token token=${token}`)
       .set('x-ynab-api-version', '2026-01-01')
       .send({
         name: 'Account Capture 3',
@@ -692,11 +690,11 @@ integrationTest('semantic catalog runtime integration', () => {
       account_name: 'Account Capture 3',
       account_type: 'Checking',
       balance_millicents: 345670,
-      budget_id: directPlanId,
+      budget_id: directVersionId,
     });
     const second = await request(testApp)
-      .post(`/api/direct_import/budgets/${directPlanId}/accounts`)
-      .set('authorization', `Token ${token}`)
+      .post(`/api/direct_import/budgets/${directVersionId}/accounts`)
+      .set('authorization', `Token token=${token}`)
       .set('x-ynab-api-version', '2026-01-01')
       .send({
         name: 'Account Capture 2',

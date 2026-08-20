@@ -15,16 +15,16 @@ const principal: AuthenticatedPrincipal = {
 describe('semantic account API', () => {
   test('accepts only the admitted unlinked Checking endpoint shape', async () => {
     const accountCreationService: AccountCreationService = {
-      createCheckingAccount: vi.fn().mockResolvedValue({
+      createUnlinkedCheckingAccount: vi.fn().mockResolvedValue({
         replayed: false,
         serverKnowledge: 3,
         endingDeviceKnowledge: 0,
         response: {
-          id: 'account-1',
-          account_name: 'Account Capture 1',
-          account_type: 'Checking',
-          balance_millicents: 123450,
-          budget_id: 'plan-1',
+          accountId: 'account-1',
+          name: 'Account Capture 1',
+          type: 'checking',
+          openingBalance: 123450,
+          planId: 'plan-1',
         },
       }),
     };
@@ -36,41 +36,40 @@ describe('semantic account API', () => {
       .set('idempotency-key', 'account-request-1')
       .send({
         name: 'Account Capture 1',
-        type: 'Checking',
-        balance: 123450,
-        starting_balance_date: '2026-08-17',
-        debt_interest_rates: '{"2026-08-01":0}',
-        debt_minimum_payments: '{"2026-08-01":0}',
-        debt_escrow_amounts: null,
-        paired_sub_category: null,
-        is_migrating_to_debt_account: false,
+        type: 'checking',
+        openingBalance: 123450,
+        openingDate: '2026-08-17',
       })
       .expect(201, {
         status: 'ok',
         data: {
-          id: 'account-1',
-          account_name: 'Account Capture 1',
-          account_type: 'Checking',
-          balance_millicents: 123450,
-          budget_id: 'plan-1',
+          account: {
+            accountId: 'account-1',
+            name: 'Account Capture 1',
+            type: 'checking',
+            openingBalance: 123450,
+            planId: 'plan-1',
+          },
           budget_server_knowledge: 3,
           replayed: false,
         },
       });
-    expect(accountCreationService.createCheckingAccount).toHaveBeenCalledWith({
+    expect(
+      accountCreationService.createUnlinkedCheckingAccount,
+    ).toHaveBeenCalledWith({
       principalId: 'principal-1',
       planId: 'plan-1',
       originDeviceId: 'web-device-1',
       idempotencyKey: 'account-request-1',
       name: 'Account Capture 1',
-      balance: 123450,
-      startingBalanceDate: '2026-08-17',
+      openingBalance: 123450,
+      openingDate: '2026-08-17',
     });
   });
 
   test('rejects linked, non-Checking, or malformed defaults', async () => {
     const accountCreationService: AccountCreationService = {
-      createCheckingAccount: vi.fn(),
+      createUnlinkedCheckingAccount: vi.fn(),
     };
     const app = createApp(accountCreationService);
     await request(app)
@@ -80,15 +79,17 @@ describe('semantic account API', () => {
       .set('idempotency-key', 'account-request-1')
       .send({
         name: 'Unsupported',
-        type: 'CreditCard',
-        balance: 0,
-        starting_balance_date: '2026-08-17',
+        type: 'credit-card',
+        openingBalance: 0,
+        openingDate: '2026-08-17',
       })
       .expect(400, {
         status: 'error',
         reason: 'invalid-account-creation-request',
       });
-    expect(accountCreationService.createCheckingAccount).not.toHaveBeenCalled();
+    expect(
+      accountCreationService.createUnlinkedCheckingAccount,
+    ).not.toHaveBeenCalled();
   });
 });
 

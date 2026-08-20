@@ -15,16 +15,16 @@ const principal: AuthenticatedPrincipal = {
 describe('stock account gateway', () => {
   test('accepts the captured Token-authenticated direct-import request and returns the exact acknowledgement', async () => {
     const service: AccountCreationService = {
-      createCheckingAccount: vi.fn().mockResolvedValue({
+      createUnlinkedCheckingAccount: vi.fn().mockResolvedValue({
         replayed: false,
         serverKnowledge: 4,
         endingDeviceKnowledge: 0,
         response: {
-          id: 'account-3',
-          account_name: 'Account Capture 3',
-          account_type: 'Checking',
-          balance_millicents: 345670,
-          budget_id: 'plan-1',
+          accountId: 'account-3',
+          name: 'Account Capture 3',
+          type: 'checking',
+          openingBalance: 345670,
+          planId: 'canonical-plan-1',
         },
       }),
     };
@@ -32,7 +32,7 @@ describe('stock account gateway', () => {
 
     await request(app)
       .post('/api/direct_import/budgets/plan-1/accounts')
-      .set('authorization', 'Token actual-session')
+      .set('authorization', 'Token token=actual-session')
       .set('x-ynab-api-version', '2026-01-01')
       .send(capturedBody())
       .expect(201, {
@@ -42,19 +42,21 @@ describe('stock account gateway', () => {
         balance_millicents: 345670,
         budget_id: 'plan-1',
       });
-    expect(service.createCheckingAccount).toHaveBeenCalledWith({
+    expect(service.createUnlinkedCheckingAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
-      planId: 'plan-1',
+      planId: 'canonical-plan-1',
       originDeviceId: 'stock-web-direct-import',
       idempotencyKey: 'stock-account-create:request-1',
       name: 'Account Capture 3',
-      balance: 345670,
-      startingBalanceDate: '2026-08-17',
+      openingBalance: 345670,
+      openingDate: '2026-08-17',
     });
   });
 
   test('fails closed for missing auth, unsupported versions, and malformed account shapes', async () => {
-    const service: AccountCreationService = { createCheckingAccount: vi.fn() };
+    const service: AccountCreationService = {
+      createUnlinkedCheckingAccount: vi.fn(),
+    };
     const app = createApp(service);
     await request(app)
       .post('/api/direct_import/budgets/plan-1/accounts')
@@ -63,17 +65,17 @@ describe('stock account gateway', () => {
       .expect(401, { error: { id: 'invalid-session' } });
     await request(app)
       .post('/api/direct_import/budgets/plan-1/accounts')
-      .set('authorization', 'Token actual-session')
+      .set('authorization', 'Token token=actual-session')
       .set('x-ynab-api-version', 'unknown')
       .send(capturedBody())
       .expect(400, { error: { id: 'unsupported_api_version' } });
     await request(app)
       .post('/api/direct_import/budgets/plan-1/accounts')
-      .set('authorization', 'Token actual-session')
+      .set('authorization', 'Token token=actual-session')
       .set('x-ynab-api-version', '2026-01-01')
       .send({ ...capturedBody(), type: 'CreditCard' })
       .expect(400, { error: { id: 'invalid_account_request' } });
-    expect(service.createCheckingAccount).not.toHaveBeenCalled();
+    expect(service.createUnlinkedCheckingAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -83,7 +85,18 @@ function createApp(service: AccountCreationService): express.Express {
     '/api',
     createStockAccountGateway({
       accountCreationService: service,
-      resolvePrincipal: token => {
+      planReader: {
+        readPlanByBudgetVersion: vi.fn().mockResolvedValue({
+          planId: 'canonical-plan-1',
+          budgetVersionId: 'plan-1',
+          name: 'Plan',
+          serverKnowledge: 1,
+          currencyFormat: {},
+          dateFormat: {},
+          entities: [],
+        }),
+      },
+      resolvePrincipal: (token) => {
         expect(token).toBe('actual-session');
         return principal;
       },

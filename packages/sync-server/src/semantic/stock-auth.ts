@@ -28,5 +28,18 @@ function tokenAuthorization(value: string | undefined): string | null {
     return null;
   }
   const match = /^Token\s+(.+)$/u.exec(value.trim());
-  return match?.[1]?.trim() || null;
+  const credential = match?.[1]?.trim();
+  if (!credential) {
+    return null;
+  }
+
+  // The stock Direct Import client serializes its credential as
+  // `Authorization: Token token=<session>`, while other stock Web clients use
+  // `Authorization: Token <session>`. Both carry the same authenticated
+  // session identity; normalize only the observed Direct Import wrapper here
+  // so individual domain gateways do not grow protocol-specific auth hacks.
+  if (credential.startsWith('token=')) {
+    return credential.slice('token='.length).trim() || null;
+  }
+  return credential;
 }

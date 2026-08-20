@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto';
 
 import type {
+  CanonicalUnlinkedAccountGroup,
   PlanChangeSetResult,
   PlanChangeWriter,
   PlanEntity,
   PlanReader,
+  PlanSnapshot,
 } from '@actual-app/semantic-core';
+import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
 
 export type CreateCheckingAccountInput = {
   principalId: string;
@@ -13,14 +16,26 @@ export type CreateCheckingAccountInput = {
   originDeviceId: string;
   idempotencyKey: string;
   name: string;
-  balance: number;
-  startingBalanceDate: string;
+  openingBalance: number;
+  openingDate: string;
+};
+
+export type CreatedUnlinkedAccount = {
+  accountId: string;
+  planId: string;
+  name: string;
+  type: 'checking';
+  openingBalance: number;
+};
+
+export type AccountCreationResult = Omit<PlanChangeSetResult, 'response'> & {
+  response: CreatedUnlinkedAccount;
 };
 
 export type AccountCreationService = {
-  createCheckingAccount(
+  createUnlinkedCheckingAccount(
     input: CreateCheckingAccountInput,
-  ): Promise<PlanChangeSetResult>;
+  ): Promise<AccountCreationResult>;
 };
 
 export class AccountCreationError extends Error {
@@ -35,13 +50,34 @@ export class AccountCreationError extends Error {
 type Dependencies = {
   planReader: PlanReader;
   changeWriter: PlanChangeWriter;
+  entityAdapter: AccountEntityAdapter;
+};
+
+export type AccountCreationContext = {
+  budgetVersionId: string;
+  expectedServerKnowledge: number;
+  sortOrder: number;
+  startingBalancePayeeId: string;
+  immediateIncomeCategoryId: string;
+};
+
+export type AccountEntityAdapter = {
+  resolveCreationContext(
+    snapshot: PlanSnapshot,
+    idempotencyKey: string,
+  ): AccountCreationContext;
+  toPlanEntities(
+    group: CanonicalUnlinkedAccountGroup,
+    budgetVersionId: string,
+    creationCommandKey: string,
+  ): readonly PlanEntity[];
 };
 
 export function createAccountCreationService(
   dependencies: Dependencies,
 ): AccountCreationService {
   return {
-    async createCheckingAccount(input) {
+    async createUnlinkedCheckingAccount(input) {
       validateInput(input);
       const snapshot = await dependencies.planReader.readPlan(
         input.principalId,
@@ -50,32 +86,9 @@ export function createAccountCreationService(
       if (!snapshot) {
         throw new AccountCreationError('plan-not-found');
       }
-
-      const existingAccounts = snapshot.entities.filter(
-        entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
-      );
-      const replayAccount = existingAccounts.find(
-        entity => entity.payload.creationCommandKey === input.idempotencyKey,
-      );
-      const sortableIndex = replayAccount
-        ? requireSortableIndex(replayAccount.payload.sortableIndex)
-        : nextSortableIndex(existingAccounts);
-
-      const startingBalancePayee = exactlyOne(
-        snapshot.entities,
-        entity =>
-          entity.entityKind === 'be_payees' &&
-          !entity.isTombstone &&
-          entity.payload.internalName === 'StartingBalancePayee',
-        'starting-balance-payee-unavailable',
-      );
-      const immediateIncomeCategory = exactlyOne(
-        snapshot.entities,
-        entity =>
-          entity.entityKind === 'be_subcategories' &&
-          !entity.isTombstone &&
-          entity.payload.internalName === 'Category/__ImmediateIncome__',
-        'immediate-income-category-unavailable',
+      const context = dependencies.entityAdapter.resolveCreationContext(
+        snapshot,
+        input.idempotencyKey,
       );
 
       const accountId = deterministicUuid(
@@ -93,176 +106,44 @@ export function createAccountCreationService(
         input.idempotencyKey,
         'starting-balance',
       );
-      const response = {
-        id: accountId,
-        account_name: input.name.trim(),
-        account_type: 'Checking',
-        balance_millicents: input.balance,
-        budget_id: input.planId,
+      const group = buildUnlinkedCheckingAccount({
+        planId: input.planId,
+        accountId,
+        transferPayeeId,
+        startingBalanceId,
+        startingBalancePayeeId: context.startingBalancePayeeId,
+        immediateIncomeCategoryId: context.immediateIncomeCategoryId,
+        name: input.name.trim(),
+        openingBalance: input.openingBalance,
+        openingDate: input.openingDate,
+        sortOrder: context.sortOrder,
+      });
+      const response: CreatedUnlinkedAccount = {
+        accountId,
+        planId: input.planId,
+        name: input.name.trim(),
+        type: 'checking',
+        openingBalance: input.openingBalance,
       };
-      return dependencies.changeWriter.commitChangeSet({
+      const result = await dependencies.changeWriter.commitChangeSet({
         changeSetId: `account-create:${input.planId}:${input.idempotencyKey}`,
         planId: input.planId,
         originDeviceId: input.originDeviceId,
         startingDeviceKnowledge: 0,
         endingDeviceKnowledge: 0,
-        expectedServerKnowledge: snapshot.serverKnowledge,
+        expectedServerKnowledge: context.expectedServerKnowledge,
         serverKnowledgeAdvance: 2,
         schemaVersion: 1,
         idempotencyKey: input.idempotencyKey,
         payloadDigest: digest(input),
-        changes: [
-          accountEntity(
-            snapshot.budgetVersionId,
-            accountId,
-            sortableIndex,
-            input,
-          ),
-          transferPayeeEntity(
-            snapshot.budgetVersionId,
-            transferPayeeId,
-            accountId,
-            input,
-          ),
-          startingBalanceEntity(
-            snapshot.budgetVersionId,
-            startingBalanceId,
-            accountId,
-            startingBalancePayee.entityId,
-            immediateIncomeCategory.entityId,
-            input,
-          ),
-        ],
+        changes: dependencies.entityAdapter.toPlanEntities(
+          group,
+          context.budgetVersionId,
+          input.idempotencyKey,
+        ),
         response,
       });
-    },
-  };
-}
-
-function accountEntity(
-  budgetVersionId: string,
-  accountId: string,
-  sortableIndex: number,
-  input: CreateCheckingAccountInput,
-): PlanEntity {
-  return {
-    entityKind: 'be_accounts',
-    entityId: accountId,
-    isTombstone: false,
-    payload: {
-      budgetVersionId,
-      creationCommandKey: input.idempotencyKey,
-      accountName: input.name.trim(),
-      accountType: 'Checking',
-      note: null,
-      isClosed: false,
-      onBudget: true,
-      isFavorite: false,
-      sortableIndex,
-      sortableFavoriteIndex: 0,
-      debtStartDate: null,
-      debtAssetValues: null,
-      lastReconciledAt: null,
-      debtEscrowAmounts: null,
-      debtInterestRates: null,
-      debtMinimumPayments: null,
-      debtOriginalBalance: null,
-      lastPaymentPayeeId: null,
-      debtMigratedFromAccountId: null,
-    },
-  };
-}
-
-function transferPayeeEntity(
-  budgetVersionId: string,
-  payeeId: string,
-  accountId: string,
-  input: CreateCheckingAccountInput,
-): PlanEntity {
-  return {
-    entityKind: 'be_payees',
-    entityId: payeeId,
-    isTombstone: false,
-    payload: {
-      budgetVersionId,
-      accountId,
-      enabled: true,
-      name: `Transfer : ${input.name.trim()}`,
-      internalName: null,
-      autoFillSubCategoryId: null,
-      autoFillUserDefinedSubCategoryId: null,
-      autoFillMemo: null,
-      autoFillAmount: 0,
-      autoFillSubCategoryEnabled: true,
-      autoFillAmountEnabled: false,
-      autoFillMemoEnabled: false,
-      renameOnImportEnabled: true,
-    },
-  };
-}
-
-function nextSortableIndex(accounts: readonly PlanEntity[]): number {
-  if (accounts.length === 0) {
-    return 0;
-  }
-  const indexes = accounts.map(account =>
-    requireSortableIndex(account.payload.sortableIndex),
-  );
-  const next = Math.max(...indexes) + 1;
-  if (!Number.isSafeInteger(next)) {
-    throw new AccountCreationError('invalid-account-sort-order');
-  }
-  return next;
-}
-
-function requireSortableIndex(value: unknown): number {
-  if (!Number.isSafeInteger(value) || Number(value) < 0) {
-    throw new AccountCreationError('invalid-account-sort-order');
-  }
-  return Number(value);
-}
-
-function startingBalanceEntity(
-  budgetVersionId: string,
-  transactionId: string,
-  accountId: string,
-  payeeId: string,
-  subCategoryId: string,
-  input: CreateCheckingAccountInput,
-): PlanEntity {
-  return {
-    entityKind: 'be_transactions',
-    entityId: transactionId,
-    isTombstone: false,
-    payload: {
-      budgetVersionId,
-      accountId,
-      payeeId,
-      subCategoryId,
-      scheduledTransactionId: null,
-      source: null,
-      importedPayee: null,
-      originalImportedPayee: null,
-      providerCleansedPayee: null,
-      date: input.startingBalanceDate,
-      importedDate: null,
-      dateEnteredFromSchedule: null,
-      amount: input.balance,
-      cashAmount: input.balance,
-      creditAmount: 0,
-      creditAmountAdjusted: 0,
-      subcategoryCreditAmountPreceding: 0,
-      memo: null,
-      cleared: 'Cleared',
-      accepted: true,
-      checkNumber: null,
-      flag: null,
-      transferAccountId: null,
-      transferTransactionId: null,
-      transferSubtransactionId: null,
-      matchedTransactionId: null,
-      debtTransactionType: null,
-      ynabId: null,
+      return { ...result, response: parseCreatedAccount(result.response) };
     },
   };
 }
@@ -274,25 +155,23 @@ function validateInput(input: CreateCheckingAccountInput): void {
     !input.originDeviceId ||
     !input.idempotencyKey ||
     !input.name.trim() ||
-    !Number.isSafeInteger(input.balance) ||
-    input.balance < 0 ||
-    !/^\d{4}-\d{2}-\d{2}$/u.test(input.startingBalanceDate) ||
-    Number.isNaN(Date.parse(`${input.startingBalanceDate}T00:00:00.000Z`))
+    !Number.isSafeInteger(input.openingBalance) ||
+    input.openingBalance < 0 ||
+    !isIsoCalendarDate(input.openingDate)
   ) {
     throw new AccountCreationError('invalid-account-creation-request');
   }
 }
 
-function exactlyOne(
-  entities: readonly PlanEntity[],
-  predicate: (entity: PlanEntity) => boolean,
-  errorCode: string,
-): PlanEntity {
-  const matches = entities.filter(predicate);
-  if (matches.length !== 1) {
-    throw new AccountCreationError(errorCode);
+function isIsoCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(value)) {
+    return false;
   }
-  return matches[0];
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
 }
 
 function deterministicUuid(...parts: string[]): string {
@@ -313,9 +192,30 @@ function digest(input: CreateCheckingAccountInput): string {
         principalId: input.principalId,
         planId: input.planId,
         name: input.name.trim(),
-        balance: input.balance,
-        startingBalanceDate: input.startingBalanceDate,
+        openingBalance: input.openingBalance,
+        openingDate: input.openingDate,
       }),
     )
     .digest('hex');
+}
+
+function parseCreatedAccount(
+  value: Readonly<Record<string, unknown>>,
+): CreatedUnlinkedAccount {
+  if (
+    typeof value.accountId !== 'string' ||
+    typeof value.planId !== 'string' ||
+    typeof value.name !== 'string' ||
+    value.type !== 'checking' ||
+    !Number.isSafeInteger(value.openingBalance)
+  ) {
+    throw new AccountCreationError('invalid-account-creation-receipt');
+  }
+  return {
+    accountId: value.accountId,
+    planId: value.planId,
+    name: value.name,
+    type: value.type,
+    openingBalance: Number(value.openingBalance),
+  };
 }

@@ -20,6 +20,7 @@ type EntityRow = {
   entity_id: string;
   is_tombstone: boolean;
   payload: Readonly<Record<string, unknown>>;
+  last_server_knowledge: string;
 };
 
 export class PostgresPlanReader implements PlanReader, BudgetVersionPlanReader {
@@ -64,7 +65,8 @@ export class PostgresPlanReader implements PlanReader, BudgetVersionPlanReader {
       return null;
     }
     const entities = await this.pool.query<EntityRow>(
-      `SELECT entity_kind, entity_id, is_tombstone, payload
+      `SELECT entity_kind, entity_id, is_tombstone, payload,
+              last_server_knowledge
        FROM semantic_plan_entities
        WHERE plan_id = $1
        ORDER BY last_server_knowledge, entity_kind, entity_id`,
@@ -88,6 +90,7 @@ function mapEntity(row: EntityRow): PlanEntity {
     entityId: row.entity_id,
     isTombstone: row.is_tombstone,
     payload: row.payload,
+    lastServerKnowledge: integer(row.last_server_knowledge),
   };
 }
 

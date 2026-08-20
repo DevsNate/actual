@@ -38,7 +38,7 @@ function createSnapshot() {
       dateFormat: {},
       createdOn: '2026-08-17',
       createdAtMilliseconds: Date.UTC(2026, 7, 17),
-      allocateId: label => `${label}:${sequence++}`,
+      allocateId: (label) => `${label}:${sequence++}`,
     }),
   };
 }
@@ -181,6 +181,45 @@ describe('stock budget gateway', () => {
     expect(Object.keys(response.body.changed_entities)).toHaveLength(13);
   });
 
+  test('returns source rows changed after an older device knowledge', async () => {
+    const snapshot = createSnapshot();
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue({
+        ...snapshot,
+        entities: [
+          ...snapshot.entities.map((entity) => ({
+            ...entity,
+            lastServerKnowledge: 1,
+          })),
+          {
+            entityKind: 'be_onboarding_events',
+            entityId: '11111111-1111-4111-8111-111111111111',
+            isTombstone: false,
+            lastServerKnowledge: 29,
+            payload: {
+              eventName: 'read-delta-proof',
+              userId: 'user-1',
+            },
+          },
+        ],
+      }),
+    };
+
+    const response = await stockRequest(planReader, 'delta', {
+      device_knowledge_of_server: 28,
+    }).expect(200);
+    expect(response.body.current_server_knowledge).toBe(29);
+    expect(response.body.changed_entities.be_onboarding_events).toEqual([
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        is_tombstone: false,
+        event_name: 'read-delta-proof',
+        user_id: 'user-1',
+      },
+    ]);
+    expect(response.body.changed_entities.be_accounts).toEqual([]);
+  });
+
   test('fails closed for writes, deltas, and unauthorized versions', async () => {
     const planReader: BudgetVersionPlanReader = {
       readPlanByBudgetVersion: vi.fn().mockResolvedValue(null),
@@ -205,7 +244,7 @@ describe('stock budget gateway', () => {
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
-      commitChangeSet: vi.fn().mockImplementation(input =>
+      commitChangeSet: vi.fn().mockImplementation((input) =>
         Promise.resolve({
           replayed: false,
           serverKnowledge: 30,
@@ -308,7 +347,7 @@ describe('stock budget gateway', () => {
 
   test('acknowledges the second leg of an already-atomic plan rename', async () => {
     const base = createSnapshot();
-    const entities = base.entities.map(entity =>
+    const entities = base.entities.map((entity) =>
       entity.entityKind === 'be_budget'
         ? {
             ...entity,
@@ -322,12 +361,14 @@ describe('stock budget gateway', () => {
       serverKnowledge: 30,
       entities,
     };
-    const budget = entities.find(entity => entity.entityKind === 'be_budget')!;
+    const budget = entities.find(
+      (entity) => entity.entityKind === 'be_budget',
+    )!;
     const planReader: BudgetVersionPlanReader = {
       readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
-      acknowledgeDevice: vi.fn().mockImplementation(async input => ({
+      acknowledgeDevice: vi.fn().mockImplementation(async (input) => ({
         replayed: false,
         serverKnowledge: input.expectedServerKnowledge,
         endingDeviceKnowledge: input.endingDeviceKnowledge,
@@ -423,7 +464,7 @@ describe('stock budget gateway', () => {
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
-      commitChangeSet: vi.fn().mockImplementation(input =>
+      commitChangeSet: vi.fn().mockImplementation((input) =>
         Promise.resolve({
           replayed: false,
           serverKnowledge: 37,

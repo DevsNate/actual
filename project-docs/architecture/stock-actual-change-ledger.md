@@ -445,16 +445,20 @@ Copy this block for a new architectural delta:
 ### ADD-010 — Evidence-backed Checking account creation
 
 - **Disposition:** Add.
-- **Location:** `packages/sync-server/src/semantic/account-creation-service.ts`,
-  `account-api.ts`, and the stock account source/calculation projectors.
+- **Location:** `packages/semantic-core/src/account.ts`,
+  `packages/sync-server/src/semantic/account-creation-service.ts`, the native
+  and stock account-operation adapters, and the stock account
+  source/calculation projectors.
 - **Observed stock behavior:** `ACCOUNT-002` creates one open on-budget
   Checking account, one enabled account-bound transfer payee, one cleared
   Starting Balance in Immediate Income, and the exact captured account,
   monthly-account, and Ready-to-Assign calculations.
-- **Fork behavior:** One application command validates and commits the three
-  authoritative source entities atomically through the shared plan-change
-  writer. A retained Actual-session route is a thin adapter. Stock source and
-  calculated projections remain separate modules.
+- **Fork behavior:** One canonical account intent is mapped to the three
+  authoritative source entities and committed atomically through the shared
+  plan-change writer. The retained Actual-session and stock direct-import
+  routes are independent thin protocol adapters. The stock route resolves its
+  external budget-version identity before invoking the canonical service.
+  Stock source and calculated projections remain separate modules.
 - **Evidence:** `analysis/evidence/stock-captures/account-002/`. The dedicated
   endpoint and terminal bootstrap are admitted. Two browser-root page+worker
   recaptures confirm the page POST/HTTP 201 contract and observe no worker
@@ -464,11 +468,14 @@ Copy this block for a new architectural delta:
   one independent entity/calculation group per account and additive budget
   calculations. Other types, linked accounts, and lifecycle mutations still
   fail closed.
-- **Verification:** Focused route/service/projection tests plus disposable
+- **Verification:** Focused domain/adapter/service/projection tests, disposable
   PostgreSQL atomicity, receipt replay, entity-count, and stock-bootstrap
-  integration.
-- **Status:** implemented for the canonical command, semantic adapter, and
-  YNAB-shaped direct-import adapter over retained Actual session authority.
+  integration, plus deployed-Web creation and register readback. The live path
+  proves the exact `Token token=` authorization wrapper and immediate
+  knowledge-indexed read delta after HTTP 201.
+- **Status:** implemented and runtime-verified for the canonical command,
+  semantic adapter, and YNAB-shaped direct-import adapter over retained Actual
+  session authority.
 
 ### ADD-011 — Explicit source and derived knowledge advancement
 

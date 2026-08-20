@@ -1,7 +1,10 @@
 import type { PlanSnapshot } from '@actual-app/semantic-core';
 
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockBudgetSource } from './stock-budget-projection';
+import {
+  projectStockBudgetSource,
+  projectStockEntity,
+} from './stock-budget-projection';
 
 const bootstrapArrayTables = [
   'be_account_calculations',
@@ -106,7 +109,7 @@ export function buildStockBudgetBackfill(
     throw new Error('Stock budget backfill requires a current month');
   }
   return {
-    ...Object.fromEntries(backfillArrayTables.map(table => [table, []])),
+    ...Object.fromEntries(backfillArrayTables.map((table) => [table, []])),
     first_month: source.firstMonth,
     last_month: source.lastMonth,
   };
@@ -120,10 +123,59 @@ export function buildStockBudgetEmptyDelta(
     throw new Error('Stock budget delta requires a current month');
   }
   return {
-    ...Object.fromEntries(deltaArrayTables.map(table => [table, []])),
+    ...Object.fromEntries(deltaArrayTables.map((table) => [table, []])),
     be_budget: null,
     be_expected_income: null,
     first_month: source.firstMonth,
     last_month: source.lastMonth,
   };
+}
+
+const calculationSensitiveKinds = new Set([
+  'be_accounts',
+  'be_expected_income',
+  'be_scheduled_subtransactions',
+  'be_scheduled_transactions',
+  'be_subtransactions',
+  'be_transactions',
+]);
+const deltaArrayTableSet = new Set<string>(deltaArrayTables);
+
+export function buildStockBudgetReadDelta(
+  snapshot: PlanSnapshot,
+  afterServerKnowledge: number,
+): Readonly<Record<string, unknown>> {
+  const changed = snapshot.entities.filter((entity) => {
+    if (entity.lastServerKnowledge === undefined) {
+      throw new Error('Stock delta projection requires entity knowledge');
+    }
+    return entity.lastServerKnowledge > afterServerKnowledge;
+  });
+  const result = {
+    ...buildStockBudgetEmptyDelta(snapshot),
+  } as Record<string, unknown>;
+
+  for (const entity of changed) {
+    if (entity.entityKind === 'be_budget') {
+      result.be_budget = projectStockEntity(entity);
+      continue;
+    }
+    if (!deltaArrayTableSet.has(entity.entityKind)) {
+      throw new Error(`Unsupported stock delta table: ${entity.entityKind}`);
+    }
+    const rows = result[entity.entityKind];
+    if (!Array.isArray(rows)) {
+      throw new Error(
+        `Stock delta table is not an array: ${entity.entityKind}`,
+      );
+    }
+    rows.push(projectStockEntity(entity));
+  }
+
+  if (
+    changed.some((entity) => calculationSensitiveKinds.has(entity.entityKind))
+  ) {
+    Object.assign(result, projectStockBudgetCalculations(snapshot));
+  }
+  return result;
 }

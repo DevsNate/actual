@@ -14,6 +14,7 @@ import {
   buildStockBudgetBackfill,
   buildStockBudgetBootstrap,
   buildStockBudgetEmptyDelta,
+  buildStockBudgetReadDelta,
 } from './stock-budget-bootstrap';
 import { projectStockEntity } from './stock-budget-projection';
 import {
@@ -85,13 +86,18 @@ export async function handleStockBudgetSync(
   }
 
   if (Object.keys(syncRequest.changedEntities).length === 0) {
-    if (syncRequest.deviceKnowledgeOfServer !== snapshot.serverKnowledge) {
+    if (syncRequest.deviceKnowledgeOfServer > snapshot.serverKnowledge) {
       return operationError(409, 'budget_knowledge_mismatch');
     }
     return successResponse(
       snapshot.serverKnowledge,
       syncRequest.endingDeviceKnowledge,
-      buildStockBudgetEmptyDelta(snapshot),
+      syncRequest.deviceKnowledgeOfServer === snapshot.serverKnowledge
+        ? buildStockBudgetEmptyDelta(snapshot)
+        : buildStockBudgetReadDelta(
+            snapshot,
+            syncRequest.deviceKnowledgeOfServer,
+          ),
     );
   }
 
@@ -322,7 +328,7 @@ function parsePlanRenameConvergence(
   }
   const outgoing = changedEntities.be_budget;
   const current = snapshot.entities.find(
-    entity =>
+    (entity) =>
       entity.entityKind === 'be_budget' &&
       entity.entityId === snapshot.budgetVersionId &&
       !entity.isTombstone,
@@ -356,11 +362,11 @@ function successResponse(
 function currentBootstrapMonth(snapshot: PlanSnapshot): string {
   const months = snapshot.entities
     .filter(
-      entity =>
+      (entity) =>
         entity.entityKind === 'be_monthly_budgets' &&
         entity.payload.bootstrapRole !== 'opened-budget-prior-month',
     )
-    .map(entity => entity.payload.month)
+    .map((entity) => entity.payload.month)
     .filter((month): month is string => typeof month === 'string')
     .sort();
   if (!months[0]) {

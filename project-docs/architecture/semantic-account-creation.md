@@ -5,30 +5,25 @@ capture and `ACCOUNT-003` rename capture into canonical application commands.
 It does not generalize account types, linked accounts, account close/reopen, or
 arbitrary transaction writes.
 
-## Structural audit before further account admission
+## Canonical account boundary
 
-The first Checking-account slice proves the captured behavior, but its current
-implementation is not yet the final account-domain boundary. Further account
-features are paused until these ownership issues are corrected:
+Checking-account creation now crosses one typed domain boundary. The
+stock-direct-import and retained semantic HTTP adapters parse their own wire
+formats, translate them into the canonical unlinked-account intent, and project
+their own responses. `account-creation-service.ts` owns orchestration only;
+`account-plan-entity-adapter.ts` is the sole mapping from the canonical account,
+transfer-payee, and Starting Balance group into persisted plan entities.
 
-- `account-creation-service.ts` is shared by both transports, but it constructs
-  stock `be_accounts`, `be_payees`, and `be_transactions` representations
-  directly instead of producing a canonical account operation;
-- the native semantic HTTP adapter reuses the stock direct-import body parser,
-  coupling the native API to a captured YNAB request shape;
-- account rename and pristine delete are parsed and committed inside the
-  generic schema-44 budget-sync handler rather than calling the same account
-  application service as creation; and
-- the generic budget-sync handler currently selects account behavior and
-  server-knowledge advancement, which will become a monolith if later account,
-  transaction, transfer, schedule, and target cases are added there.
+The stock adapter also resolves the external `budget_version_id` carried by the
+deployed Web route to the canonical internal `plan_id`. Neither identity leaks
+into the other's role. Atomic knowledge, receipts, and replay remain owned by
+PostgreSQL.
 
-The correction is source-first: define canonical account intents and one
-account application boundary, route create/rename/delete through it, keep
-schema-44 parsing and projection in stock adapters, and leave atomic knowledge
-and replay enforcement in PostgreSQL. Close/reopen, additional account types,
-and linked accounts may be admitted only after that refactor. No compatibility
-exception will be added to bypass it.
+Rename and pristine deletion are still admitted captured behaviors, but their
+schema-44 handlers have not yet been moved behind this canonical account
+application boundary. That is the next account subphase. Close/reopen,
+additional account types, and linked accounts remain outside this slice. No
+compatibility exception will bypass the boundary.
 
 ## Evidence boundary
 
@@ -121,16 +116,24 @@ relationships fail closed.
 
 `POST /semantic/v1/plans/:planId/accounts` is the retained Actual-session
 semantic adapter over the shared command. The stock-shaped adapter is mounted
-at `POST /api/direct_import/budgets/:planId/accounts`; it accepts the captured
-`Authorization: Token` scheme and API-version header, delegates authentication
-to Actual's retained session authority, validates the same admitted JSON, and
-returns the exact flat HTTP 201 acknowledgement. Neither transport constructs
+at `POST /api/direct_import/budgets/:budgetVersionId/accounts`; it accepts the
+captured `Authorization: Token token=<session>` wrapper and API-version header,
+delegates authentication to Actual's retained session authority, and returns
+the exact flat HTTP 201 acknowledgement. Neither transport constructs plan
 entities itself.
+
+After the acknowledgement, an older valid stock cursor receives an
+entity-knowledge-indexed read delta instead of a conflict. A cursor ahead of
+the server still fails closed; an equal cursor receives the empty delta. This
+keeps delivery ordering separate from account command execution.
 
 ## Verification
 
-Focused request, command, rename-parser, gateway, projection, and calculation
-tests pass.
+Focused request, canonical-domain, adapter, gateway, projection, and
+calculation tests pass. A controlled deployed-Web run created
+`CANONICAL CHECKING 01`, accepted the HTTP 201 response, consumed the immediate
+read delta, and displayed the account and its sole `$12.34` Starting Balance
+without a reload or duplicate request.
 Disposable PostgreSQL integration proves repeated direct-import requests,
 three canonical entities per request, independent account calculations,
 additive budget calculations, exact semantic replay without duplicates, and
