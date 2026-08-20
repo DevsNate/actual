@@ -162,7 +162,7 @@ function addAccount(
         accountId: `account-${suffix}`,
         enabled: true,
         autoFillSubCategoryId: null,
-        autoFillUserDefinedSubCategoryId: null,
+        autoFillUserDefinedSubcategoryId: null,
         autoFillMemo: null,
         autoFillAmount: 0,
         autoFillSubCategoryEnabled: true,

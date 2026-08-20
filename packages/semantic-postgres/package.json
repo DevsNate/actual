@@ -16,7 +16,8 @@
     "./budget-identity-schema-migration": "./src/budget-identity-schema-migration.ts",
     "./canonical-account-domain-migration": "./src/canonical-account-domain-migration.ts",
     "./account-lifecycle-migration": "./src/account-lifecycle-migration.ts",
-    "./canonical-category-domain-migration": "./src/canonical-category-domain-migration.ts"
+    "./canonical-category-domain-migration": "./src/canonical-category-domain-migration.ts",
+    "./canonical-ordinary-transaction-migration": "./src/canonical-ordinary-transaction-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

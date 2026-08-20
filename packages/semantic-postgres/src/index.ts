@@ -7,6 +7,7 @@ export { PostgresBudgetReader } from './budget-reader';
 export { semanticCanonicalAccountDomainMigration } from './canonical-account-domain-migration';
 export { semanticAccountLifecycleMigration } from './account-lifecycle-migration';
 export { semanticCanonicalCategoryDomainMigration } from './canonical-category-domain-migration';
+export { semanticCanonicalOrdinaryTransactionMigration } from './canonical-ordinary-transaction-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

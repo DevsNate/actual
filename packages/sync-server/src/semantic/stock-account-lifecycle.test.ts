@@ -191,7 +191,7 @@ function fixture(closed: boolean): BudgetSnapshot {
         accountId: 'account-1',
         enabled: true,
         autoFillSubCategoryId: null,
-        autoFillUserDefinedSubCategoryId: null,
+        autoFillUserDefinedSubcategoryId: null,
         autoFillMemo: null,
         autoFillAmount: 0,
         autoFillSubCategoryEnabled: true,

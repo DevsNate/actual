@@ -53,6 +53,8 @@ function application(
     commitAccountClose: vi.fn(),
     commitAccountReopen: vi.fn(),
     commitCategoryMutation: vi.fn(),
+    commitOrdinaryTransactionMutation: vi.fn(),
+    commitOrdinaryPayeeMutation: vi.fn(),
   },
 ) {
   const result = express();
@@ -254,6 +256,8 @@ describe('stock budget gateway', () => {
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
       commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
       commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
@@ -344,6 +348,8 @@ describe('stock budget gateway', () => {
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
       commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -392,6 +398,8 @@ describe('stock budget gateway', () => {
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
       commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -461,7 +469,7 @@ describe('stock budget gateway', () => {
         accountId: 'account-3',
         enabled: true,
         autoFillSubCategoryId: null,
-        autoFillUserDefinedSubCategoryId: null,
+        autoFillUserDefinedSubcategoryId: null,
         autoFillMemo: null,
         autoFillAmount: 0,
         autoFillSubCategoryEnabled: true,
@@ -494,6 +502,8 @@ describe('stock budget gateway', () => {
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
       commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -562,6 +572,8 @@ describe('stock budget gateway', () => {
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
       commitChangeSet: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
       commitCategoryMutation: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
@@ -637,6 +649,89 @@ describe('stock budget gateway', () => {
           changes: expect.arrayContaining([
             expect.objectContaining({ entityKind: 'be_subcategories' }),
           ]),
+        }),
+      }),
+    );
+  });
+
+  test('routes an ordinary payee rename through the canonical writer', async () => {
+    const base = createSnapshot();
+    const payee = {
+      entityKind: 'be_payees' as const,
+      entityId: 'ordinary-payee-1',
+      isTombstone: false,
+      payload: {
+        budgetVersionId: 'version-1',
+        accountId: null,
+        enabled: true,
+        autoFillSubCategoryId: null,
+        autoFillUserDefinedSubcategoryId: null,
+        autoFillMemo: null,
+        autoFillAmount: 0,
+        autoFillSubCategoryEnabled: true,
+        autoFillMemoEnabled: false,
+        autoFillAmountEnabled: false,
+        renameOnImportEnabled: true,
+        name: 'Payee 4',
+        internalName: null,
+        deviceKnowledge: null,
+      },
+    };
+    const snapshot = {
+      ...base,
+      serverKnowledge: 84,
+      entities: [...base.entities, payee],
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitChangeSet: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn().mockImplementation(input =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 85,
+          endingDeviceKnowledge: 5,
+          response: input.delivery.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      {
+        readBudgetByVersion: vi.fn().mockResolvedValue(snapshot),
+      },
+      'delta',
+      {
+        starting_device_knowledge: 4,
+        ending_device_knowledge: 5,
+        device_knowledge_of_server: 84,
+        changed_entities: {
+          be_payees: [{ ...projectStockEntity(payee), name: 'Payee 5' }],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 85,
+      server_knowledge_of_device: 5,
+    });
+    expect(changeWriter.commitOrdinaryPayeeMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mutation: {
+          kind: 'rename',
+          budgetId: 'plan-1',
+          payeeId: 'ordinary-payee-1',
+          expectedName: 'Payee 4',
+          name: 'Payee 5',
+        },
+        delivery: expect.objectContaining({
+          serverKnowledgeAdvance: 1,
         }),
       }),
     );

@@ -33,6 +33,8 @@ function app(
     commitAccountClose: vi.fn(),
     commitAccountReopen: vi.fn(),
     commitCategoryMutation: vi.fn(),
+    commitOrdinaryTransactionMutation: vi.fn(),
+    commitOrdinaryPayeeMutation: vi.fn(),
   },
   catalogWriter: CatalogCommandWriter = { commitCatalogCommand: vi.fn() },
   budgetLifecycleService: BudgetLifecycleService = {

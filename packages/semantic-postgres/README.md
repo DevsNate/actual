@@ -24,6 +24,8 @@ audit.
   adjustment storage for admitted Checking-account creation and lifecycle;
 - typed category-group references, category definitions, and monthly-category
   budgeting rows for the admitted untargeted category lifecycle;
+- typed ordinary payee and transaction facts for the admitted PAYEE-001
+  transaction-coupled lifecycle;
 - transactional migrations protected by a PostgreSQL advisory lock.
 
 `commitChangeSet` serializes reuse of a device idempotency key, locks budget and
@@ -65,17 +67,22 @@ Migration 0008 admits CATEGORY-001 without treating server-derived monthly rows
 as additional client mutations. Category definitions and monthly budgeting
 facts remain separate canonical tables and commit atomically with compatibility
 delivery and replay receipts.
+Migration 0009 admits the PAYEE-001 ordinary payee/transaction aggregate. It
+adds the captured payee autofill facts and exact cleared state while keeping
+grouped schema-44 rows at the stock adapter boundary.
 The full field-by-field audit is recorded in
 `project-docs/architecture/semantic-postgres-contract-audit.md`.
 
 ## Deliberate exclusions
 
 Typed account storage owns only the evidence-admitted unlinked Checking-account
-creation, rename, pristine deletion, close, and reopen shapes. Other account
-types, linked accounts, general transactions, splits, transfers, schedules,
-targets, and credit-card semantics remain gated on their canonical domain
-cutovers. Existing narrow compatibility implementations do not broaden that
-authority. The package also does not duplicate Actual authentication;
+creation, rename, pristine deletion, close, and reopen shapes. Typed ordinary
+transaction storage owns only PAYEE-001 transaction-coupled payee creation,
+transaction deletion, payee rename, and unused-payee deletion. Other account
+types, linked accounts, categorized/general transaction editing, splits,
+transfers, schedules, targets, and credit-card semantics remain gated on their
+canonical domain cutovers. Existing narrow compatibility implementations do
+not broaden that authority. The package also does not duplicate Actual authentication;
 memberships refer to principals produced by the retained Actual session system.
 
 All changes to this boundary must update

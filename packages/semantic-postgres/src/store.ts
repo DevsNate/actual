@@ -1,17 +1,19 @@
 import type {
+  BudgetDeviceAcknowledgement,
+  BudgetMembership,
   CatalogCommand,
   CatalogCommandResult,
   CatalogSnapshot,
-  CommitUnlinkedAccountCreation,
-  CommitCanonicalAccountRename,
   CommitCanonicalAccountClose,
+  CommitCanonicalAccountRename,
   CommitCanonicalAccountReopen,
-  CommitCanonicalPristineAccountDeletion,
   CommitCanonicalCategoryMutation,
+  CommitCanonicalOrdinaryPayeeMutation,
+  CommitCanonicalOrdinaryTransactionMutation,
+  CommitCanonicalPristineAccountDeletion,
+  CommitUnlinkedAccountCreation,
   CreateBudgetCommand,
   CreateBudgetResult,
-  BudgetDeviceAcknowledgement,
-  BudgetMembership,
   PrincipalId,
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
@@ -442,6 +444,28 @@ export class PostgresSemanticStore {
     );
   }
 
+  async commitOrdinaryTransactionMutation(
+    command: CommitCanonicalOrdinaryTransactionMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalOrdinaryTransactionMutation(client, command),
+      ),
+    );
+  }
+
+  async commitOrdinaryPayeeMutation(
+    command: CommitCanonicalOrdinaryPayeeMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalOrdinaryPayeeMutation(client, command),
+      ),
+    );
+  }
+
   async acknowledgeDevice(
     input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
@@ -657,8 +681,9 @@ async function insertCanonicalAccountGroup(
     `INSERT INTO semantic_transactions
        (budget_id, transaction_id, account_id, payee_id, category_id,
         transaction_date, amount_milliunits, is_cleared, is_approved,
-        transaction_kind)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'starting_balance')`,
+        transaction_kind, cleared_state)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+             'starting_balance', 'Cleared')`,
     [
       startingBalance.budgetId,
       startingBalance.id,
@@ -822,6 +847,153 @@ async function writeCanonicalCategoryMutation(
   }
 }
 
+async function writeCanonicalOrdinaryTransactionMutation(
+  client: PoolClient,
+  command: CommitCanonicalOrdinaryTransactionMutation,
+): Promise<void> {
+  const mutation = command.mutation;
+  if (mutation.kind === 'create-with-payee') {
+    const { payee, transaction } = mutation;
+    if (
+      payee.budgetId !== transaction.budgetId ||
+      transaction.payeeId !== payee.id
+    ) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Ordinary payee and transaction identities do not share one aggregate',
+      );
+    }
+    await client.query(
+      `INSERT INTO semantic_payees
+         (budget_id, payee_id, account_id, name, is_enabled,
+          auto_fill_category_id, auto_fill_user_defined_category_id,
+          auto_fill_memo, auto_fill_amount_milliunits,
+          auto_fill_category_enabled, auto_fill_memo_enabled,
+          auto_fill_amount_enabled, rename_on_import_enabled, internal_name)
+       VALUES ($1, $2, NULL, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+      [
+        payee.budgetId,
+        payee.id,
+        payee.name,
+        payee.isEnabled,
+        payee.autoFillCategoryId,
+        payee.autoFillUserDefinedCategoryId,
+        payee.autoFillMemo,
+        payee.autoFillAmount,
+        payee.autoFillCategoryEnabled,
+        payee.autoFillMemoEnabled,
+        payee.autoFillAmountEnabled,
+        payee.renameOnImportEnabled,
+        payee.internalName,
+      ],
+    );
+    await client.query(
+      `INSERT INTO semantic_transactions
+         (budget_id, transaction_id, account_id, payee_id, category_id,
+          transaction_date, amount_milliunits, is_cleared, is_approved,
+          transaction_kind, memo, cleared_state, check_number, flag)
+       VALUES ($1, $2, $3, $4, $5, $6, $7,
+               ($8 <> 'Uncleared'), $9, 'ordinary', $10, $8, $11, $12)`,
+      [
+        transaction.budgetId,
+        transaction.id,
+        transaction.accountId,
+        transaction.payeeId,
+        transaction.categoryId,
+        transaction.date,
+        transaction.amount,
+        transaction.cleared,
+        transaction.accepted,
+        transaction.memo,
+        transaction.checkNumber,
+        transaction.flag,
+      ],
+    );
+    return;
+  }
+
+  const transaction = await client.query(
+    `UPDATE semantic_transactions
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND transaction_id = $2
+       AND transaction_kind = 'ordinary' AND is_tombstone = false`,
+    [mutation.budgetId, mutation.transactionId],
+  );
+  if (transaction.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Ordinary transaction deletion did not match one live transaction',
+    );
+  }
+}
+
+async function writeCanonicalOrdinaryPayeeMutation(
+  client: PoolClient,
+  command: CommitCanonicalOrdinaryPayeeMutation,
+): Promise<void> {
+  const mutation = command.mutation;
+  if (mutation.kind === 'rename') {
+    const payee = await client.query(
+      `UPDATE semantic_payees
+       SET name = $4, updated_at = now()
+       WHERE budget_id = $1 AND payee_id = $2 AND account_id IS NULL
+         AND name = $3 AND is_tombstone = false`,
+      [
+        mutation.budgetId,
+        mutation.payeeId,
+        mutation.expectedName,
+        mutation.name,
+      ],
+    );
+    if (payee.rowCount !== 1) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Ordinary payee rename did not match one live payee',
+      );
+    }
+    return;
+  }
+
+  const current = await client.query(
+    `SELECT 1 FROM semantic_payees
+     WHERE budget_id = $1 AND payee_id = $2 AND account_id IS NULL
+       AND is_tombstone = false
+     FOR UPDATE`,
+    [mutation.budgetId, mutation.payeeId],
+  );
+  if (current.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Ordinary payee deletion did not match one unused live payee',
+    );
+  }
+  const liveReferences = await client.query(
+    `SELECT 1 FROM semantic_transactions
+     WHERE budget_id = $1 AND payee_id = $2 AND is_tombstone = false
+     LIMIT 1 FOR UPDATE`,
+    [mutation.budgetId, mutation.payeeId],
+  );
+  if (liveReferences.rowCount !== 0) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Ordinary payee deletion is not admitted while live transactions refer to it',
+    );
+  }
+  const payee = await client.query(
+    `UPDATE semantic_payees
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND payee_id = $2 AND account_id IS NULL
+       AND is_tombstone = false`,
+    [mutation.budgetId, mutation.payeeId],
+  );
+  if (payee.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Ordinary payee deletion did not match one unused live payee',
+    );
+  }
+}
+
 async function updateCanonicalAccountName(
   client: PoolClient,
   command: CommitCanonicalAccountRename,
@@ -938,9 +1110,9 @@ async function closeCanonicalAccount(
     `INSERT INTO semantic_transactions
        (budget_id, transaction_id, account_id, payee_id, category_id,
         transaction_date, amount_milliunits, is_cleared, is_approved,
-        transaction_kind, memo)
+        transaction_kind, memo, cleared_state)
      VALUES ($1, $2, $3, $4, $5, $6, $7, true, true,
-             'manual_balance_adjustment', $8)`,
+             'manual_balance_adjustment', $8, 'Cleared')`,
     [
       adjustment.budgetId,
       adjustment.id,

@@ -630,3 +630,27 @@ Copy this block for a new architectural delta:
 - **Status:** implemented and verified by the full local suites, strict
   TypeScript checks, and disposable PostgreSQL create/replay/update/delete plus
   authenticated runtime integration.
+
+### ADD-015 — Canonical ordinary transaction and payee aggregate
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/transaction.ts`,
+  `packages/sync-server/src/semantic/stock-ordinary-transaction.ts`, and
+  `packages/semantic-postgres/migrations/0009_canonical_ordinary_transaction.sql`.
+- **Observed stock behavior:** PAYEE-001 creates a new ordinary payee and its
+  first unsplit transaction in one schema-44 request. The response normalizes
+  `cash_amount` from zero to the transaction amount. Exact transaction deletion
+  leaves the payee live; the retained payee can then be renamed and deleted
+  once unused.
+- **Fork behavior:** A strict stock adapter emits typed transaction/payee
+  commands. Canonical rows, compatibility projections, calculation changes,
+  knowledge, and exact replay receipts commit atomically. Live-reference payee
+  deletion fails closed.
+- **Boundary:** Only the uncategorized, unscheduled, non-transfer PAYEE-001
+  shape is admitted. Standalone creation, merge, categorized edits, splits,
+  transfers, payments, schedules, imports, and matching remain gated.
+- **Verification:** Focused positive and adversarial parser tests, strict
+  TypeScript checks, all local package suites, clean disposable PostgreSQL
+  create/replay/delete/rename/delete readback, and authenticated runtime
+  migration tests.
+- **Status:** implemented.

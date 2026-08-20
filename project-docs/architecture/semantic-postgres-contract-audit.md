@@ -313,7 +313,7 @@ should be a new clean initial semantic schema assembled from:
    model; and
 4. separate Web and iOS compatibility projections.
 
-Migrations 0001-0008 remain useful as provenance and migration-test evidence,
+Migrations 0001-0009 remain useful as provenance and migration-test evidence,
 but they should not automatically become the shipping schema. Build the clean
 schema alongside the current implementation, migrate one complete domain at a
 time, then remove the replaced transitional path. This is a canonical-core
@@ -328,3 +328,7 @@ close, and reopen, including typed Starting Balance/manual-adjustment identity.
 Migration 0008 cuts over the captured untargeted category lifecycle into typed
 group-reference, category-definition, and monthly-budgeting tables. Its stock
 rows remain compatibility projections rather than canonical authority.
+Migration 0009 cuts over the narrow PAYEE-001 ordinary transaction/payee
+aggregate. It preserves exact grouped stock rows only in compatibility
+projection while typed payee and transaction facts are authoritative for the
+admitted create/delete/rename lifecycle.

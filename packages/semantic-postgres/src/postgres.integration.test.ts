@@ -744,6 +744,266 @@ integrationTest('PostgresSemanticStore integration', () => {
     });
   });
 
+  test('atomically commits and replays the admitted ordinary transaction and payee lifecycle', async () => {
+    const budgetId = 'ordinary-budget';
+    const deviceId = 'ordinary-device';
+    await store.seedBudget({
+      budgetId,
+      budgetVersionId: 'ordinary-version',
+      membershipId: 'ordinary-membership',
+      principalId: 'ordinary-principal',
+      name: 'Ordinary budget',
+      permissions: 7,
+    });
+    const accountGroup = buildUnlinkedCheckingAccount({
+      budgetId,
+      accountId: 'ordinary-account',
+      transferPayeeId: 'ordinary-transfer-payee',
+      startingBalanceId: 'ordinary-starting-balance',
+      startingBalancePayeeId: 'ordinary-starting-balance-payee',
+      immediateIncomeCategoryId: 'ordinary-immediate-income',
+      name: 'Checking',
+      openingBalance: 100000,
+      openingDate: '2026-08-16',
+      sortOrder: 0,
+    });
+    await store.commitUnlinkedAccountCreation({
+      accountGroup,
+      delivery: {
+        changeSetId: 'ordinary-account-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 0,
+        expectedServerKnowledge: 0,
+        serverKnowledgeAdvance: 2,
+        schemaVersion: 44,
+        idempotencyKey: 'ordinary-account-request',
+        payloadDigest: '1'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_accounts',
+            entityId: 'ordinary-account',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_payees',
+            entityId: 'ordinary-transfer-payee',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'ordinary-starting-balance',
+            isTombstone: false,
+            payload: {},
+          },
+        ],
+        response: { created: true },
+      },
+    });
+
+    const create = {
+      mutation: {
+        kind: 'create-with-payee' as const,
+        payee: {
+          id: 'ordinary-payee',
+          budgetId,
+          name: 'Payee 4',
+          isEnabled: true,
+          autoFillCategoryId: null,
+          autoFillUserDefinedCategoryId: null,
+          autoFillMemo: null,
+          autoFillAmount: 0,
+          autoFillCategoryEnabled: true,
+          autoFillMemoEnabled: false,
+          autoFillAmountEnabled: false,
+          renameOnImportEnabled: true,
+          internalName: null,
+        },
+        transaction: {
+          id: 'ordinary-transaction',
+          budgetId,
+          accountId: 'ordinary-account',
+          payeeId: 'ordinary-payee',
+          categoryId: null,
+          date: '2026-08-16',
+          amount: -1000,
+          memo: 'Payee Test 1',
+          cleared: 'Uncleared' as const,
+          accepted: true,
+          checkNumber: null,
+          flag: null,
+        },
+      },
+      delivery: {
+        changeSetId: 'ordinary-create-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 2,
+        serverKnowledgeAdvance: 2 as const,
+        schemaVersion: 44,
+        idempotencyKey: 'ordinary-create-request',
+        payloadDigest: '2'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_payees',
+            entityId: 'ordinary-payee',
+            isTombstone: false,
+            payload: { name: 'Payee 4' },
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'ordinary-transaction',
+            isTombstone: false,
+            payload: { amount: -1000 },
+          },
+        ],
+        response: { accepted: true },
+      },
+    };
+    await expect(
+      store.commitOrdinaryTransactionMutation(create),
+    ).resolves.toMatchObject({
+      replayed: false,
+      serverKnowledge: 4,
+    });
+    await expect(
+      store.commitOrdinaryTransactionMutation(create),
+    ).resolves.toMatchObject({
+      replayed: true,
+      serverKnowledge: 4,
+    });
+
+    await expect(
+      store.commitOrdinaryPayeeMutation({
+        mutation: {
+          kind: 'delete',
+          budgetId,
+          payeeId: 'ordinary-payee',
+        },
+        delivery: {
+          ...create.delivery,
+          changeSetId: 'ordinary-live-payee-delete-change',
+          startingDeviceKnowledge: 2,
+          endingDeviceKnowledge: 3,
+          expectedServerKnowledge: 4,
+          serverKnowledgeAdvance: 1,
+          idempotencyKey: 'ordinary-live-payee-delete-request',
+          payloadDigest: '6'.repeat(64),
+          changes: [],
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_OPERATION' });
+
+    await store.commitOrdinaryTransactionMutation({
+      mutation: {
+        kind: 'delete',
+        budgetId,
+        transactionId: 'ordinary-transaction',
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'ordinary-delete-change',
+        startingDeviceKnowledge: 2,
+        endingDeviceKnowledge: 3,
+        expectedServerKnowledge: 4,
+        idempotencyKey: 'ordinary-delete-request',
+        payloadDigest: '3'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_transactions',
+            entityId: 'ordinary-transaction',
+            isTombstone: true,
+            payload: { amount: -1000 },
+          },
+        ],
+      },
+    });
+    await store.commitOrdinaryPayeeMutation({
+      mutation: {
+        kind: 'rename',
+        budgetId,
+        payeeId: 'ordinary-payee',
+        expectedName: 'Payee 4',
+        name: 'Payee 5',
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'ordinary-payee-rename-change',
+        startingDeviceKnowledge: 3,
+        endingDeviceKnowledge: 4,
+        expectedServerKnowledge: 6,
+        serverKnowledgeAdvance: 1,
+        idempotencyKey: 'ordinary-payee-rename-request',
+        payloadDigest: '4'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_payees',
+            entityId: 'ordinary-payee',
+            isTombstone: false,
+            payload: { name: 'Payee 5' },
+          },
+        ],
+      },
+    });
+    await store.commitOrdinaryPayeeMutation({
+      mutation: { kind: 'delete', budgetId, payeeId: 'ordinary-payee' },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'ordinary-payee-delete-change',
+        startingDeviceKnowledge: 4,
+        endingDeviceKnowledge: 5,
+        expectedServerKnowledge: 7,
+        serverKnowledgeAdvance: 1,
+        idempotencyKey: 'ordinary-payee-delete-request',
+        payloadDigest: '5'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_payees',
+            entityId: 'ordinary-payee',
+            isTombstone: true,
+            payload: { name: 'Payee 5' },
+          },
+        ],
+      },
+    });
+
+    const terminal = await pool.query(
+      `SELECT p.name, p.is_tombstone AS payee_tombstone,
+              t.amount_milliunits::text AS amount,
+              t.memo, t.cleared_state,
+              t.is_tombstone AS transaction_tombstone,
+              b.server_knowledge::text AS server_knowledge,
+              d.server_knowledge_of_device::text AS device_knowledge,
+              (SELECT count(*) FROM semantic_budget_device_receipts
+               WHERE budget_id = $1 AND idempotency_key = 'ordinary-create-request')::text AS create_receipts
+       FROM semantic_payees p
+       JOIN semantic_transactions t
+         ON t.budget_id = p.budget_id AND t.payee_id = p.payee_id
+       JOIN semantic_budgets b ON b.budget_id = p.budget_id
+       JOIN semantic_budget_devices d ON d.budget_id = p.budget_id
+       WHERE p.budget_id = $1 AND p.payee_id = 'ordinary-payee'
+         AND t.transaction_id = 'ordinary-transaction'
+         AND d.device_id = $2`,
+      [budgetId, deviceId],
+    );
+    expect(terminal.rows[0]).toEqual({
+      name: 'Payee 5',
+      payee_tombstone: true,
+      amount: '-1000',
+      memo: 'Payee Test 1',
+      cleared_state: 'Uncleared',
+      transaction_tombstone: true,
+      server_knowledge: '8',
+      device_knowledge: '5',
+      create_receipts: '1',
+    });
+  });
+
   test('commits and exactly replays an isolated catalog command', async () => {
     const operation = {
       changeSetId: 'catalog-change-integration',

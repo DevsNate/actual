@@ -1,13 +1,11 @@
 import type {
-  CanonicalUnlinkedAccountGroup,
   BudgetEntity,
   BudgetSnapshot,
+  CanonicalUnlinkedAccountGroup,
 } from '@actual-app/semantic-core';
 
-import {
-  AccountCreationError,
-  type AccountEntityAdapter,
-} from './account-creation-service';
+import { AccountCreationError } from './account-creation-service';
+import type { AccountEntityAdapter } from './account-creation-service';
 
 export const stockAccountBudgetEntityAdapter: AccountEntityAdapter = {
   resolveCreationContext(snapshot, idempotencyKey) {
@@ -104,7 +102,7 @@ function transferPayeeEntity(
       name: transferPayee.name,
       internalName: null,
       autoFillSubCategoryId: null,
-      autoFillUserDefinedSubCategoryId: null,
+      autoFillUserDefinedSubcategoryId: null,
       autoFillMemo: null,
       autoFillAmount: 0,
       autoFillSubCategoryEnabled: true,
