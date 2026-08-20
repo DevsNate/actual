@@ -53,7 +53,7 @@ export function projectStockBudgetSource(
 export function projectStockEntity(
   entity: PlanEntity,
 ): Readonly<Record<string, unknown>> {
-  const payload = projectPayload(entity.entityKind, entity.payload);
+  const payload = projectEntityPayload(entity.entityKind, entity.payload);
   if ('id' in payload || 'is_tombstone' in payload) {
     throw new Error(
       'Canonical entity payload collides with stock identity fields',
@@ -63,6 +63,33 @@ export function projectStockEntity(
     ...payload,
     id: entity.entityId,
     is_tombstone: entity.isTombstone,
+  };
+}
+
+function projectEntityPayload(
+  entityKind: string,
+  payload: Readonly<Record<string, unknown>>,
+) {
+  const projected = projectPayload(entityKind, payload);
+  if (entityKind !== 'be_budget') {
+    return projected;
+  }
+  const currencyFormat = projected.currency_format;
+  const dateFormat = projected.date_format;
+  if (
+    (currencyFormat !== undefined && !isRecord(currencyFormat)) ||
+    (dateFormat !== undefined && !isRecord(dateFormat))
+  ) {
+    throw new Error('Stock budget formats must be structured canonical values');
+  }
+  return {
+    ...projected,
+    ...(currencyFormat === undefined
+      ? {}
+      : { currency_format: JSON.stringify(currencyFormat) }),
+    ...(dateFormat === undefined
+      ? {}
+      : { date_format: JSON.stringify(dateFormat) }),
   };
 }
 

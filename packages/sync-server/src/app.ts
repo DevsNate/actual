@@ -7,6 +7,7 @@ import express from 'express';
 import rateLimit from 'express-rate-limit';
 
 import { bootstrap } from './account-db';
+import { loginWithPassword } from './accounts/password';
 import * as accountApp from './app-account';
 import * as adminApp from './app-admin';
 import * as akahuApp from './app-akahu/app-akahu.js';
@@ -20,6 +21,8 @@ import * as simpleFinApp from './app-simplefin/app-simplefin';
 import * as syncApp from './app-sync';
 import { config } from './load-config';
 import { createPostgresSemanticCatalogHandlers } from './semantic/postgres-runtime';
+import { resolveActualPrincipal } from './semantic/session-principal-adapter';
+import { createStockWebRuntime } from './semantic/stock-web-runtime';
 
 const app = express();
 
@@ -77,6 +80,7 @@ if (config.get('semantic.enabled')) {
     await createPostgresSemanticCatalogHandlers(databaseUrl);
   app.use('/semantic/v1', semanticCatalog.handlers);
   app.use('/api/v1', semanticCatalog.stockHandlers);
+  app.use('/api/v2', semanticCatalog.stockUserHandlers);
   app.use('/api', semanticCatalog.stockAccountHandlers);
 }
 
@@ -149,9 +153,11 @@ app.get('/metrics', (_req, res) => {
 // `'unsafe-eval'` is required at runtime for the Electron app, so it is
 // kept in both branches.
 const isDev = process.env.NODE_ENV === 'development';
-const scriptSrc = isDev
-  ? "'self' 'unsafe-inline' 'unsafe-eval' blob:"
-  : "'self' 'unsafe-eval' blob:";
+const stockWebEnabled = config.get('stockWeb.enabled');
+const scriptSrc =
+  isDev || stockWebEnabled
+    ? "'self' 'unsafe-inline' 'unsafe-eval' blob:"
+    : "'self' 'unsafe-eval' blob:";
 const connectSrc = isDev ? "'self' ws: wss: http: https:" : 'http: https:';
 const csp = [
   "default-src 'self' blob:",
@@ -168,7 +174,22 @@ app.use((req, res, next) => {
   res.set('Content-Security-Policy', csp);
   next();
 });
-if (isDev) {
+if (stockWebEnabled) {
+  const root = config.get('stockWeb.root').trim();
+  if (!root) {
+    throw new Error(
+      'ACTUAL_STOCK_WEB_ROOT is required when ACTUAL_STOCK_WEB_ENABLED is true',
+    );
+  }
+  app.use(
+    createStockWebRuntime({
+      root,
+      loginWithPassword,
+      resolvePrincipal: resolveActualPrincipal,
+      loginRateLimiter: accountApp.authRateLimiter,
+    }),
+  );
+} else if (isDev) {
   console.log(
     'Running in development mode - Proxying frontend routes to React Dev Server',
   );

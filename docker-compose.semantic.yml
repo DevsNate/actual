@@ -32,6 +32,8 @@ services:
       ACTUAL_DATA_DIR: /data
       ACTUAL_SEMANTIC_ENABLED: 'true'
       ACTUAL_SEMANTIC_DATABASE_URL: postgresql://actual:${SEMANTIC_POSTGRES_PASSWORD:-actual-local-dev}@semantic-db:5432/actual_semantic
+      ACTUAL_STOCK_WEB_ENABLED: ${ACTUAL_STOCK_WEB_ENABLED:-false}
+      ACTUAL_STOCK_WEB_ROOT: /stock-web-runtime
     healthcheck:
       test:
         [
@@ -48,6 +50,7 @@ services:
       - ${SEMANTIC_SERVER_PORT:-5006}:5006
     volumes:
       - semantic-actual-data:/data
+      - ${ACTUAL_STOCK_WEB_RUNTIME_ROOT:-./web-stock-runtime/vendor/current}:/stock-web-runtime:ro
     restart: unless-stopped
 
   semantic-test:

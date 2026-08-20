@@ -1,4 +1,11 @@
-import type { CatalogReader, PlanMembership } from '@actual-app/semantic-core';
+import { createHash, randomUUID } from 'node:crypto';
+
+import type {
+  CatalogCommandChange,
+  CatalogCommandWriter,
+  CatalogReader,
+  PlanMembership,
+} from '@actual-app/semantic-core';
 
 import {
   isRecord,
@@ -11,10 +18,17 @@ import type {
   StockOperationContext,
   StockOperationResponse,
 } from './stock-operation';
+import {
+  projectStockPrivacyAgreement,
+  projectStockUser,
+} from './stock-user-projection';
 
 export async function handleStockCatalogSync(
   context: StockOperationContext,
-  catalogReader: CatalogReader,
+  dependencies: {
+    catalogReader: CatalogReader;
+    catalogWriter: CatalogCommandWriter;
+  },
 ): Promise<StockOperationResponse> {
   const syncRequest = parseCatalogSyncRequest(context.requestData);
   if (!syncRequest) {
@@ -24,34 +38,78 @@ export async function handleStockCatalogSync(
     return operationError(403, 'principal_mismatch');
   }
 
-  const catalog = await catalogReader.readCatalog(context.principal.id);
+  const outgoingChanges = parseOutgoingChanges(
+    syncRequest.changedEntities,
+    context.principal.id,
+  );
+  if (outgoingChanges === null) {
+    return operationError(400, 'invalid_catalog_request');
+  }
+
+  const catalog = await dependencies.catalogReader.readCatalog(
+    context.principal.id,
+  );
   if (
     syncRequest.deviceKnowledgeOfServer >
     catalog.knowledge.currentServerKnowledge
   ) {
     return operationError(409, 'server_knowledge_mismatch');
   }
-  const memberships =
+  if (outgoingChanges.length > 0) {
+    const nextKnowledge = catalog.knowledge.currentServerKnowledge + 1;
+    const body = catalogResponse(
+      syncRequest.endingDeviceKnowledge,
+      nextKnowledge,
+      {},
+    );
+    const result = await dependencies.catalogWriter.commitCatalogCommand({
+      changeSetId: randomUUID(),
+      principalId: context.principal.id,
+      originDeviceId: context.deviceId,
+      startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
+      endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
+      expectedServerKnowledge: syncRequest.deviceKnowledgeOfServer,
+      schemaVersion: STOCK_CATALOG_SCHEMA_VERSION,
+      commandKind: 'stock-sync-user-settings',
+      idempotencyKey: context.clientRequestId,
+      payloadDigest: createHash('sha256')
+        .update(context.requestData)
+        .digest('hex'),
+      changes: outgoingChanges,
+      response: body,
+    });
+    return { status: 200, body: result.response };
+  }
+
+  const changed =
     syncRequest.deviceKnowledgeOfServer <
-    catalog.knowledge.currentServerKnowledge
-      ? catalog.memberships.map(projectMembership)
-      : [];
+    catalog.knowledge.currentServerKnowledge;
+  const memberships = changed ? catalog.memberships.map(projectMembership) : [];
   return {
     status: 200,
-    body: {
-      error: null,
-      schema_version_of_response: STOCK_CATALOG_SCHEMA_VERSION,
-      server_knowledge_of_device: syncRequest.endingDeviceKnowledge,
-      current_server_knowledge: catalog.knowledge.currentServerKnowledge,
-      changed_entities: { ce_user_budgets: memberships },
-    },
+    body: catalogResponse(
+      syncRequest.endingDeviceKnowledge,
+      catalog.knowledge.currentServerKnowledge,
+      changed
+        ? {
+            ce_user_budgets: memberships,
+            ce_users: [projectStockUser(context.principal)],
+            ce_user_settings: [],
+            ce_user_privacy_policy_agreements: [
+              projectStockPrivacyAgreement(context.principal),
+            ],
+          }
+        : { ce_user_budgets: memberships },
+    ),
   };
 }
 
 type CatalogSyncRequest = {
   userId: string;
+  startingDeviceKnowledge: number;
   deviceKnowledgeOfServer: number;
   endingDeviceKnowledge: number;
+  changedEntities: Readonly<Record<string, unknown>>;
 };
 
 function parseCatalogSyncRequest(value: string): CatalogSyncRequest | null {
@@ -78,9 +136,8 @@ function parseCatalogSyncRequest(value: string): CatalogSyncRequest | null {
     startingDeviceKnowledge === null ||
     endingDeviceKnowledge === null ||
     deviceKnowledgeOfServer === null ||
-    startingDeviceKnowledge !== endingDeviceKnowledge ||
+    endingDeviceKnowledge < startingDeviceKnowledge ||
     !isRecord(parsed.changed_entities) ||
-    Object.keys(parsed.changed_entities).length !== 0 ||
     typeof parsed.user_id !== 'string' ||
     !parsed.user_id
   ) {
@@ -88,8 +145,70 @@ function parseCatalogSyncRequest(value: string): CatalogSyncRequest | null {
   }
   return {
     userId: parsed.user_id,
+    startingDeviceKnowledge,
     endingDeviceKnowledge,
     deviceKnowledgeOfServer,
+    changedEntities: parsed.changed_entities,
+  };
+}
+
+function parseOutgoingChanges(
+  changedEntities: Readonly<Record<string, unknown>>,
+  principalId: string,
+): readonly CatalogCommandChange[] | null {
+  const keys = Object.keys(changedEntities);
+  if (keys.length === 0) {
+    return [];
+  }
+  if (keys.length !== 1 || keys[0] !== 'ce_user_settings') {
+    return null;
+  }
+  const rows = changedEntities.ce_user_settings;
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return null;
+  }
+  const changes: CatalogCommandChange[] = [];
+  for (const row of rows) {
+    if (!isRecord(row) || !validUserSetting(row, principalId)) {
+      return null;
+    }
+    changes.push({
+      entityKind: 'ce_user_settings',
+      entityId: row.id,
+      isTombstone: false,
+      payload: row,
+    });
+  }
+  return changes;
+}
+
+function validUserSetting(
+  row: Readonly<Record<string, unknown>>,
+  principalId: string,
+): row is Readonly<Record<string, unknown>> & { id: string } {
+  return (
+    Object.keys(row).sort().join(',') ===
+      'id,setting_name,setting_value,user_id' &&
+    typeof row.id === 'string' &&
+    row.id.length > 0 &&
+    row.user_id === principalId &&
+    typeof row.setting_name === 'string' &&
+    row.setting_name.length > 0 &&
+    typeof row.setting_value === 'string'
+  );
+}
+
+function catalogResponse(
+  serverKnowledgeOfDevice: number,
+  currentServerKnowledge: number,
+  changedEntities: Readonly<Record<string, unknown>>,
+) {
+  return {
+    error: null,
+    schema_version_of_response: STOCK_CATALOG_SCHEMA_VERSION,
+    server_knowledge_of_device: serverKnowledgeOfDevice,
+    current_server_knowledge: currentServerKnowledge,
+    changed_entities: changedEntities,
   };
 }
 

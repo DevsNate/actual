@@ -1,6 +1,7 @@
 import type {
   AuthenticatedPrincipal,
   BudgetVersionPlanReader,
+  CatalogCommandWriter,
   CatalogReader,
 } from '@actual-app/semantic-core';
 import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
@@ -47,10 +48,14 @@ function application(
 ) {
   const result = express();
   const catalogReader: CatalogReader = { readCatalog: vi.fn() };
+  const catalogWriter: CatalogCommandWriter = {
+    commitCatalogCommand: vi.fn(),
+  };
   result.use(
     '/api/v1',
     createStockCatalogGateway({
       catalogReader,
+      catalogWriter,
       planReader,
       changeWriter,
       resolvePrincipal: () => principal,

@@ -40,6 +40,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export type StockOperationContext = {
   principal: AuthenticatedPrincipal;
+  sessionToken: string;
   requestData: string;
   clientRequestId: string;
   deviceId: string;

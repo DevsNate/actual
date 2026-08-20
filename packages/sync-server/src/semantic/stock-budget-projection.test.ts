@@ -38,11 +38,9 @@ describe('stock budget source projection', () => {
       budget_id: 'plan-1',
       budget_name: 'Plan',
       is_tombstone: false,
-      currency_format: {
-        iso_code: 'USD',
-        currency_symbol: '$',
-        decimal_digits: 2,
-      },
+      currency_format:
+        '{"iso_code":"USD","currency_symbol":"$","decimal_digits":2}',
+      date_format: '{"format":"MM/DD/YYYY"}',
     });
     expect(result.changedEntities.be_master_categories).toHaveLength(6);
     expect(result.changedEntities.be_subcategories).toHaveLength(15);

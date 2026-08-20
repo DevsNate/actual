@@ -2,6 +2,7 @@ import { AuthenticationError } from '@actual-app/semantic-core';
 import type {
   AuthenticatedPrincipal,
   BudgetVersionPlanReader,
+  CatalogCommandWriter,
   CatalogReader,
 } from '@actual-app/semantic-core';
 import express from 'express';
@@ -9,11 +10,14 @@ import express from 'express';
 import { handleStockBudgetSync } from './stock-budget-operation';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { handleStockCatalogSync } from './stock-catalog-operation';
+import { handleStockFamilySync } from './stock-family-operation';
+import { handleStockInitialUserData } from './stock-initial-user-operation';
 import { operationError, STOCK_API_VERSION } from './stock-operation';
 import type { StockOperationResponse } from './stock-operation';
 
 export type StockCatalogGatewayDependencies = {
   catalogReader: CatalogReader;
+  catalogWriter: CatalogCommandWriter;
   planReader: BudgetVersionPlanReader;
   changeWriter: StockBudgetChangeWriter;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
@@ -31,7 +35,7 @@ export function createStockCatalogGateway(
       send(response, operationError(401, authentication.errorCode));
       return;
     }
-    const { principal } = authentication;
+    const { principal, sessionToken } = authentication;
 
     const clientRequestId = request.get('x-ynab-client-request-id');
     if (clientRequestId) {
@@ -56,19 +60,27 @@ export function createStockCatalogGateway(
     try {
       const context = {
         principal,
+        sessionToken,
         requestData,
         clientRequestId,
         deviceId: request.get('x-ynab-device-id')!,
       };
       const result =
-        operation === 'syncCatalogData'
-          ? await handleStockCatalogSync(context, dependencies.catalogReader)
-          : operation === 'syncBudgetData'
-            ? await handleStockBudgetSync(context, {
-                planReader: dependencies.planReader,
-                changeWriter: dependencies.changeWriter,
-              })
-            : operationError(501, 'unsupported_operation');
+        operation === 'getInitialUserData'
+          ? await handleStockInitialUserData(context, dependencies)
+          : operation === 'syncFamilyData'
+            ? await handleStockFamilySync(context, dependencies.catalogReader)
+            : operation === 'syncCatalogData'
+              ? await handleStockCatalogSync(context, {
+                  catalogReader: dependencies.catalogReader,
+                  catalogWriter: dependencies.catalogWriter,
+                })
+              : operation === 'syncBudgetData'
+                ? await handleStockBudgetSync(context, {
+                    planReader: dependencies.planReader,
+                    changeWriter: dependencies.changeWriter,
+                  })
+                : operationError(501, 'unsupported_operation');
       send(response, result);
     } catch (error) {
       console.error('Stock compatibility projection failed', error);
@@ -82,12 +94,14 @@ export function createStockCatalogGateway(
 function authenticate(
   request: express.Request,
   dependencies: Pick<StockCatalogGatewayDependencies, 'resolvePrincipal'>,
-): { principal: AuthenticatedPrincipal } | { errorCode: string } {
+):
+  | { principal: AuthenticatedPrincipal; sessionToken: string }
+  | { errorCode: string } {
+  const sessionToken = request.get('x-session-token') ?? '';
   try {
     return {
-      principal: dependencies.resolvePrincipal(
-        request.get('x-session-token') ?? '',
-      ),
+      principal: dependencies.resolvePrincipal(sessionToken),
+      sessionToken,
     };
   } catch (error) {
     if (error instanceof AuthenticationError) {

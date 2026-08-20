@@ -1,0 +1,6 @@
+:4173 {
+	root * "{$MIRROR_ROOT}"
+	try_files {path} {path}/index.html /index.html
+	file_server
+	header Cache-Control "no-store"
+}

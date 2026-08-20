@@ -314,6 +314,21 @@ const configSchema = convict({
       sensitive: true,
     },
   },
+  stockWeb: {
+    doc: 'Preserved stock Web runtime configuration.',
+    enabled: {
+      doc: 'Serve the preserved stock Web runtime.',
+      format: Boolean,
+      default: false,
+      env: 'ACTUAL_STOCK_WEB_ENABLED',
+    },
+    root: {
+      doc: 'Path to the local preserved stock Web runtime.',
+      format: String,
+      default: '',
+      env: 'ACTUAL_STOCK_WEB_ROOT',
+    },
+  },
 });
 
 let configPath = null;

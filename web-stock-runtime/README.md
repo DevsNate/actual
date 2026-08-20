@@ -24,3 +24,45 @@ web-stock-runtime/
 
 No stock runtime asset may be committed. The first experiment stops at shell,
 session/bootstrap, plan picker, and opening one plan.
+
+## Unpatched mirror smoke test
+
+Serve one immutable local vendor snapshot without changing client bytes:
+
+```sh
+MIRROR_ROOT="$PWD/web-stock-runtime/vendor/<capture-id>" \
+  caddy run --config web-stock-runtime/Caddyfile.mirror
+```
+
+Open `http://127.0.0.1:4173/users/budgets` in the dedicated LOCAL browser
+profile. The first unresolved runtime or API dependency is evidence for the
+next compatibility boundary; it is not permission to patch domain behavior.
+
+## Project-server experiment
+
+The sync server can serve the immutable mirror while retaining Actual password
+authentication:
+
+```sh
+ACTUAL_STOCK_WEB_ENABLED=true \
+ACTUAL_STOCK_WEB_ROOT="$PWD/web-stock-runtime/vendor/<capture-id>" \
+ACTUAL_SEMANTIC_ENABLED=true \
+ACTUAL_SEMANTIC_DATABASE_URL='postgresql://...' \
+  <start the sync server>
+```
+
+The server issues an HttpOnly Actual-session cookie from `/stock-web/login`,
+renders fresh session/CSRF meta values, clears the captured Castle JWT, and
+replaces only the captured server origin. Vendor asset bytes remain unchanged
+and Git-ignored.
+
+Run the disposable end-to-end browser gate against a stock-enabled server:
+
+```sh
+node web-stock-runtime/smoke-server-runtime.mjs
+```
+
+The gate creates only synthetic disposable state, blocks external browser
+traffic, opens the preserved picker and one canonical plan, and requires the
+captured initial-user, catalog, family, budget, and current-user contracts to
+complete without a first-party request, response, page, or console failure.
