@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.STOCK_WEB_SMOKE_URL ?? 'http://127.0.0.1:5007';
-const expectEmptyPicker = process.env.STOCK_WEB_SMOKE_EMPTY === 'true';
+const createPlanThroughStock =
+  process.env.STOCK_WEB_SMOKE_CREATE_PLAN === 'true';
+const expectEmptyPicker =
+  createPlanThroughStock || process.env.STOCK_WEB_SMOKE_EMPTY === 'true';
 const runtimeRoot =
   process.env.ACTUAL_STOCK_WEB_RUNTIME_ROOT ??
   fileURLToPath(new URL('./vendor/current/', import.meta.url));
@@ -95,6 +98,7 @@ const page = await context.newPage();
 const firstPartyRequests = [];
 const catalogOperations = [];
 const catalogRequests = [];
+const stockPlanRequests = [];
 const failedRequests = [];
 const pageErrors = [];
 const consoleErrors = [];
@@ -103,6 +107,9 @@ page.on('request', request => {
   if (request.url().startsWith(baseUrl)) {
     const path = new URL(request.url()).pathname;
     firstPartyRequests.push(path);
+    if (path === '/api/budgets' && request.method() === 'POST') {
+      stockPlanRequests.push(request.postDataJSON());
+    }
     if (path === '/api/v1/catalog' && request.method() === 'POST') {
       const body = request.postDataJSON();
       if (typeof body?.operation_name === 'string') {
@@ -158,13 +165,39 @@ await Promise.all([
 ]);
 await page.waitForTimeout(15000);
 const planLink = page.getByRole('button', { name: 'Stock Runtime Smoke' });
-const browserPlanVisible = (await planLink.count()) > 0;
-if (browserPlanVisible) {
+let browserPlanVisible = (await planLink.count()) > 0;
+const initialEmptyPickerVisible =
+  (await page.getByRole('button', { name: 'Create New Plan' }).count()) > 0;
+let browserCreatedPlan = false;
+let stockPlanResponse = null;
+if (createPlanThroughStock) {
+  await page.getByRole('button', { name: 'Create New Plan' }).click();
+  await page
+    .locator('#modal-settings-budget-name')
+    .fill('Stock Runtime Created Plan');
+  const [response] = await Promise.all([
+    page.waitForResponse(
+      response =>
+        new URL(response.url()).pathname === '/api/budgets' &&
+        response.request().method() === 'POST',
+    ),
+    page.getByRole('button', { name: 'Create Plan' }).click(),
+  ]);
+  stockPlanResponse = {
+    status: response.status(),
+    body: await response.json(),
+  };
+  await page.waitForURL(/\/[0-9a-f-]+\/budget$/u);
+  await page.waitForTimeout(15000);
+  browserCreatedPlan =
+    (await page
+      .getByRole('button', { name: /Stock Runtime Created Plan/u })
+      .count()) > 0;
+} else if (browserPlanVisible) {
   await planLink.click({ force: true });
   await page.waitForTimeout(15000);
 }
-const emptyPickerVisible =
-  (await page.getByRole('button', { name: 'Create New Plan' }).count()) > 0;
+browserPlanVisible = (await planLink.count()) > 0;
 const browserBodyText = expectEmptyPicker
   ? (await page.locator('body').innerText()).slice(0, 2000)
   : '';
@@ -201,20 +234,29 @@ const assertions = {
   browserCalledInitialUser: catalogOperations.includes('getInitialUserData'),
   browserCalledCatalogSync: catalogOperations.includes('syncCatalogData'),
   browserCalledFamilySync: catalogOperations.includes('syncFamilyData'),
-  budgetSyncMatchesMode: expectEmptyPicker
-    ? !catalogOperations.includes('syncBudgetData')
-    : catalogOperations.includes('syncBudgetData'),
+  budgetSyncMatchesMode:
+    createPlanThroughStock || !expectEmptyPicker
+      ? catalogOperations.includes('syncBudgetData')
+      : !catalogOperations.includes('syncBudgetData'),
+  stockPlanCreationMatchesMode: createPlanThroughStock
+    ? stockPlanRequests.length === 1 &&
+      stockPlanResponse?.status === 201 &&
+      typeof stockPlanResponse?.body?.id === 'string'
+    : stockPlanRequests.length === 0,
   browserCalledUser: firstPartyRequests.includes('/api/v2/user'),
   browserFirstPartyFailures: failedRequests.length,
   browserPageErrors: pageErrors.length,
   browserUnexpectedConsoleErrors: unexpectedConsoleErrors.length,
   browserUnexpectedResponses: unexpectedResponses.length,
-  browserPlanStateMatchesMode: expectEmptyPicker
-    ? emptyPickerVisible && !browserPlanVisible
-    : browserPlanVisible,
-  browserPathMatchesMode: expectEmptyPicker
-    ? browserPath.startsWith('/users/budgets')
-    : browserPath.endsWith('/budget'),
+  browserPlanStateMatchesMode: createPlanThroughStock
+    ? initialEmptyPickerVisible && browserCreatedPlan
+    : expectEmptyPicker
+      ? initialEmptyPickerVisible && !browserPlanVisible
+      : browserPlanVisible,
+  browserPathMatchesMode:
+    createPlanThroughStock || !expectEmptyPicker
+      ? browserPath.endsWith('/budget')
+      : browserPath.startsWith('/users/budgets'),
   browserPath,
   catalogOperations: [...new Set(catalogOperations)],
 };

@@ -68,9 +68,19 @@ Run the same client against a fresh principal with no plans:
 STOCK_WEB_SMOKE_EMPTY=true node web-stock-runtime/smoke-server-runtime.mjs
 ```
 
+Exercise plan creation through the unmodified stock dialog and require the
+new plan to open and bootstrap successfully:
+
+```sh
+STOCK_WEB_SMOKE_CREATE_PLAN=true node web-stock-runtime/smoke-server-runtime.mjs
+```
+
 The gate creates only synthetic disposable state, blocks external browser
 traffic, opens the preserved picker and one canonical plan, and requires the
 captured initial-user, catalog, family, budget, and current-user contracts to
 complete without a first-party request, response, page, or console failure.
 Empty mode requires the picker and **Create New Plan** action, forbids budget
 sync, and verifies that startup does not fabricate or select a plan.
+Create-plan mode starts from that same empty picker, submits the captured
+`POST /api/budgets` envelope, requires the stock `{ id }` acknowledgement,
+and then verifies navigation plus budget bootstrap without browser errors.

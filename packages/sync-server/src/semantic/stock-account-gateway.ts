@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { AuthenticationError } from '@actual-app/semantic-core';
 import type { AuthenticatedPrincipal } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
@@ -8,6 +7,7 @@ import express from 'express';
 import { parseStockCheckingAccountBody } from './account-api';
 import type { AccountCreationService } from './account-creation-service';
 import { AccountCreationError } from './account-creation-service';
+import { authenticateStockTokenRequest } from './stock-auth';
 import { STOCK_API_VERSION } from './stock-operation';
 
 type Dependencies = {
@@ -25,20 +25,13 @@ export function createStockAccountGateway(
   handlers.post(
     '/direct_import/budgets/:planId/accounts',
     async (request, response) => {
-      const sessionToken = tokenAuthorization(request.get('authorization'));
-      if (!sessionToken) {
-        response.status(401).send({ error: { id: 'invalid-session' } });
+      const principal = authenticateStockTokenRequest(
+        request,
+        response,
+        token => dependencies.resolvePrincipal(token),
+      );
+      if (!principal) {
         return;
-      }
-      let principal: AuthenticatedPrincipal;
-      try {
-        principal = dependencies.resolvePrincipal(sessionToken);
-      } catch (error) {
-        if (error instanceof AuthenticationError) {
-          response.status(401).send({ error: { id: error.code } });
-          return;
-        }
-        throw error;
       }
       if (request.get('x-ynab-api-version') !== STOCK_API_VERSION) {
         response.status(400).send({ error: { id: 'unsupported_api_version' } });
@@ -85,12 +78,4 @@ export function createStockAccountGateway(
   );
 
   return handlers;
-}
-
-function tokenAuthorization(value: string | undefined): string | null {
-  if (!value) {
-    return null;
-  }
-  const match = /^Token\s+(.+)$/u.exec(value.trim());
-  return match?.[1]?.trim() || null;
 }

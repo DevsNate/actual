@@ -81,6 +81,7 @@ if (config.get('semantic.enabled')) {
   app.use('/semantic/v1', semanticCatalog.handlers);
   app.use('/api/v1', semanticCatalog.stockHandlers);
   app.use('/api/v2', semanticCatalog.stockUserHandlers);
+  app.use('/api', semanticCatalog.stockPlanHandlers);
   app.use('/api', semanticCatalog.stockAccountHandlers);
 }
 

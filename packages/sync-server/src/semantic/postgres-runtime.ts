@@ -20,6 +20,7 @@ import { createPlanLifecycleService } from './plan-lifecycle-service';
 import { resolveActualPrincipal } from './session-principal-adapter';
 import { createStockAccountGateway } from './stock-account-gateway';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
+import { createStockPlanGateway } from './stock-plan-gateway';
 import { createStockUserGateway } from './stock-user-gateway';
 
 export async function createPostgresSemanticCatalogHandlers(
@@ -86,6 +87,10 @@ export async function createPostgresSemanticCatalogHandlers(
     accountCreationService,
     resolvePrincipal: resolveActualPrincipal,
   });
+  const stockPlanHandlers = createStockPlanGateway({
+    planCreationService,
+    resolvePrincipal: resolveActualPrincipal,
+  });
   const stockUserHandlers = createStockUserGateway({
     resolvePrincipal: resolveActualPrincipal,
   });
@@ -93,6 +98,7 @@ export async function createPostgresSemanticCatalogHandlers(
     handlers,
     stockHandlers,
     stockAccountHandlers,
+    stockPlanHandlers,
     stockUserHandlers,
     close: () => pool.end(),
   };

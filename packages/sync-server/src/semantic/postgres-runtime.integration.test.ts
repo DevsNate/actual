@@ -65,6 +65,7 @@ integrationTest('semantic catalog runtime integration', () => {
     const app = express();
     app.use('/semantic/v1', runtime.handlers);
     app.use('/api/v1', runtime.stockHandlers);
+    app.use('/api', runtime.stockPlanHandlers);
     app.use('/api', runtime.stockAccountHandlers);
     testApp = app;
   });
@@ -159,35 +160,41 @@ integrationTest('semantic catalog runtime integration', () => {
     });
   });
 
-  test('creates a complete plan through the retained Actual session', async () => {
+  test('creates and replays a complete plan through the captured stock endpoint', async () => {
     const response = await request(testApp)
-      .post('/semantic/v1/plans')
-      .set('x-actual-token', token)
-      .set('x-semantic-device-id', 'semantic-web-device')
-      .set('idempotency-key', 'semantic-create-request')
+      .post('/api/budgets')
+      .set('authorization', `Token ${token}`)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .set('x-ynab-client-request-id', 'stock-create-request')
       .send({
-        name: 'Semantic Created Plan',
-        currency_format: {
-          iso_code: 'USD',
-          decimal_digits: 2,
-          currency_symbol: '$',
+        budget: {
+          name: 'Stock Created Plan',
+          currency_format: JSON.stringify({
+            iso_code: 'USD',
+            decimal_digits: 2,
+            currency_symbol: '$',
+          }),
+          date_format: JSON.stringify({ format: 'MM/DD/YYYY' }),
         },
-        date_format: { format: 'MM/DD/YYYY' },
       })
       .expect(201);
 
-    expect(response.body).toMatchObject({
-      status: 'ok',
-      data: {
-        catalog_server_knowledge: 2,
-        budget_server_knowledge: 1,
-        replayed: false,
-      },
-    });
-    createdPlanId = response.body.data.budget_id as string;
-    createdVersionId = response.body.data.budget_version_id as string;
-    expect(createdPlanId).toBeTruthy();
+    expect(response.headers['x-ynab-client-request-id']).toBe(
+      'stock-create-request',
+    );
+    expect(response.body).toEqual({ id: expect.any(String) });
+    createdVersionId = response.body.id as string;
     expect(createdVersionId).toBeTruthy();
+
+    const createdPlan = await seedPool!.query<{ plan_id: string }>(
+      `SELECT plan_id
+         FROM semantic_plans
+        WHERE budget_version_id = $1`,
+      [createdVersionId],
+    );
+    createdPlanId = createdPlan.rows[0]?.plan_id ?? '';
+    expect(createdPlanId).toBeTruthy();
 
     const counts = await seedPool!.query<{
       entity_count: string;
@@ -236,7 +243,7 @@ integrationTest('semantic catalog runtime integration', () => {
       changed_entities: {
         be_budget: {
           id: createdVersionId,
-          budget_name: 'Semantic Created Plan',
+          budget_name: 'Stock Created Plan',
         },
         first_month: expect.any(String),
         last_month: expect.any(String),
@@ -253,27 +260,24 @@ integrationTest('semantic catalog runtime integration', () => {
       .first_month as string;
 
     const replay = await request(testApp)
-      .post('/semantic/v1/plans')
-      .set('x-actual-token', token)
-      .set('x-semantic-device-id', 'semantic-web-device')
-      .set('idempotency-key', 'semantic-create-request')
+      .post('/api/budgets')
+      .set('authorization', `Token ${token}`)
+      .set('x-ynab-api-version', '2026-01-01')
+      .set('x-ynab-device-id', 'stock-web-device')
+      .set('x-ynab-client-request-id', 'stock-create-request')
       .send({
-        name: 'Semantic Created Plan',
-        currency_format: {
-          iso_code: 'USD',
-          decimal_digits: 2,
-          currency_symbol: '$',
+        budget: {
+          name: 'Stock Created Plan',
+          currency_format: JSON.stringify({
+            iso_code: 'USD',
+            decimal_digits: 2,
+            currency_symbol: '$',
+          }),
+          date_format: JSON.stringify({ format: 'MM/DD/YYYY' }),
         },
-        date_format: { format: 'MM/DD/YYYY' },
       })
       .expect(200);
-    expect(replay.body.data).toMatchObject({
-      budget_id: createdPlanId,
-      budget_version_id: createdVersionId,
-      catalog_server_knowledge: 2,
-      budget_server_knowledge: 1,
-      replayed: true,
-    });
+    expect(replay.body).toEqual({ id: createdVersionId });
   });
 
   test('atomically ingests and replays the admitted opened-budget delta', async () => {

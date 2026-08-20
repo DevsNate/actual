@@ -287,6 +287,13 @@ evidence-backed plan creation`.
   adapter authenticates `x-session-token` through retained Actual sessions and
   projects canonical memberships, including tombstones, as complete
   `ce_user_budgets` records. See `stock-catalog-gateway.md`.
+- **Plan-create gateway:** The admitted `POST /api/budgets` adapter now accepts
+  the stock Token-authenticated envelope, JSON-encoded currency/date fields,
+  device identity, and client request identity. It delegates to the existing
+  atomic `PlanCreationService`, uses the client request ID for exact replay,
+  and returns the stock online API acknowledgement `{ id: budgetVersionId }`.
+  The unmodified stock dialog creates and opens the plan, then completes
+  catalog and budget bootstrap against the canonical PostgreSQL state.
 - **Budget-read foundation:** The principal-scoped PostgreSQL reader can now
   resolve a canonical plan by its opaque budget-version identity, and the pure
   stock budget projector converts the 58 admitted PLAN-001 source entities to
@@ -308,11 +315,11 @@ evidence-backed plan creation`.
 - **Verification:** Source projection fixtures, strict TypeScript checks,
   repository lint, production sync-server build, and disposable PostgreSQL 17
   authorization/readback integration.
-- **Status:** migrating; read-only `syncCatalogData` membership projection is
-  implemented. Pristine-plan `syncBudgetData` bootstrap/backfill and the exact
-  BUDGET-001 `opened_budget` write are routed. Initial user, family, all other
-  budget deltas/writes, nonzero calculations, and catalog-write operations
-  remain explicit unsupported boundaries.
+- **Status:** migrating; read-only `syncCatalogData` membership projection and
+  stock plan creation are implemented. Pristine-plan `syncBudgetData`
+  bootstrap/backfill and the exact BUDGET-001 `opened_budget` write are routed.
+  Initial user, family, all other budget deltas/writes, nonzero calculations,
+  and catalog-write operations remain explicit unsupported boundaries.
 
 ### ADD-004 — Web semantic API
 
