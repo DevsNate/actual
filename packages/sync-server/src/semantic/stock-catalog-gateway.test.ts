@@ -28,6 +28,10 @@ function app(
   changeWriter: StockBudgetChangeWriter = {
     commitChangeSet: vi.fn(),
     acknowledgeDevice: vi.fn(),
+    commitAccountRename: vi.fn(),
+    commitPristineAccountDeletion: vi.fn(),
+    commitAccountClose: vi.fn(),
+    commitAccountReopen: vi.fn(),
   },
   catalogWriter: CatalogCommandWriter = { commitCatalogCommand: vi.fn() },
   budgetLifecycleService: BudgetLifecycleService = {

@@ -70,7 +70,7 @@ contracts.
 - principal-scoped reads;
 - PostgreSQL transaction boundaries;
 - canonical entity snapshots with unknown-field preservation; and
-- typed storage for the admitted unlinked Checking-account aggregate.
+- typed storage for admitted unlinked Checking-account creation and lifecycle.
 
 **Strength:** this is the most portable implementation area in the fork.
 
@@ -92,7 +92,7 @@ contracts.
 
 - plan creation;
 - plan rename/delete;
-- checking-account creation.
+- checking-account creation, rename, pristine deletion, close, and reopen.
 
 **Strength:** commit 14 established the correct architectural direction: transports call shared services rather than building semantic commands independently.
 

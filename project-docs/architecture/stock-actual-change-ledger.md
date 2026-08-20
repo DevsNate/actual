@@ -38,7 +38,7 @@ v26.8.1. The baseline commit is
 | ADD-008    | Semantic budget client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
 | ADD-009    | Shared budget command application services | Add                | implemented    | One orchestration path for React and stock routes |
 | ADD-013    | Deployed stock Web runtime                 | Add                | investigating  | Schema-44 gateway over canonical semantics        |
-| ADD-014    | Typed canonical account aggregate          | Add                | implemented    | Account/payee/starting-balance authority          |
+| ADD-014    | Typed canonical account aggregate          | Add                | implemented    | Captured Checking creation/lifecycle authority    |
 
 ## Detailed entries
 
@@ -251,23 +251,27 @@ evidence-backed plan creation`.
 ### ADD-014 — Typed canonical account aggregate
 
 - **Disposition:** Add.
-- **Scope:** The evidence-admitted first unlinked Checking-account creation
-  operation only.
+- **Scope:** Evidence-admitted unlinked Checking-account creation, rename,
+  pristine deletion, close, and reopen only.
 - **Implementation:** Migration 0006 adds typed `semantic_accounts`,
   `semantic_payees`, and `semantic_transactions`. The account application
   service builds one canonical account aggregate and a separate stock delivery
   projection. `PostgresSemanticStore.commitUnlinkedAccountCreation` commits the
   canonical rows, compatibility projections, knowledge advancement, and exact
-  replay receipt in one transaction.
+  replay receipt in one transaction. Migration 0007 adds typed transaction
+  kind/memo and lifecycle writers for rename, pristine deletion, close, and
+  reopen.
 - **Boundary:** `be_*` rows remain unknown-field-preserving compatibility
-  projections. They are not account authority. Rename, deletion, close/reopen,
-  other account types, and general transaction semantics remain outside this
-  admitted slice.
+  projections. They are not account authority. Other account types, linked
+  accounts, and general transaction semantics remain outside this admitted
+  slice. Close amount validation temporarily reads the compatibility snapshot
+  at the stock adapter boundary until ordinary transactions are cut over.
 - **Verification:** Contract tests cover the typed schema and adapter boundary.
   Disposable PostgreSQL integration verifies atomic persistence and exact
   replay with one account, one account-bound payee, one starting-balance
-  transaction, and no duplicate rows.
-- **Status:** implemented for unlinked Checking-account creation.
+  transaction, rename/delete lifecycle, one manual adjustment, close/reopen,
+  and no duplicate rows under replay.
+- **Status:** implemented for captured unlinked Checking-account lifecycle.
 
 ### ADD-002 — Knowledge and receipt ledger
 
@@ -396,6 +400,28 @@ Add evidence-backed plan creation`.
 - **Verification:** Strict TypeScript build and package tests.
 - **Commit/PR:** `7c60694`.
 - **Status:** implemented.
+
+### ADD-015 — Evidence-backed Checking close and reopen
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/account.ts`, migration 0007,
+  `packages/semantic-postgres/src/store.ts`, and
+  `packages/sync-server/src/semantic/stock-account-lifecycle.ts`.
+- **Observed stock behavior:** ACCOUNT-005 closes an open Checking account with
+  one exact Manual Balance Adjustment that negates its working balance, then
+  reopens the same account identity without deleting its history or bound
+  transfer payee. Both operations advance source plus derivation knowledge;
+  reopen's derivation delta is empty.
+- **Fork behavior:** The protocol parser admits only the complete captured rows
+  and exact system relationships. PostgreSQL closes/reopens the canonical
+  account and stores the adjustment atomically with delivery state and receipt.
+- **Evidence:** `analysis/evidence/stock-captures/account-005/`.
+- **Boundary:** Non-Checking and uncaptured close shapes fail closed. Balance
+  validation remains at the stock snapshot boundary until canonical ordinary
+  transactions are admitted.
+- **Verification:** Focused positive/adversarial parsing, strict typecheck, and
+  disposable PostgreSQL create/rename/close/reopen/replay integration.
+- **Status:** implemented for the captured Checking shape.
 
 ### ADD-007 — Local semantic development stack
 

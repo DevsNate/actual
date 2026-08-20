@@ -283,7 +283,7 @@ now non-negotiable:
 | `semantic_budget_entity_changes` / catalog equivalent   | History stores protocol-shaped entity payloads.                                                                                        | Retain as delivery history or split canonical events from adapter projections; document which role each row has.                             |
 | `semantic-core/src/stock-budget-bootstrap.ts`           | A protocol-specific `be_*` bootstrap builder lives in the canonical-core package.                                                      | Move behind the stock compatibility adapter after canonical budget bootstrap commands exist.                                                 |
 | `PostgresSemanticStore.createBudget`                    | The persistence store directly creates a `ce_user_budgets` payload.                                                                    | Persist canonical membership first; let the catalog adapter project the stock row.                                                           |
-| `semantic-core/src/account.ts`                          | Canonical account is restricted to checking, on-budget, open, nonfavorite, with a positive-only opening balance path.                  | Replace with a typed account aggregate that can represent the recovered account fields and evidence-admitted account types/lifecycle states. |
+| `semantic-core/src/account.ts`                          | Canonical account is restricted to evidence-admitted unlinked Checking creation/lifecycle; other types and linked accounts are absent. | Broaden only as recovered evidence admits each account type; keep uncaptured lifecycle shapes fail-closed.                                   |
 | `account-creation-service.ts`                           | Correctly introduces an adapter seam, but still hard-codes knowledge advancement and one narrow account product.                       | Preserve the command/service separation; broaden only from admitted account evidence and move derivation count out of the domain API.        |
 | `stock-budget-operation.ts`                             | One dispatcher parses protocol, recognizes individual domain deltas, chooses derivation knowledge, builds responses, and commits them. | Reduce to envelope validation/routing. Domain handlers own commands; projection and knowledge policy have dedicated boundaries.              |
 | `stock-budget-calculations.ts`                          | Partial hand-written compatibility calculations cover only a subset of the recovered dependency graph.                                 | Replace with the reconstructed shared calculation library and oracle tests before admitting calculation-dependent domains.                   |
@@ -313,7 +313,7 @@ should be a new clean initial semantic schema assembled from:
    model; and
 4. separate Web and iOS compatibility projections.
 
-Migrations 0001-0006 remain useful as provenance and migration-test evidence,
+Migrations 0001-0007 remain useful as provenance and migration-test evidence,
 but they should not automatically become the shipping schema. Build the clean
 schema alongside the current implementation, migrate one complete domain at a
 time, then remove the replaced transitional path. This is a canonical-core
@@ -323,3 +323,5 @@ deployment, bank integration, evidence, or protocol research.
 Migration 0006 is the first such complete-domain cutover: the narrow admitted
 unlinked Checking-account aggregate now has typed canonical storage, while its
 stock rows remain a separate compatibility projection committed atomically.
+Migration 0007 extends that cutover through captured rename, pristine deletion,
+close, and reopen, including typed Starting Balance/manual-adjustment identity.

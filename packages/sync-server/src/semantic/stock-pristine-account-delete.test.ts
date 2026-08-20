@@ -33,6 +33,12 @@ describe('stock pristine account delete', () => {
       }),
       expect.objectContaining({ entityId: 'balance-2', isTombstone: true }),
     ]);
+    expect(result?.deletion).toEqual({
+      budgetId: 'plan-1',
+      accountId: 'account-2',
+      transferPayeeId: 'transfer-payee-2',
+      startingBalanceTransactionId: 'balance-2',
+    });
     expect(result?.changedEntities.be_account_calculations).toEqual([
       expect.objectContaining({
         id: 'ac/account-2',

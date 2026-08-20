@@ -3,12 +3,14 @@ import { isDeepStrictEqual } from 'node:util';
 
 import type {
   BudgetVersionReader,
+  AccountLifecycleWriter,
   BudgetChangeSetCommand,
   BudgetChangeWriter,
   BudgetDeviceAcknowledgementWriter,
   BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
+import { parseStockAccountLifecycleDelta } from './stock-account-lifecycle';
 import { parseStockAccountRenameDelta } from './stock-account-rename';
 import {
   buildStockBudgetBackfill,
@@ -31,7 +33,8 @@ import type {
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
 
 export type StockBudgetChangeWriter = BudgetChangeWriter &
-  BudgetDeviceAcknowledgementWriter;
+  BudgetDeviceAcknowledgementWriter &
+  AccountLifecycleWriter;
 
 type StockBudgetSyncDependencies = {
   budgetReader: BudgetVersionReader;
@@ -131,15 +134,22 @@ export async function handleStockBudgetSync(
     snapshot,
     context.principal.id,
   );
-  const accountRenameChanges = openedBudgetChanges
+  const accountRename = openedBudgetChanges
     ? null
     : parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
   const accountDelete =
-    openedBudgetChanges || accountRenameChanges
+    openedBudgetChanges || accountRename
       ? null
       : parseStockPristineAccountDelete(syncRequest.changedEntities, snapshot);
+  const accountLifecycle =
+    openedBudgetChanges || accountRename || accountDelete
+      ? null
+      : parseStockAccountLifecycleDelta(syncRequest.changedEntities, snapshot);
   const changes =
-    openedBudgetChanges ?? accountRenameChanges ?? accountDelete?.changes;
+    openedBudgetChanges ??
+    accountRename?.changes ??
+    accountDelete?.changes ??
+    accountLifecycle?.changes;
   if (!changes) {
     return operationError(501, 'unsupported_budget_delta');
   }
@@ -150,15 +160,17 @@ export async function handleStockBudgetSync(
     return operationError(400, 'invalid_budget_knowledge_range');
   }
 
-  const serverKnowledgeAdvance = accountDelete ? 2 : 1;
+  const serverKnowledgeAdvance = accountDelete || accountLifecycle ? 2 : 1;
   const nextServerKnowledge =
     syncRequest.deviceKnowledgeOfServer + serverKnowledgeAdvance;
   const response = successResponse(
     nextServerKnowledge,
     syncRequest.endingDeviceKnowledge,
-    accountDelete?.changedEntities ?? buildStockBudgetEmptyDelta(snapshot),
+    accountDelete?.changedEntities ??
+      accountLifecycle?.changedEntities ??
+      buildStockBudgetEmptyDelta(snapshot),
   );
-  const committed = await dependencies.changeWriter.commitChangeSet({
+  const delivery: BudgetChangeSetCommand = {
     changeSetId: `stock-budget:${snapshot.budgetId}:${context.clientRequestId}`,
     budgetId: snapshot.budgetId,
     originDeviceId: context.deviceId,
@@ -173,7 +185,31 @@ export async function handleStockBudgetSync(
       .digest('hex'),
     changes,
     response: response.body,
-  });
+  };
+  const committed = accountRename
+    ? await dependencies.changeWriter.commitAccountRename({
+        rename: accountRename.rename,
+        delivery,
+      })
+    : accountDelete
+      ? await dependencies.changeWriter.commitPristineAccountDeletion({
+          deletion: accountDelete.deletion,
+          delivery,
+        })
+      : accountLifecycle?.kind === 'close'
+        ? await dependencies.changeWriter.commitAccountClose({
+            budgetId: snapshot.budgetId,
+            accountId: accountLifecycle.accountId,
+            adjustment: accountLifecycle.adjustment,
+            delivery,
+          })
+        : accountLifecycle?.kind === 'reopen'
+          ? await dependencies.changeWriter.commitAccountReopen({
+              budgetId: snapshot.budgetId,
+              accountId: accountLifecycle.accountId,
+              delivery,
+            })
+          : await dependencies.changeWriter.commitChangeSet(delivery);
   return { status: 200, body: committed.response };
 }
 

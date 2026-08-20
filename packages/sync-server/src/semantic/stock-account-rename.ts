@@ -9,7 +9,7 @@ import { isRecord } from './stock-operation';
 export function parseStockAccountRenameDelta(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
-): BudgetChangeSetCommand['changes'] | null {
+): StockAccountRename | null {
   if (!hasExactKeys(changedEntities, ['be_accounts', 'be_payees'])) {
     return null;
   }
@@ -76,17 +76,39 @@ export function parseStockAccountRenameDelta(
     return null;
   }
 
-  return [
-    {
-      ...account,
-      payload: { ...account.payload, accountName: newName },
+  return {
+    rename: {
+      budgetId: snapshot.budgetId,
+      accountId: account.entityId,
+      transferPayeeId: payee.entityId,
+      expectedAccountName: String(account.payload.accountName),
+      expectedTransferPayeeName: String(payee.payload.name),
+      name: newName,
     },
-    {
-      ...payee,
-      payload: { ...payee.payload, name: `Transfer : ${newName}` },
-    },
-  ];
+    changes: [
+      {
+        ...account,
+        payload: { ...account.payload, accountName: newName },
+      },
+      {
+        ...payee,
+        payload: { ...payee.payload, name: `Transfer : ${newName}` },
+      },
+    ],
+  };
 }
+
+export type StockAccountRename = {
+  rename: {
+    budgetId: string;
+    accountId: string;
+    transferPayeeId: string;
+    expectedAccountName: string;
+    expectedTransferPayeeName: string;
+    name: string;
+  };
+  changes: BudgetChangeSetCommand['changes'];
+};
 
 function sameRecord(
   left: Readonly<Record<string, unknown>>,

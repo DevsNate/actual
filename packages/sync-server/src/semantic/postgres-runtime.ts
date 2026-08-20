@@ -4,6 +4,7 @@ import {
   PostgresBudgetReader,
   PostgresSemanticStore,
 } from '@actual-app/semantic-postgres';
+import { semanticAccountLifecycleMigration } from '@actual-app/semantic-postgres/account-lifecycle-migration';
 import { semanticBudgetIdentitySchemaMigration } from '@actual-app/semantic-postgres/budget-identity-schema-migration';
 import { semanticCanonicalAccountDomainMigration } from '@actual-app/semantic-postgres/canonical-account-domain-migration';
 import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-postgres/canonical-budget-entity-migration';
@@ -38,6 +39,7 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCatalogSchemaVersionMigration,
       semanticBudgetIdentitySchemaMigration,
       semanticCanonicalAccountDomainMigration,
+      semanticAccountLifecycleMigration,
     ]);
   } catch (error) {
     await pool.end();

@@ -5,6 +5,7 @@ export { PostgresSemanticStore } from './store';
 export { PostgresBudgetLifecycleStore } from './budget-lifecycle-store';
 export { PostgresBudgetReader } from './budget-reader';
 export { semanticCanonicalAccountDomainMigration } from './canonical-account-domain-migration';
+export { semanticAccountLifecycleMigration } from './account-lifecycle-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

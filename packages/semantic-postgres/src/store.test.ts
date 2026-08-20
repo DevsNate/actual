@@ -551,4 +551,18 @@ describe('semantic foundation migration', () => {
     expect(migration).not.toContain('be_payees');
     expect(migration).not.toContain('be_transactions');
   });
+
+  test('extends canonical transactions for the captured account lifecycle', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL('../migrations/0007_account_lifecycle.sql', import.meta.url),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain("'starting_balance'");
+    expect(migration).toContain("'manual_balance_adjustment'");
+    expect(migration).toContain('ADD COLUMN memo TEXT');
+    expect(migration).not.toContain('be_transactions');
+  });
 });

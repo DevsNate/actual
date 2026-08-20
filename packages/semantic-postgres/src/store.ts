@@ -3,6 +3,10 @@ import type {
   CatalogCommandResult,
   CatalogSnapshot,
   CommitUnlinkedAccountCreation,
+  CommitCanonicalAccountRename,
+  CommitCanonicalAccountClose,
+  CommitCanonicalAccountReopen,
+  CommitCanonicalPristineAccountDeletion,
   CreateBudgetCommand,
   CreateBudgetResult,
   BudgetDeviceAcknowledgement,
@@ -373,6 +377,59 @@ export class PostgresSemanticStore {
     );
   }
 
+  async commitAccountRename(
+    command: CommitCanonicalAccountRename,
+  ): Promise<CommitChangeSetResult> {
+    validateCanonicalAccountRename(command);
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        updateCanonicalAccountName(client, command),
+      ),
+    );
+  }
+
+  async commitPristineAccountDeletion(
+    command: CommitCanonicalPristineAccountDeletion,
+  ): Promise<CommitChangeSetResult> {
+    validateCanonicalPristineAccountDeletion(command);
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        tombstoneCanonicalPristineAccount(client, command),
+      ),
+    );
+  }
+
+  async commitAccountClose(
+    command: CommitCanonicalAccountClose,
+  ): Promise<CommitChangeSetResult> {
+    validateCanonicalAccountClose(command);
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        closeCanonicalAccount(client, command),
+      ),
+    );
+  }
+
+  async commitAccountReopen(
+    command: CommitCanonicalAccountReopen,
+  ): Promise<CommitChangeSetResult> {
+    validateCanonicalAccountReopen(command);
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        setCanonicalAccountClosed(
+          client,
+          command.budgetId,
+          command.accountId,
+          false,
+        ),
+      ),
+    );
+  }
+
   async acknowledgeDevice(
     input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
@@ -587,8 +644,9 @@ async function insertCanonicalAccountGroup(
   await client.query(
     `INSERT INTO semantic_transactions
        (budget_id, transaction_id, account_id, payee_id, category_id,
-        transaction_date, amount_milliunits, is_cleared, is_approved)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        transaction_date, amount_milliunits, is_cleared, is_approved,
+        transaction_kind)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'starting_balance')`,
     [
       startingBalance.budgetId,
       startingBalance.id,
@@ -601,6 +659,159 @@ async function insertCanonicalAccountGroup(
       startingBalance.isApproved,
     ],
   );
+}
+
+async function updateCanonicalAccountName(
+  client: PoolClient,
+  command: CommitCanonicalAccountRename,
+): Promise<void> {
+  const { rename } = command;
+  const account = await client.query(
+    `UPDATE semantic_accounts
+     SET name = $4, updated_at = now()
+     WHERE budget_id = $1 AND account_id = $2 AND name = $3
+       AND is_tombstone = false`,
+    [
+      rename.budgetId,
+      rename.accountId,
+      rename.expectedAccountName,
+      rename.name,
+    ],
+  );
+  const payee = await client.query(
+    `UPDATE semantic_payees
+     SET name = $5, updated_at = now()
+     WHERE budget_id = $1 AND payee_id = $2 AND account_id = $3
+       AND name = $4 AND is_tombstone = false`,
+    [
+      rename.budgetId,
+      rename.transferPayeeId,
+      rename.accountId,
+      rename.expectedTransferPayeeName,
+      `Transfer : ${rename.name}`,
+    ],
+  );
+  if (account.rowCount !== 1 || payee.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Account rename did not match one live canonical account group',
+    );
+  }
+}
+
+async function tombstoneCanonicalPristineAccount(
+  client: PoolClient,
+  command: CommitCanonicalPristineAccountDeletion,
+): Promise<void> {
+  const { deletion } = command;
+  const liveTransactions = await client.query<{
+    transaction_id: string;
+    transaction_kind: string;
+  }>(
+    `SELECT transaction_id, transaction_kind
+     FROM semantic_transactions
+     WHERE budget_id = $1 AND account_id = $2 AND is_tombstone = false
+     FOR UPDATE`,
+    [deletion.budgetId, deletion.accountId],
+  );
+  if (
+    liveTransactions.rowCount !== 1 ||
+    liveTransactions.rows[0]?.transaction_id !==
+      deletion.startingBalanceTransactionId ||
+    liveTransactions.rows[0]?.transaction_kind !== 'starting_balance'
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Pristine deletion requires exactly one live canonical transaction',
+    );
+  }
+  const transaction = await client.query(
+    `UPDATE semantic_transactions
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND transaction_id = $2 AND account_id = $3
+       AND is_tombstone = false`,
+    [
+      deletion.budgetId,
+      deletion.startingBalanceTransactionId,
+      deletion.accountId,
+    ],
+  );
+  const payee = await client.query(
+    `UPDATE semantic_payees
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND payee_id = $2 AND account_id = $3
+       AND is_tombstone = false`,
+    [deletion.budgetId, deletion.transferPayeeId, deletion.accountId],
+  );
+  const account = await client.query(
+    `UPDATE semantic_accounts
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND account_id = $2 AND is_closed = false
+       AND is_tombstone = false`,
+    [deletion.budgetId, deletion.accountId],
+  );
+  if (
+    transaction.rowCount !== 1 ||
+    payee.rowCount !== 1 ||
+    account.rowCount !== 1
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Pristine deletion did not match one live canonical account group',
+    );
+  }
+}
+
+async function closeCanonicalAccount(
+  client: PoolClient,
+  command: CommitCanonicalAccountClose,
+): Promise<void> {
+  await setCanonicalAccountClosed(
+    client,
+    command.budgetId,
+    command.accountId,
+    true,
+  );
+  const adjustment = command.adjustment;
+  await client.query(
+    `INSERT INTO semantic_transactions
+       (budget_id, transaction_id, account_id, payee_id, category_id,
+        transaction_date, amount_milliunits, is_cleared, is_approved,
+        transaction_kind, memo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, true, true,
+             'manual_balance_adjustment', $8)`,
+    [
+      adjustment.budgetId,
+      adjustment.id,
+      adjustment.accountId,
+      adjustment.payeeId,
+      adjustment.categoryId,
+      adjustment.date,
+      adjustment.amount,
+      adjustment.memo,
+    ],
+  );
+}
+
+async function setCanonicalAccountClosed(
+  client: PoolClient,
+  budgetId: string,
+  accountId: string,
+  closed: boolean,
+): Promise<void> {
+  const account = await client.query(
+    `UPDATE semantic_accounts
+     SET is_closed = $3, updated_at = now()
+     WHERE budget_id = $1 AND account_id = $2 AND is_closed = $4
+       AND is_tombstone = false`,
+    [budgetId, accountId, closed, !closed],
+  );
+  if (account.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      `Account ${closed ? 'close' : 'reopen'} did not match one live canonical account`,
+    );
+  }
 }
 
 async function lockCreateBudgetIdempotencyKey(
@@ -1106,6 +1317,83 @@ function validateCanonicalAccountCreation(
     throw new SemanticStoreError(
       'INVALID_OPERATION',
       'Account creation failed canonical storage validation',
+    );
+  }
+}
+
+function validateCanonicalAccountRename(
+  command: CommitCanonicalAccountRename,
+): void {
+  const { rename, delivery } = command;
+  if (
+    rename.budgetId !== delivery.budgetId ||
+    !rename.accountId.trim() ||
+    !rename.transferPayeeId.trim() ||
+    !rename.expectedAccountName.trim() ||
+    !rename.expectedTransferPayeeName.trim() ||
+    !rename.name.trim() ||
+    rename.name !== rename.name.trim() ||
+    rename.expectedTransferPayeeName !==
+      `Transfer : ${rename.expectedAccountName}`
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Account rename failed canonical storage validation',
+    );
+  }
+}
+
+function validateCanonicalPristineAccountDeletion(
+  command: CommitCanonicalPristineAccountDeletion,
+): void {
+  const { deletion, delivery } = command;
+  if (
+    deletion.budgetId !== delivery.budgetId ||
+    !deletion.accountId.trim() ||
+    !deletion.transferPayeeId.trim() ||
+    !deletion.startingBalanceTransactionId.trim()
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Pristine account deletion failed canonical storage validation',
+    );
+  }
+}
+
+function validateCanonicalAccountClose(
+  command: CommitCanonicalAccountClose,
+): void {
+  const { adjustment } = command;
+  if (
+    command.budgetId !== command.delivery.budgetId ||
+    adjustment.budgetId !== command.budgetId ||
+    adjustment.accountId !== command.accountId ||
+    !command.accountId.trim() ||
+    !adjustment.id.trim() ||
+    !adjustment.payeeId.trim() ||
+    !adjustment.categoryId.trim() ||
+    !Number.isSafeInteger(adjustment.amount) ||
+    adjustment.amount === 0 ||
+    adjustment.memo !== 'Closed Account' ||
+    !/^\d{4}-\d{2}-\d{2}$/u.test(adjustment.date)
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Account close failed canonical storage validation',
+    );
+  }
+}
+
+function validateCanonicalAccountReopen(
+  command: CommitCanonicalAccountReopen,
+): void {
+  if (
+    command.budgetId !== command.delivery.budgetId ||
+    !command.accountId.trim()
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Account reopen failed canonical storage validation',
     );
   }
 }

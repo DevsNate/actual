@@ -20,8 +20,8 @@ audit.
 - ordered change sets with schema versions and affected entity identities;
 - explicit tombstones;
 - durable idempotency receipts containing the exact accepted response; and
-- typed canonical account, account-bound payee, and starting-balance
-  transaction storage for the admitted unlinked Checking-account operation;
+- typed canonical account, account-bound payee, starting-balance, and manual
+  adjustment storage for admitted Checking-account creation and lifecycle;
 - transactional migrations protected by a PostgreSQL advisory lock.
 
 `commitChangeSet` serializes reuse of a device idempotency key, locks budget and
@@ -55,18 +55,22 @@ Migration 0006 is the first typed domain cutover. It stores the admitted
 account aggregate independently from `be_*` compatibility projections, while
 `commitUnlinkedAccountCreation` commits both representations, knowledge, and
 the exact replay receipt atomically.
+Migration 0007 admits typed account rename, pristine deletion, close, and
+reopen. These lifecycle writers update canonical rows in the same PostgreSQL
+transaction as compatibility projections, ordered knowledge, and replay
+receipts.
 The full field-by-field audit is recorded in
 `project-docs/architecture/semantic-postgres-contract-audit.md`.
 
 ## Deliberate exclusions
 
-Typed account storage currently owns only the evidence-admitted unlinked
-Checking-account creation aggregate. Account rename/deletion/lifecycle,
-general transactions, splits, transfers, schedules, targets, and credit-card
-semantics remain gated on their canonical domain cutovers. Existing narrow
-compatibility implementations do not broaden that authority. The package also
-does not duplicate Actual authentication; memberships refer to principals
-produced by the retained Actual session system.
+Typed account storage owns only the evidence-admitted unlinked Checking-account
+creation, rename, pristine deletion, close, and reopen shapes. Other account
+types, linked accounts, general transactions, splits, transfers, schedules,
+targets, and credit-card semantics remain gated on their canonical domain
+cutovers. Existing narrow compatibility implementations do not broaden that
+authority. The package also does not duplicate Actual authentication;
+memberships refer to principals produced by the retained Actual session system.
 
 All changes to this boundary must update
 `project-docs/architecture/stock-actual-change-ledger.md` in the same commit.

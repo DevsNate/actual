@@ -14,7 +14,8 @@
     "./catalog-schema-version-migration": "./src/catalog-schema-version-migration.ts",
     "./canonical-budget-entity-migration": "./src/canonical-budget-entity-migration.ts",
     "./budget-identity-schema-migration": "./src/budget-identity-schema-migration.ts",
-    "./canonical-account-domain-migration": "./src/canonical-account-domain-migration.ts"
+    "./canonical-account-domain-migration": "./src/canonical-account-domain-migration.ts",
+    "./account-lifecycle-migration": "./src/account-lifecycle-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

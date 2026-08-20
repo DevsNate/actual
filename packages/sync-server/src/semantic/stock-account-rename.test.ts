@@ -20,8 +20,16 @@ describe('stock account rename delta', () => {
       ],
     };
 
-    const changes = parseStockAccountRenameDelta(changedEntities, snapshot);
-    expect(changes).toEqual([
+    const result = parseStockAccountRenameDelta(changedEntities, snapshot);
+    expect(result?.rename).toEqual({
+      budgetId: 'plan-1',
+      accountId: 'account-3',
+      transferPayeeId: 'payee-3',
+      expectedAccountName: 'Account Capture 3',
+      expectedTransferPayeeName: 'Transfer : Account Capture 3',
+      name: 'Account Renamed 3',
+    });
+    expect(result?.changes).toEqual([
       expect.objectContaining({
         entityId: 'account-3',
         payload: expect.objectContaining({

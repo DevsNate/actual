@@ -1,9 +1,8 @@
 # Semantic account creation
 
-This record translates the admitted `ACCOUNT-002` unlinked Checking-account
-capture and `ACCOUNT-003` rename capture into canonical application commands.
-It does not generalize account types, linked accounts, account close/reopen, or
-arbitrary transaction writes.
+This record translates the admitted `ACCOUNT-002` through `ACCOUNT-005`
+Checking-account captures into canonical application commands. It does not
+generalize account types, linked accounts, or arbitrary transaction writes.
 
 ## Canonical account boundary
 
@@ -28,11 +27,12 @@ deployed Web route to the canonical internal `budget_id`. Neither identity leaks
 into the other's role. Atomic knowledge, receipts, and replay remain owned by
 PostgreSQL.
 
-Rename and pristine deletion are still admitted captured behaviors, but their
-schema-44 handlers have not yet been moved behind this canonical account
-application boundary. That is the next account subphase. Close/reopen,
-additional account types, and linked accounts remain outside this slice. No
-compatibility exception will bypass the boundary.
+Migration 0007 extends the typed transaction record with an explicit
+starting-balance/manual-adjustment kind and memo. Rename, pristine deletion,
+close, and reopen now enter PostgreSQL through typed account lifecycle commands
+rather than generic compatibility-row commits. Additional account types,
+linked accounts, and arbitrary transaction mutation remain outside this slice.
+No compatibility exception bypasses the boundary.
 
 ## Evidence boundary
 
@@ -100,6 +100,28 @@ Immediate Income calculations. Remaining account balances continue to project
 normally. Any extra transaction, split, transfer, partial row, field divergence,
 or different lifecycle shape fails closed.
 
+## Close and reopen commands
+
+`ACCOUNT-005` admits one exact Checking-account lifecycle. Close requires the
+complete live account row plus one complete Manual Balance Adjustment group.
+The adjustment must use the unique Starting Balance system payee, Immediate
+Income category, `Closed Account` memo, captured cleared/accepted defaults, and
+an amount that exactly negates the current compatibility snapshot balance.
+PostgreSQL atomically closes the canonical account and inserts the typed manual
+adjustment while the stock adapter returns the observed calculation delta at
+`+2` knowledge.
+
+Reopen requires the complete closed account row with only `is_closed` changed
+to false. PostgreSQL atomically reopens that same identity and retains all
+transactions and its bound payee. The observed server derivation advances a
+second revision even though its calculation delta is empty.
+
+Until ordinary transactions receive their own typed-domain cutover, the close
+parser validates the adjustment against the unknown-field-preserving stock
+snapshot at the protocol boundary. The canonical store never derives or
+guesses that amount itself. Partial rows, missing system identities, nonzero or
+unsafe mismatches, and unsupported account types fail closed.
+
 ## Calculation projection
 
 Account source rows and calculation rows remain separate modules. For every
@@ -149,3 +171,5 @@ additive budget calculations, exact semantic replay without duplicates, and
 stock bootstrap readback. It also proves complete-row account/payee rename,
 knowledge acknowledgement, renamed bootstrap readback, strict pristine delete,
 terminal calculation rows, and the remaining-account Ready-to-Assign total.
+It additionally proves typed close/reopen persistence, one retained manual
+adjustment, lifecycle replay without duplication, and strict lifecycle parsing.

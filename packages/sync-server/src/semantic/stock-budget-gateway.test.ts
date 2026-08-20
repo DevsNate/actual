@@ -48,6 +48,10 @@ function application(
   changeWriter: StockBudgetChangeWriter = {
     commitChangeSet: vi.fn(),
     acknowledgeDevice: vi.fn(),
+    commitAccountRename: vi.fn(),
+    commitPristineAccountDeletion: vi.fn(),
+    commitAccountClose: vi.fn(),
+    commitAccountReopen: vi.fn(),
   },
 ) {
   const result = express();
@@ -244,6 +248,10 @@ describe('stock budget gateway', () => {
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
       commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
@@ -329,6 +337,10 @@ describe('stock budget gateway', () => {
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -372,6 +384,10 @@ describe('stock budget gateway', () => {
         endingDeviceKnowledge: input.endingDeviceKnowledge,
         response: input.response,
       })),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -462,14 +478,18 @@ describe('stock budget gateway', () => {
     };
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
-      commitChangeSet: vi.fn().mockImplementation(input =>
+      commitAccountRename: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
           serverKnowledge: 37,
           endingDeviceKnowledge: 2,
-          response: input.response,
+          response: input.delivery.response,
         }),
       ),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitChangeSet: vi.fn(),
     };
 
     const response = await stockRequest(
@@ -501,24 +521,19 @@ describe('stock budget gateway', () => {
       current_server_knowledge: 37,
       server_knowledge_of_device: 2,
     });
-    expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
+    expect(changeWriter.commitAccountRename).toHaveBeenCalledWith(
       expect.objectContaining({
-        changes: [
-          expect.objectContaining({
-            entityKind: 'be_accounts',
-            entityId: 'account-3',
-            payload: expect.objectContaining({
-              accountName: 'Account Renamed 3',
-            }),
-          }),
-          expect.objectContaining({
-            entityKind: 'be_payees',
-            entityId: 'payee-3',
-            payload: expect.objectContaining({
-              name: 'Transfer : Account Renamed 3',
-            }),
-          }),
-        ],
+        rename: expect.objectContaining({
+          accountId: 'account-3',
+          transferPayeeId: 'payee-3',
+          name: 'Account Renamed 3',
+        }),
+        delivery: expect.objectContaining({
+          changes: [
+            expect.objectContaining({ entityKind: 'be_accounts' }),
+            expect.objectContaining({ entityKind: 'be_payees' }),
+          ],
+        }),
       }),
     );
   });

@@ -28,6 +28,14 @@ export function projectStockCheckingAccountCalculations(
     ),
     'be_subcategories',
   );
+  const balanceAdjustmentPayee = exactlyOne(
+    snapshot.entities.filter(
+      entity =>
+        entity.entityKind === 'be_payees' &&
+        entity.payload.internalName === 'BalanceAdjustmentPayee',
+    ),
+    'be_payees',
+  );
   const groups = accounts.map(account =>
     checkingAccountGroup(
       snapshot.entities,
@@ -42,7 +50,13 @@ export function projectStockCheckingAccountCalculations(
   );
   const ordinaryTransactions = liveTransactions.filter(
     transaction =>
-      !groups.some(group => group.startingBalance.entityId === transaction.entityId),
+      !groups.some(
+        group => group.startingBalance.entityId === transaction.entityId,
+      ) && transaction.payload.payeeId !== balanceAdjustmentPayee.entityId,
+  );
+  const balanceAdjustments = liveTransactions.filter(
+    transaction =>
+      transaction.payload.payeeId === balanceAdjustmentPayee.entityId,
   );
   const noneCategory = exactlyOne(
     snapshot.entities.filter(
@@ -86,12 +100,28 @@ export function projectStockCheckingAccountCalculations(
   ) {
     throw new Error('Starting balance must belong to the current budget month');
   }
-  const incomeAmount = groups.reduce((sum, group) => sum + group.amount, 0);
+  const incomeAmount =
+    groups.reduce((sum, group) => sum + group.amount, 0) +
+    balanceAdjustments.reduce(
+      (sum, transaction) =>
+        sum +
+        manualAdjustmentAmount(
+          transaction,
+          accounts,
+          immediateIncomeCategory,
+          currentMonth,
+        ),
+      0,
+    );
   const uncategorizedAmount = ordinaryTransactions.reduce(
-    (sum, transaction) => sum + ordinaryTransactionAmount(transaction, accounts, currentMonth),
+    (sum, transaction) =>
+      sum + ordinaryTransactionAmount(transaction, accounts, currentMonth),
     0,
   );
-  if (!Number.isSafeInteger(incomeAmount) || !Number.isSafeInteger(uncategorizedAmount)) {
+  if (
+    !Number.isSafeInteger(incomeAmount) ||
+    !Number.isSafeInteger(uncategorizedAmount)
+  ) {
     throw new Error('Starting Balance total must be a safe integer');
   }
 
@@ -193,40 +223,42 @@ export function projectStockCheckingAccountCalculations(
     be_account_calculations: groups.map(group => {
       const totals = accountTotals(group.account.entityId, liveTransactions);
       return {
-      id: `ac/${group.account.entityId}`,
-      entities_account_id: group.account.entityId,
-      is_tombstone: false,
-      cleared_balance: totals.cleared,
-      uncleared_balance: totals.uncleared,
-      info_count: 0,
-      warning_count: totals.warningCount,
-      error_count: 0,
-      transaction_count: totals.count,
-      debt_last_payment_date: null,
-      debt_payments: null,
-    };
+        id: `ac/${group.account.entityId}`,
+        entities_account_id: group.account.entityId,
+        is_tombstone: false,
+        cleared_balance: totals.cleared,
+        uncleared_balance: totals.uncleared,
+        info_count: 0,
+        warning_count: totals.warningCount,
+        error_count: 0,
+        transaction_count: totals.count,
+        debt_last_payment_date: null,
+        debt_payments: null,
+      };
     }),
     be_monthly_account_calculations: groups.flatMap(group => {
       const totals = accountTotals(group.account.entityId, liveTransactions);
-      return [monthlyAccountCalculation(
-        group.account.entityId,
-        currentMonth,
-        totals.cleared,
-        totals.uncleared,
-        totals.cleared + totals.uncleared,
-        totals.count,
-        totals.warningCount,
-      ),
-      monthlyAccountCalculation(
-        group.account.entityId,
-        nextMonth,
-        0,
-        0,
-        totals.cleared + totals.uncleared,
-        0,
-        0,
-      ),
-    ];}),
+      return [
+        monthlyAccountCalculation(
+          group.account.entityId,
+          currentMonth,
+          totals.cleared,
+          totals.uncleared,
+          totals.cleared + totals.uncleared,
+          totals.count,
+          totals.warningCount,
+        ),
+        monthlyAccountCalculation(
+          group.account.entityId,
+          nextMonth,
+          0,
+          0,
+          totals.cleared + totals.uncleared,
+          0,
+          0,
+        ),
+      ];
+    }),
   };
 }
 
@@ -245,7 +277,9 @@ function checkingAccountGroup(
     entities.filter(
       entity =>
         entity.entityKind === 'be_transactions' &&
-        entity.payload.accountId === account.entityId,
+        entity.payload.accountId === account.entityId &&
+        entity.payload.payeeId === startingBalancePayee.entityId &&
+        entity.payload.subCategoryId === immediateIncomeCategory.entityId,
     ),
     'be_transactions',
   );
@@ -261,7 +295,7 @@ function checkingAccountGroup(
   if (
     account.payload.accountType !== 'Checking' ||
     account.payload.onBudget !== true ||
-    account.payload.isClosed !== false ||
+    typeof account.payload.isClosed !== 'boolean' ||
     transferPayee.isTombstone ||
     transferPayee.payload.enabled !== true ||
     transferPayee.payload.name !== `Transfer : ${accountName}` ||
@@ -292,13 +326,46 @@ function checkingAccountGroup(
   };
 }
 
+function manualAdjustmentAmount(
+  transaction: BudgetEntity,
+  accounts: readonly BudgetEntity[],
+  immediateIncomeCategory: BudgetEntity,
+  currentMonth: string,
+): number {
+  if (
+    !accounts.some(
+      account => account.entityId === transaction.payload.accountId,
+    ) ||
+    transaction.payload.subCategoryId !== immediateIncomeCategory.entityId ||
+    transaction.payload.scheduledTransactionId !== null ||
+    transaction.payload.amount !== transaction.payload.cashAmount ||
+    transaction.payload.creditAmount !== 0 ||
+    transaction.payload.creditAmountAdjusted !== 0 ||
+    transaction.payload.subcategoryCreditAmountPreceding !== 0 ||
+    transaction.payload.memo !== 'Closed Account' ||
+    transaction.payload.cleared !== 'Cleared' ||
+    transaction.payload.accepted !== true ||
+    transaction.payload.transferAccountId !== null ||
+    transaction.payload.transferTransactionId !== null ||
+    transaction.payload.transferSubtransactionId !== null ||
+    requireIsoDate(transaction.payload.date).slice(0, 7) !==
+      currentMonth.slice(0, 7) ||
+    !Number.isSafeInteger(transaction.payload.amount)
+  ) {
+    throw new Error('Unsupported Manual Balance Adjustment state');
+  }
+  return Number(transaction.payload.amount);
+}
+
 function ordinaryTransactionAmount(
   transaction: BudgetEntity,
   accounts: readonly BudgetEntity[],
   currentMonth: string,
 ): number {
   if (
-    !accounts.some(account => account.entityId === transaction.payload.accountId) ||
+    !accounts.some(
+      account => account.entityId === transaction.payload.accountId,
+    ) ||
     transaction.payload.subCategoryId !== null ||
     transaction.payload.scheduledTransactionId !== null ||
     transaction.payload.amount !== transaction.payload.cashAmount ||
@@ -310,7 +377,8 @@ function ordinaryTransactionAmount(
     transaction.payload.transferAccountId !== null ||
     transaction.payload.transferTransactionId !== null ||
     transaction.payload.transferSubtransactionId !== null ||
-    requireIsoDate(transaction.payload.date).slice(0, 7) !== currentMonth.slice(0, 7) ||
+    requireIsoDate(transaction.payload.date).slice(0, 7) !==
+      currentMonth.slice(0, 7) ||
     !Number.isSafeInteger(transaction.payload.amount)
   ) {
     throw new Error('Unsupported ordinary transaction calculation state');
@@ -323,8 +391,12 @@ function accountTotals(
   transactions: readonly BudgetEntity[],
 ): { cleared: number; uncleared: number; count: number; warningCount: number } {
   const rows = transactions.filter(row => row.payload.accountId === accountId);
-  const cleared = rows.filter(row => row.payload.cleared === 'Cleared').reduce((sum, row) => sum + Number(row.payload.amount), 0);
-  const uncleared = rows.filter(row => row.payload.cleared === 'Uncleared').reduce((sum, row) => sum + Number(row.payload.amount), 0);
+  const cleared = rows
+    .filter(row => row.payload.cleared === 'Cleared')
+    .reduce((sum, row) => sum + Number(row.payload.amount), 0);
+  const uncleared = rows
+    .filter(row => row.payload.cleared === 'Uncleared')
+    .reduce((sum, row) => sum + Number(row.payload.amount), 0);
   if (![cleared, uncleared].every(Number.isSafeInteger)) {
     throw new Error('Account balance must be a safe integer');
   }

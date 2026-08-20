@@ -60,7 +60,7 @@ integrationTest('semantic catalog runtime integration', () => {
     const migrations = await seedPool.query<{ count: string }>(
       'SELECT count(*) FROM semantic_schema_migrations',
     );
-    expect(migrations.rows[0]?.count).toBe('6');
+    expect(migrations.rows[0]?.count).toBe('7');
 
     const app = express();
     app.use('/semantic/v1', runtime.handlers);
@@ -809,6 +809,23 @@ integrationTest('semantic catalog runtime integration', () => {
       current_server_knowledge: bootstrap.body.current_server_knowledge + 1,
       server_knowledge_of_device: 2,
     });
+    const canonicalRename = await seedPool!.query<{
+      account_name: string;
+      payee_name: string;
+    }>(
+      `SELECT a.name AS account_name, p.name AS payee_name
+       FROM semantic_accounts a
+       JOIN semantic_payees p
+         ON p.budget_id = a.budget_id AND p.account_id = a.account_id
+       WHERE a.budget_id = $1 AND a.account_id = $2`,
+      [directBudgetId, created.body.id],
+    );
+    expect(canonicalRename.rows).toEqual([
+      {
+        account_name: 'Account Renamed 3',
+        payee_name: 'Transfer : Account Renamed 3',
+      },
+    ]);
 
     const renamedBootstrap = await request(testApp)
       .post('/api/v1/catalog')
@@ -917,5 +934,28 @@ integrationTest('semantic catalog runtime integration', () => {
         ],
       },
     });
+    const canonicalDelete = await seedPool!.query<{
+      account_tombstone: boolean;
+      payee_tombstone: boolean;
+      transaction_tombstone: boolean;
+    }>(
+      `SELECT a.is_tombstone AS account_tombstone,
+              p.is_tombstone AS payee_tombstone,
+              t.is_tombstone AS transaction_tombstone
+       FROM semantic_accounts a
+       JOIN semantic_payees p
+         ON p.budget_id = a.budget_id AND p.account_id = a.account_id
+       JOIN semantic_transactions t
+         ON t.budget_id = a.budget_id AND t.account_id = a.account_id
+       WHERE a.budget_id = $1 AND a.account_id = $2`,
+      [directBudgetId, created.body.id],
+    );
+    expect(canonicalDelete.rows).toEqual([
+      {
+        account_tombstone: true,
+        payee_tombstone: true,
+        transaction_tombstone: true,
+      },
+    ]);
   });
 });

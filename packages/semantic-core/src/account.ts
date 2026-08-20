@@ -53,6 +53,71 @@ export type UnlinkedAccountCreationWriter = {
   ): Promise<BudgetChangeSetResult>;
 };
 
+export type CanonicalAccountRename = {
+  budgetId: string;
+  accountId: string;
+  transferPayeeId: string;
+  expectedAccountName: string;
+  expectedTransferPayeeName: string;
+  name: string;
+};
+
+export type CommitCanonicalAccountRename = {
+  rename: CanonicalAccountRename;
+  delivery: BudgetChangeSetCommand;
+};
+
+export type CanonicalPristineAccountDeletion = {
+  budgetId: string;
+  accountId: string;
+  transferPayeeId: string;
+  startingBalanceTransactionId: string;
+};
+
+export type CommitCanonicalPristineAccountDeletion = {
+  deletion: CanonicalPristineAccountDeletion;
+  delivery: BudgetChangeSetCommand;
+};
+
+export type CanonicalManualBalanceAdjustment = {
+  id: string;
+  budgetId: string;
+  accountId: string;
+  payeeId: string;
+  categoryId: string;
+  date: string;
+  amount: number;
+  memo: 'Closed Account';
+};
+
+export type CommitCanonicalAccountClose = {
+  budgetId: string;
+  accountId: string;
+  adjustment: CanonicalManualBalanceAdjustment;
+  delivery: BudgetChangeSetCommand;
+};
+
+export type CommitCanonicalAccountReopen = {
+  budgetId: string;
+  accountId: string;
+  delivery: BudgetChangeSetCommand;
+};
+
+export type AccountLifecycleWriter = {
+  commitAccountRename(
+    command: CommitCanonicalAccountRename,
+  ): Promise<BudgetChangeSetResult>;
+  commitPristineAccountDeletion(
+    command: CommitCanonicalPristineAccountDeletion,
+  ): Promise<BudgetChangeSetResult>;
+  commitAccountClose(
+    command: CommitCanonicalAccountClose,
+  ): Promise<BudgetChangeSetResult>;
+  commitAccountReopen(
+    command: CommitCanonicalAccountReopen,
+  ): Promise<BudgetChangeSetResult>;
+};
+
 export type BuildUnlinkedCheckingAccountInput = {
   budgetId: string;
   accountId: string;

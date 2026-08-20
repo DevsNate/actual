@@ -442,6 +442,114 @@ integrationTest('PostgresSemanticStore integration', () => {
       transactions: '1',
       projections: '3',
     });
+
+    await store.commitAccountRename({
+      rename: {
+        budgetId: 'canonical-account-budget',
+        accountId: 'canonical-account',
+        transferPayeeId: 'canonical-transfer-payee',
+        expectedAccountName: 'Canonical checking',
+        expectedTransferPayeeName: 'Transfer : Canonical checking',
+        name: 'Renamed checking',
+      },
+      delivery: {
+        ...command.delivery,
+        changeSetId: 'canonical-account-rename-change',
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 2,
+        serverKnowledgeAdvance: 1,
+        idempotencyKey: 'canonical-account-rename-request',
+        payloadDigest: 'b'.repeat(64),
+        response: { renamed: true },
+      },
+    });
+
+    await store.commitAccountClose({
+      budgetId: 'canonical-account-budget',
+      accountId: 'canonical-account',
+      adjustment: {
+        id: 'canonical-close-adjustment',
+        budgetId: 'canonical-account-budget',
+        accountId: 'canonical-account',
+        payeeId: 'canonical-balance-adjustment-payee',
+        categoryId: 'canonical-immediate-income',
+        date: '2026-08-20',
+        amount: -123450,
+        memo: 'Closed Account',
+      },
+      delivery: {
+        ...command.delivery,
+        changeSetId: 'canonical-account-close-change',
+        startingDeviceKnowledge: 2,
+        endingDeviceKnowledge: 4,
+        expectedServerKnowledge: 3,
+        serverKnowledgeAdvance: 2,
+        idempotencyKey: 'canonical-account-close-request',
+        payloadDigest: 'c'.repeat(64),
+        response: { closed: true },
+      },
+    });
+
+    const reopen = {
+      budgetId: 'canonical-account-budget',
+      accountId: 'canonical-account',
+      delivery: {
+        ...command.delivery,
+        changeSetId: 'canonical-account-reopen-change',
+        startingDeviceKnowledge: 4,
+        endingDeviceKnowledge: 5,
+        expectedServerKnowledge: 5,
+        serverKnowledgeAdvance: 2 as const,
+        idempotencyKey: 'canonical-account-reopen-request',
+        payloadDigest: 'd'.repeat(64),
+        response: { reopened: true },
+      },
+    };
+    await expect(store.commitAccountReopen(reopen)).resolves.toMatchObject({
+      replayed: false,
+      serverKnowledge: 7,
+      response: { reopened: true },
+    });
+    await expect(store.commitAccountReopen(reopen)).resolves.toMatchObject({
+      replayed: true,
+      serverKnowledge: 7,
+      response: { reopened: true },
+    });
+
+    const lifecycle = await pool.query<{
+      account_name: string;
+      payee_name: string;
+      is_closed: boolean;
+      adjustment_count: string;
+      adjustment_amount: string;
+      adjustment_memo: string;
+    }>(
+      `SELECT a.name AS account_name, p.name AS payee_name, a.is_closed,
+              count(t.*)::text AS adjustment_count,
+              min(t.amount_milliunits)::text AS adjustment_amount,
+              min(t.memo) AS adjustment_memo
+       FROM semantic_accounts a
+       JOIN semantic_payees p
+         ON p.budget_id = a.budget_id AND p.account_id = a.account_id
+       LEFT JOIN semantic_transactions t
+         ON t.budget_id = a.budget_id
+        AND t.account_id = a.account_id
+        AND t.transaction_kind = 'manual_balance_adjustment'
+       WHERE a.budget_id = $1 AND a.account_id = $2
+       GROUP BY a.name, p.name, a.is_closed`,
+      ['canonical-account-budget', 'canonical-account'],
+    );
+    expect(lifecycle.rows).toEqual([
+      {
+        account_name: 'Renamed checking',
+        payee_name: 'Transfer : Renamed checking',
+        is_closed: false,
+        adjustment_count: '1',
+        adjustment_amount: '-123450',
+        adjustment_memo: 'Closed Account',
+      },
+    ]);
   });
 
   test('commits and exactly replays an isolated catalog command', async () => {

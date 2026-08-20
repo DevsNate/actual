@@ -10,6 +10,12 @@ import { projectStockEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 export type StockPristineAccountDelete = {
+  deletion: {
+    budgetId: string;
+    accountId: string;
+    transferPayeeId: string;
+    startingBalanceTransactionId: string;
+  };
   changes: BudgetChangeSetCommand['changes'];
   changedEntities: Readonly<Record<string, unknown>>;
 };
@@ -109,6 +115,12 @@ export function parseStockPristineAccountDelete(
     isTombstone: true,
   }));
   return {
+    deletion: {
+      budgetId: snapshot.budgetId,
+      accountId: account.entityId,
+      transferPayeeId: payee.entityId,
+      startingBalanceTransactionId: transaction.entityId,
+    },
     changes,
     changedEntities: calculationDeleteDelta(snapshot, changes),
   };
