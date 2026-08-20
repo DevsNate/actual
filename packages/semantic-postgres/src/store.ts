@@ -7,6 +7,7 @@ import type {
   CommitCanonicalAccountClose,
   CommitCanonicalAccountReopen,
   CommitCanonicalPristineAccountDeletion,
+  CommitCanonicalCategoryMutation,
   CreateBudgetCommand,
   CreateBudgetResult,
   BudgetDeviceAcknowledgement,
@@ -430,6 +431,17 @@ export class PostgresSemanticStore {
     );
   }
 
+  async commitCategoryMutation(
+    command: CommitCanonicalCategoryMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalCategoryMutation(client, command),
+      ),
+    );
+  }
+
   async acknowledgeDevice(
     input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
@@ -659,6 +671,155 @@ async function insertCanonicalAccountGroup(
       startingBalance.isApproved,
     ],
   );
+}
+
+async function writeCanonicalCategoryMutation(
+  client: PoolClient,
+  command: CommitCanonicalCategoryMutation,
+): Promise<void> {
+  const mutation = command.mutation;
+  if (mutation.kind === 'create') {
+    const { group, category, months } = mutation;
+    if (
+      group.budgetId !== category.budgetId ||
+      months.some(
+        month =>
+          month.budgetId !== category.budgetId ||
+          month.categoryId !== category.id,
+      )
+    ) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Category creation identities do not share one budget and category',
+      );
+    }
+    await client.query(
+      `INSERT INTO semantic_category_groups
+         (budget_id, category_group_id, name, sortable_index, is_hidden)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (budget_id, category_group_id) DO UPDATE SET
+         name = EXCLUDED.name,
+         sortable_index = EXCLUDED.sortable_index,
+         is_hidden = EXCLUDED.is_hidden,
+         updated_at = now()`,
+      [group.budgetId, group.id, group.name, group.sortOrder, group.isHidden],
+    );
+    await client.query(
+      `INSERT INTO semantic_categories
+         (budget_id, category_id, category_group_id, name, sortable_index,
+          category_type, note, is_hidden)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        category.budgetId,
+        category.id,
+        category.groupId,
+        category.name,
+        category.sortOrder,
+        category.type,
+        category.note,
+        category.isHidden,
+      ],
+    );
+    for (const month of months) {
+      await client.query(
+        `INSERT INTO semantic_monthly_category_budgets
+           (budget_id, monthly_category_budget_id, category_id, month,
+            budgeted_milliunits, goal_snoozed_at, note,
+            overspending_handling)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          month.budgetId,
+          month.id,
+          month.categoryId,
+          month.month,
+          month.budgeted,
+          month.goalSnoozedAt,
+          month.note,
+          month.overspendingHandling,
+        ],
+      );
+    }
+    return;
+  }
+
+  if (mutation.kind === 'update') {
+    const destination = await client.query(
+      `SELECT 1 FROM semantic_category_groups
+       WHERE budget_id = $1 AND category_group_id = $2`,
+      [mutation.budgetId, mutation.groupId],
+    );
+    if (destination.rowCount !== 1) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Category update destination group is not canonical',
+      );
+    }
+    const result = await client.query(
+      `UPDATE semantic_categories
+       SET category_group_id = $7, name = $8, sortable_index = $9,
+           is_hidden = $10, updated_at = now()
+       WHERE budget_id = $1 AND category_id = $2
+         AND category_group_id = $3 AND name = $4
+         AND sortable_index = $5 AND is_hidden = $6
+         AND is_tombstone = false`,
+      [
+        mutation.budgetId,
+        mutation.categoryId,
+        mutation.expectedGroupId,
+        mutation.expectedName,
+        mutation.expectedSortOrder,
+        mutation.expectedHidden,
+        mutation.groupId,
+        mutation.name,
+        mutation.sortOrder,
+        mutation.isHidden,
+      ],
+    );
+    if (result.rowCount !== 1) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Category update did not match one live canonical category',
+      );
+    }
+    return;
+  }
+
+  const references = await client.query(
+    `SELECT 1 FROM semantic_transactions
+     WHERE budget_id = $1 AND category_id = $2 AND is_tombstone = false
+     LIMIT 1 FOR UPDATE`,
+    [mutation.budgetId, mutation.categoryId],
+  );
+  if (references.rowCount !== 0) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Category deletion is not admitted for a referenced category',
+    );
+  }
+  const months = await client.query(
+    `UPDATE semantic_monthly_category_budgets
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND category_id = $2
+       AND monthly_category_budget_id = ANY($3::text[])
+       AND is_tombstone = false`,
+    [
+      mutation.budgetId,
+      mutation.categoryId,
+      [...mutation.monthlyCategoryBudgetIds],
+    ],
+  );
+  const category = await client.query(
+    `UPDATE semantic_categories
+     SET is_tombstone = true, updated_at = now()
+     WHERE budget_id = $1 AND category_id = $2 AND is_tombstone = false`,
+    [mutation.budgetId, mutation.categoryId],
+  );
+  if (months.rowCount !== 2 || category.rowCount !== 1) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Category deletion requires one category and exactly two monthly rows',
+    );
+  }
 }
 
 async function updateCanonicalAccountName(

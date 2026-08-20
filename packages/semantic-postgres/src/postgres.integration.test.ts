@@ -552,6 +552,198 @@ integrationTest('PostgresSemanticStore integration', () => {
     ]);
   });
 
+  test('atomically commits a canonical category and its monthly rows', async () => {
+    await store.seedBudget({
+      budgetId: 'canonical-category-budget',
+      budgetVersionId: 'canonical-category-version',
+      membershipId: 'canonical-category-membership',
+      principalId: 'canonical-category-principal',
+      name: 'Canonical category budget',
+      permissions: 7,
+    });
+    const command = {
+      mutation: {
+        kind: 'create' as const,
+        group: {
+          id: 'category-group',
+          budgetId: 'canonical-category-budget',
+          name: 'Group',
+          sortOrder: 100,
+          isHidden: false,
+        },
+        category: {
+          id: 'category',
+          budgetId: 'canonical-category-budget',
+          groupId: 'category-group',
+          name: 'Category',
+          sortOrder: 200,
+          type: 'DFT' as const,
+          note: null,
+          isHidden: false,
+        },
+        months: [
+          {
+            id: 'category-august',
+            budgetId: 'canonical-category-budget',
+            categoryId: 'category',
+            month: '2026-08-01',
+            budgeted: 0 as const,
+            goalSnoozedAt: null,
+            note: null,
+            overspendingHandling: 'AffectsBuffer' as const,
+          },
+          {
+            id: 'category-september',
+            budgetId: 'canonical-category-budget',
+            categoryId: 'category',
+            month: '2026-09-01',
+            budgeted: 0 as const,
+            goalSnoozedAt: null,
+            note: null,
+            overspendingHandling: 'AffectsBuffer' as const,
+          },
+        ] as const,
+      },
+      delivery: {
+        changeSetId: 'canonical-category-change',
+        budgetId: 'canonical-category-budget',
+        originDeviceId: 'canonical-category-device',
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 0,
+        serverKnowledgeAdvance: 2 as const,
+        schemaVersion: 44,
+        idempotencyKey: 'canonical-category-request',
+        payloadDigest: '8'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_subcategories',
+            entityId: 'category',
+            isTombstone: false,
+            payload: { name: 'Category' },
+          },
+          {
+            entityKind: 'be_monthly_subcategory_budgets',
+            entityId: 'category-august',
+            isTombstone: false,
+            payload: { budgeted: 0 },
+          },
+          {
+            entityKind: 'be_monthly_subcategory_budgets',
+            entityId: 'category-september',
+            isTombstone: false,
+            payload: { budgeted: 0 },
+          },
+        ],
+        response: { accepted: true },
+      },
+    };
+
+    await expect(store.commitCategoryMutation(command)).resolves.toEqual({
+      replayed: false,
+      serverKnowledge: 2,
+      endingDeviceKnowledge: 2,
+      response: { accepted: true },
+    });
+    await expect(store.commitCategoryMutation(command)).resolves.toEqual({
+      replayed: true,
+      serverKnowledge: 2,
+      endingDeviceKnowledge: 2,
+      response: { accepted: true },
+    });
+    const state = await pool.query(
+      `SELECT
+         (SELECT count(*) FROM semantic_category_groups WHERE budget_id = $1) AS groups,
+         (SELECT count(*) FROM semantic_categories WHERE budget_id = $1) AS categories,
+         (SELECT count(*) FROM semantic_monthly_category_budgets WHERE budget_id = $1) AS months`,
+      ['canonical-category-budget'],
+    );
+    expect(state.rows[0]).toEqual({
+      groups: '1',
+      categories: '1',
+      months: '2',
+    });
+
+    await expect(
+      store.commitCategoryMutation({
+        mutation: {
+          kind: 'update',
+          budgetId: 'canonical-category-budget',
+          categoryId: 'category',
+          expectedGroupId: 'category-group',
+          expectedName: 'Category',
+          expectedSortOrder: 200,
+          expectedHidden: false,
+          groupId: 'category-group',
+          name: 'Renamed category',
+          sortOrder: 200,
+          isHidden: true,
+        },
+        delivery: {
+          ...command.delivery,
+          changeSetId: 'canonical-category-update-change',
+          startingDeviceKnowledge: 2,
+          endingDeviceKnowledge: 3,
+          expectedServerKnowledge: 2,
+          serverKnowledgeAdvance: 1,
+          idempotencyKey: 'canonical-category-update',
+          payloadDigest: '9'.repeat(64),
+          changes: [
+            {
+              entityKind: 'be_subcategories',
+              entityId: 'category',
+              isTombstone: false,
+              payload: { name: 'Renamed category', isHidden: true },
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ serverKnowledge: 3 });
+
+    await expect(
+      store.commitCategoryMutation({
+        mutation: {
+          kind: 'delete',
+          budgetId: 'canonical-category-budget',
+          categoryId: 'category',
+          monthlyCategoryBudgetIds: ['category-august', 'category-september'],
+        },
+        delivery: {
+          ...command.delivery,
+          changeSetId: 'canonical-category-delete-change',
+          startingDeviceKnowledge: 3,
+          endingDeviceKnowledge: 6,
+          expectedServerKnowledge: 3,
+          idempotencyKey: 'canonical-category-delete',
+          payloadDigest: 'a'.repeat(64),
+          changes: command.delivery.changes.map(change => ({
+            ...change,
+            isTombstone: true,
+          })),
+        },
+      }),
+    ).resolves.toMatchObject({ serverKnowledge: 5 });
+
+    const terminal = await pool.query(
+      `SELECT
+         (SELECT name FROM semantic_categories
+          WHERE budget_id = $1 AND category_id = 'category') AS name,
+         (SELECT is_hidden FROM semantic_categories
+          WHERE budget_id = $1 AND category_id = 'category') AS hidden,
+         (SELECT is_tombstone FROM semantic_categories
+          WHERE budget_id = $1 AND category_id = 'category') AS category_tombstone,
+         (SELECT count(*) FROM semantic_monthly_category_budgets
+          WHERE budget_id = $1 AND is_tombstone = true) AS month_tombstones`,
+      ['canonical-category-budget'],
+    );
+    expect(terminal.rows[0]).toEqual({
+      name: 'Renamed category',
+      hidden: true,
+      category_tombstone: true,
+      month_tombstones: '2',
+    });
+  });
+
   test('commits and exactly replays an isolated catalog command', async () => {
     const operation = {
       changeSetId: 'catalog-change-integration',

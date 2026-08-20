@@ -565,4 +565,26 @@ describe('semantic foundation migration', () => {
     expect(migration).toContain('ADD COLUMN memo TEXT');
     expect(migration).not.toContain('be_transactions');
   });
+
+  test('separates canonical categories from monthly budgeting state', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0008_canonical_category_domain.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE semantic_category_groups');
+    expect(migration).toContain('CREATE TABLE semantic_categories');
+    expect(migration).toContain(
+      'CREATE TABLE semantic_monthly_category_budgets',
+    );
+    expect(migration).toContain('UNIQUE (budget_id, category_id, month)');
+    expect(migration).toContain('ON DELETE RESTRICT');
+    expect(migration).not.toContain('be_subcategories');
+    expect(migration).not.toContain('be_monthly_subcategory_budgets');
+  });
 });

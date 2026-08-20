@@ -52,6 +52,7 @@ function application(
     commitPristineAccountDeletion: vi.fn(),
     commitAccountClose: vi.fn(),
     commitAccountReopen: vi.fn(),
+    commitCategoryMutation: vi.fn(),
   },
 ) {
   const result = express();
@@ -252,6 +253,7 @@ describe('stock budget gateway', () => {
       commitPristineAccountDeletion: vi.fn(),
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
       commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
@@ -341,6 +343,7 @@ describe('stock budget gateway', () => {
       commitPristineAccountDeletion: vi.fn(),
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -388,6 +391,7 @@ describe('stock budget gateway', () => {
       commitPristineAccountDeletion: vi.fn(),
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -489,6 +493,7 @@ describe('stock budget gateway', () => {
       commitPristineAccountDeletion: vi.fn(),
       commitAccountClose: vi.fn(),
       commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -533,6 +538,105 @@ describe('stock budget gateway', () => {
             expect.objectContaining({ entityKind: 'be_accounts' }),
             expect.objectContaining({ entityKind: 'be_payees' }),
           ],
+        }),
+      }),
+    );
+  });
+
+  test('commits captured category creation through the canonical writer', async () => {
+    const snapshot = { ...createSnapshot(), serverKnowledge: 88 };
+    const group = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_master_categories' &&
+        entity.payload.deletable === true,
+    )!;
+    const month = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_monthly_budgets' &&
+        entity.payload.month === '2026-08-01',
+    )!;
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitChangeSet: vi.fn(),
+      commitCategoryMutation: vi.fn().mockImplementation(input =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 90,
+          endingDeviceKnowledge: 7,
+          response: input.delivery.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      {
+        readBudgetByVersion: vi.fn().mockResolvedValue(snapshot),
+      },
+      'delta',
+      {
+        starting_device_knowledge: 5,
+        ending_device_knowledge: 7,
+        device_knowledge_of_server: 88,
+        changed_entities: {
+          be_subcategories: [
+            {
+              id: 'category-new',
+              is_tombstone: false,
+              entities_master_category_id: group.entityId,
+              entities_account_id: null,
+              internal_name: null,
+              sortable_index: 79990,
+              name: 'Category 1',
+              type: 'DFT',
+              note: null,
+              goal_type: null,
+              goal_created_on: null,
+              goal_needs_whole_amount: null,
+              goal_target_amount: 0,
+              goal_target_date: null,
+              goal_cadence: null,
+              goal_cadence_frequency: null,
+              goal_day: null,
+              monthly_funding: 0,
+              is_hidden: false,
+              pinned_index: null,
+              pinned_goal_index: null,
+            },
+          ],
+          be_monthly_subcategory_budgets: [
+            {
+              id: 'mcb/2026-08/category-new',
+              is_tombstone: false,
+              entities_monthly_budget_id: month.entityId,
+              entities_subcategory_id: 'category-new',
+              budgeted: 0,
+              goal_snoozed_at: null,
+            },
+          ],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 90,
+      server_knowledge_of_device: 7,
+      changed_entities: {
+        be_monthly_subcategory_budgets: [{ id: 'mcb/2026-09/category-new' }],
+      },
+    });
+    expect(changeWriter.commitCategoryMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mutation: expect.objectContaining({ kind: 'create' }),
+        delivery: expect.objectContaining({
+          serverKnowledgeAdvance: 2,
+          changes: expect.arrayContaining([
+            expect.objectContaining({ entityKind: 'be_subcategories' }),
+          ]),
         }),
       }),
     );

@@ -32,6 +32,7 @@ function app(
     commitPristineAccountDeletion: vi.fn(),
     commitAccountClose: vi.fn(),
     commitAccountReopen: vi.fn(),
+    commitCategoryMutation: vi.fn(),
   },
   catalogWriter: CatalogCommandWriter = { commitCatalogCommand: vi.fn() },
   budgetLifecycleService: BudgetLifecycleService = {

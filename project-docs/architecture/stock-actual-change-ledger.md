@@ -604,3 +604,29 @@ Copy this block for a new architectural delta:
 - **Status:** investigating runtime completeness; feature delivery is frozen
   beyond bootstrap/plan lifecycle until the smallest relocatable experiment is
   proven.
+
+### ADD-014 — Canonical untargeted category lifecycle
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/category.ts`,
+  `packages/sync-server/src/semantic/stock-category-lifecycle.ts`, and
+  `packages/semantic-postgres/migrations/0008_canonical_category_domain.sql`.
+- **Observed stock behavior:** CATEGORY-001 creates one category plus a current
+  monthly row, derives a next-month row and two calculations, accepts complete
+  rename/move/hide/unhide rows, and terminally tombstones the category and both
+  monthly rows when the unused category is deleted.
+- **Fork behavior:** A strict schema-44 adapter maps captured relationship-field
+  variants into one typed category command. Canonical category definitions and
+  monthly budgeting facts commit atomically with compatibility projections,
+  ordered knowledge, and exact replay receipts.
+- **Boundary:** Only untargeted ordinary categories and unused deletion are
+  admitted. Referenced deletion, targets, assignments, and group lifecycle fail
+  closed. PAYEE-001 creation remains grouped with ordinary transactions because
+  that is the only captured invocation.
+- **Verification:** Focused parser and gateway tests cover creation,
+  server-derived rows, rename, move, hide, delete, malformed target rejection,
+  reference rejection, cursor advancement, and replay. PostgreSQL migration and
+  atomic-store tests cover typed row separation.
+- **Status:** implemented and verified by the full local suites, strict
+  TypeScript checks, and disposable PostgreSQL create/replay/update/delete plus
+  authenticated runtime integration.

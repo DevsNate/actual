@@ -22,6 +22,8 @@ audit.
 - durable idempotency receipts containing the exact accepted response; and
 - typed canonical account, account-bound payee, starting-balance, and manual
   adjustment storage for admitted Checking-account creation and lifecycle;
+- typed category-group references, category definitions, and monthly-category
+  budgeting rows for the admitted untargeted category lifecycle;
 - transactional migrations protected by a PostgreSQL advisory lock.
 
 `commitChangeSet` serializes reuse of a device idempotency key, locks budget and
@@ -59,6 +61,10 @@ Migration 0007 admits typed account rename, pristine deletion, close, and
 reopen. These lifecycle writers update canonical rows in the same PostgreSQL
 transaction as compatibility projections, ordered knowledge, and replay
 receipts.
+Migration 0008 admits CATEGORY-001 without treating server-derived monthly rows
+as additional client mutations. Category definitions and monthly budgeting
+facts remain separate canonical tables and commit atomically with compatibility
+delivery and replay receipts.
 The full field-by-field audit is recorded in
 `project-docs/architecture/semantic-postgres-contract-audit.md`.
 
