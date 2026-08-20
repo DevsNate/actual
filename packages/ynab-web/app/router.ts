@@ -8,6 +8,7 @@ export default class AppRouter extends Router {
 }
 
 AppRouter.map(function () {
+  this.route("login");
   this.route("plans");
   this.route("plan", { path: "/plans/:plan_id" });
 });

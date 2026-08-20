@@ -7,6 +7,11 @@ body {
   margin: 0;
 }
 
+button,
+input {
+  font: inherit;
+}
+
 .app-shell {
   margin: 0 auto;
   max-width: 72rem;
@@ -18,4 +23,22 @@ body {
   gap: 0.75rem;
   list-style: none;
   padding: 0;
+}
+
+.login-form {
+  display: grid;
+  gap: 1rem;
+  margin: 12vh auto 0;
+  max-width: 24rem;
+}
+
+.login-form input,
+.login-form button {
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  width: 100%;
+}
+
+.form-error {
+  color: #b42318;
 }

@@ -55,6 +55,15 @@ Each slice requires:
 - Ember route/component workflow tests; and
 - compatibility tests proving that the same canonical state projects to iOS.
 
+## Current implementation
+
+`packages/ynab-web` now contains the isolated Ember shell and first guarded
+workflow. Its login form delegates password validation and session creation to
+Actual's retained `/account/login` boundary, keeps the returned session token
+in memory only, and reads the canonical plan catalog from `/semantic/v1`.
+React, CRDT, browser storage, PostgreSQL, and iOS-wire dependencies are blocked
+by the package boundary test.
+
 ## Non-goals
 
 - Reimplementing authentication inside Ember.

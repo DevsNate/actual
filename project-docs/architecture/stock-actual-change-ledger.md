@@ -163,10 +163,14 @@ API` contains the expiry correction and first route integration.
 - **Evidence:** Deep client inspection dated 2026-08-19 and
   `project-docs/architecture/ember-web-migration.md`.
 - **Implementation:** `packages/ynab-web` provides an isolated Ember 7
-  workspace, strict semantic catalog parser, in-memory retained-session port,
-  semantic API service, plan routes, and a forbidden-import boundary test.
+  workspace, strict semantic catalog and login parsers, an in-memory adapter to
+  Actual's existing login/session authority, guarded login and plan routes, a
+  semantic API service, and a forbidden-import/storage boundary test. The
+  development server proxies only `/account` and `/semantic` to the retained
+  Actual server.
 - **Verification:** Package formatting/template lint, strict Ember typecheck,
-  browser unit tests, production build, and repository typecheck pass.
+  browser unit and login-to-catalog acceptance tests, production build, and
+  repository typecheck pass.
 - **Status:** migrating; the scaffold is implemented and React remains
   unchanged as the fallback.
 

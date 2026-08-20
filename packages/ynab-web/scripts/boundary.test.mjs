@@ -11,6 +11,8 @@ const forbiddenImports = [
   "react",
 ];
 
+const forbiddenBrowserStorage = ["localStorage", "sessionStorage", "indexedDB"];
+
 test("Ember app keeps the clean presentation boundary", async () => {
   const files = await sourceFiles(new URL("../app/", import.meta.url));
   assert.ok(files.length > 0, "expected Ember application source files");
@@ -24,6 +26,13 @@ test("Ember app keeps the clean presentation boundary", async () => {
           `(?:from\\s+|import\\s*\\()(['\"])${escapeRegExp(forbiddenImport)}`,
         ),
         `${file} imports forbidden boundary ${forbiddenImport}`,
+      );
+    }
+    for (const storageName of forbiddenBrowserStorage) {
+      assert.doesNotMatch(
+        source,
+        new RegExp(`\\b${storageName}\\b`),
+        `${file} persists auth or domain state through ${storageName}`,
       );
     }
   }
