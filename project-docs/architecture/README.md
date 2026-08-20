@@ -6,17 +6,18 @@ fork never loses the distinction between stock Actual behavior and project
 behavior.
 
 Read these documents before changing synchronization, persistence,
-authentication, plan lifecycle, the web parity boundary, or the React data
-boundary:
+authentication, plan lifecycle, the Web runtime boundary, or either stock
+client compatibility boundary:
 
 1. [`product-objective.md`](product-objective.md)
 2. [`selective-fork-decision.md`](selective-fork-decision.md)
-3. [`ember-web-migration.md`](ember-web-migration.md)
+3. [`stock-web-runtime-strategy.md`](stock-web-runtime-strategy.md)
 4. [`evidence-gap-matrix.md`](evidence-gap-matrix.md)
 5. [`stock-actual-change-ledger.md`](stock-actual-change-ledger.md)
-6. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
-7. [`semantic-docker-development.md`](semantic-docker-development.md)
-8. [`semantic-account-creation.md`](semantic-account-creation.md)
+6. [`ember-web-migration.md`](ember-web-migration.md) — superseded experiment
+7. [`semantic-plan-lifecycle.md`](semantic-plan-lifecycle.md)
+8. [`semantic-docker-development.md`](semantic-docker-development.md)
+9. [`semantic-account-creation.md`](semantic-account-creation.md)
 
 The `reference/` subdirectory contains repository-audit and promotion-planning
 records. Those documents preserve provenance and repository-boundary analysis,

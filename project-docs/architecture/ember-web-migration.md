@@ -1,14 +1,16 @@
-# Ember web migration
+# Ember web experiment
 
-- Status: accepted
+- Status: superseded as primary path; preserved experimental fallback
 - Date: 2026-08-20
-- Replaces: React-as-final-UI portion of `selective-fork-decision.md`
+- Superseded by: deployed stock-Web runtime direction, 2026-08-20
 
 ## Decision
 
-Build the final budgeting Web client as a clean Ember application. Keep
-Actual's React client operational only during migration, then retire its
-budgeting routes after equivalent Ember vertical slices pass conformance.
+Do not continue building this clean Ember application as the primary budgeting
+Web client. Preserve the existing scaffold and tests as an experimental,
+framework-independent fallback only. The primary path is now the preserved
+deployed stock YNAB Web client running through a schema-44 compatibility
+gateway.
 
 The decision follows the recovered current YNAB Web structure: Ember routes,
 controllers, services, components, compiled templates, a transaction-editor
@@ -33,21 +35,16 @@ It must not depend on:
 - stock YNAB minified modules; or
 - the iOS compatibility wire format as its application API.
 
-## Migration sequence
+## Frozen state
 
-1. Keep React as the fallback client while Ember is scaffolded.
-2. Share authentication through the retained Actual session service.
-3. Deliver plan catalog and plan opening as the first complete Ember slice.
-4. Add accounts/registers, transactions, budgeting, schedules, and lifecycle
-   features one vertical slice at a time.
-5. Route both clients through the same semantic application services.
-6. Disable each replaced React route only after semantic, browser, and
-   compatibility tests pass.
-7. Retire the React budgeting client when no production route depends on it.
+The scaffold contains a retained-Actual login adapter, catalog parser, guarded
+plan routes, and tests. No additional register, transaction, budget, target,
+schedule, or account UI work is authorized while the stock-Web runtime path is
+viable.
 
 ## Verification
 
-Each slice requires:
+Any future fallback slice requires:
 
 - pure semantic tests;
 - PostgreSQL integration and replay tests;

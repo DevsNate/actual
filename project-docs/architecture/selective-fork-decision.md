@@ -7,21 +7,21 @@
 ## Decision
 
 Reuse Actual's authentication, users, sessions, roles, server operations, and
-evidence-verified infrastructure and domain code. Retain the React application
-only as a migration surface while a clean Ember budgeting client replaces it.
-Replace Actual's CRDT and opaque budget-file relay as the active budgeting
-store and synchronization protocol.
+evidence-verified infrastructure and domain code. Preserve the deployed stock
+YNAB Web client as the primary Web client and the stock YNAB iOS application as
+the Mobile client, adapting only their infrastructure boundaries. Replace
+Actual's CRDT and opaque budget-file relay as the active budgeting store and
+synchronization protocol.
 
-The final web product is a literal 1:1 recreation of the stock YNAB web
-application at the observable visual and functional level. The recreated web
-application is delivered through the clean Ember client described in
-[`ember-web-migration.md`](ember-web-migration.md). It and the lightly modified
-stock iOS application use one canonical
-semantic command layer and one PostgreSQL budgeting authority. The web product
-uses a native web API. The iOS app uses a YNAB-shaped compatibility gateway over
-the same commands and state. React remains reachable only until equivalent
-Ember vertical slices replace it and must not become a second budgeting
-authority.
+The final Web product targets literal 1:1 stock YNAB behavior at the observable
+visual and functional level. It is delivered by relocating the preserved
+deployed client behind a schema-44 Web compatibility gateway. It and the
+minimally modified stock iOS application use one canonical semantic command
+layer and one PostgreSQL budgeting authority. iOS uses a separate schema-42
+compatibility gateway over the same commands and state. The clean Ember
+scaffold described in
+[`ember-web-migration.md`](ember-web-migration.md) is frozen as experimental
+fallback only.
 
 The complete parity objective and acceptance rule are defined in
 [`product-objective.md`](product-objective.md).
@@ -31,7 +31,8 @@ The complete parity objective and acceptance rule are defined in
 - password, OpenID, and trusted-header authentication;
 - users, sessions, roles, expiration, and administration;
 - configuration, secrets, migrations, hosting, middleware, HTTPS, and health;
-- React application and component library as temporary migration references;
+- React application and component library as optional Actual administration,
+  provider, migration, and fallback surfaces;
 - reusable accessibility, localization, theme, and asset work that can be
   extracted without coupling Ember to React or preventing 1:1 stock YNAB web
   parity;
@@ -61,18 +62,21 @@ migration tests. It must not receive new product behavior.
 3. Atomic semantic command service
 4. Ordered knowledge ledger and idempotency receipts
 5. YNAB protocol gateway
-6. Framework-independent web query and command API
-7. Clean Ember budgeting client delivering the 1:1 YNAB web recreation
-8. Evidence-backed compatibility and parity fixture suite
+6. Web schema-44 compatibility gateway
+7. iOS schema-42 compatibility gateway
+8. Relocatable deployed stock Web runtime and minimum client patch boundary
+9. Evidence-backed compatibility and parity fixture suite
 
 ## Non-negotiable rules
 
 - There is exactly one authoritative budgeting database.
 - Authentication is reused, not independently reimplemented.
-- Web and iOS clients invoke the same domain commands.
+- Web and iOS gateways normalize into the same domain commands.
 - The final web product targets 100% observable stock YNAB parity for the
   defined supported version/capture horizon.
-- React and Ember never own or independently calculate canonical budget state.
+- Client-specific compatibility code never owns canonical budget state.
+- Stock client internals are patched only when a concrete relocation
+  incompatibility cannot be handled at configuration or transport boundaries.
 - No knowledge advances before the complete semantic transaction commits.
 - Stock behavior is implemented only from admitted evidence.
 - UI/interaction evidence is first-class alongside protocol, entity,

@@ -11,13 +11,17 @@ The product goal is a self-hosted system that reproduces the stock YNAB experien
 The product has two client-facing requirements:
 
 1. a lightly modified stock YNAB iOS application must communicate with the reconstructed server without a heavy device-side rewrite; and
-2. the web application must be a literal 1:1 recreation of the stock YNAB web application, visually and functionally.
+2. the actual deployed stock YNAB Web client must run against the reconstructed
+   server with only the minimum infrastructure patches required to relocate it.
 
 The implementation does not need to reproduce YNAB's private internal architecture. Parity is judged at observable boundaries: what the user sees, what interactions are available, what those interactions do, what state and calculations result, and what compatible clients exchange with the server.
 
 ## 1:1 web parity
 
-The web target is not YNAB-inspired, approximately similar, feature-equivalent, or an Actual UI with YNAB-like behavior. It is the stock YNAB web application reproduced at the observable level.
+The Web target is not YNAB-inspired, approximately similar, feature-equivalent,
+or an Actual UI with YNAB-like behavior. The primary client is the preserved
+deployed YNAB Web application itself. A clean-room client is fallback-only for
+a bounded surface that proves technically impossible to relocate.
 
 For every supported captured state and behavior, parity includes where applicable:
 
@@ -40,14 +44,16 @@ The intended client architecture is:
                      semantic/domain commands
                        /                  \
                       /                    \
-              native web API        YNAB compatibility
-                    |                      gateway
+          Web schema-44 gateway      iOS schema-42 gateway
                     |                        |
-          1:1 recreated web UI       lightly modified
-                                     stock YNAB iOS app
+          deployed stock YNAB Web     minimally patched
+                                      stock YNAB iOS app
 ```
 
-There is exactly one canonical budgeting authority. The web implementation and YNAB compatibility gateway are adapters over the same domain commands and state. They must not become independent budgeting systems synchronized after the fact.
+There is exactly one canonical budgeting authority. The Web schema-44 and iOS
+schema-42 compatibility gateways are wire adapters over the same domain
+commands and state. They must not become independent budgeting systems
+synchronized after the fact.
 
 ## iOS compatibility objective
 
@@ -59,7 +65,11 @@ The goal is not to replace the stock application's domain/network model with an 
 
 Full observable parity does not require reproducing YNAB's private server implementation, database schema, frontend source layout, or internal service topology.
 
-The project may intentionally use PostgreSQL, semantic command/application services, retained or extracted Actual React foundations, different internal algorithms, and an evidence-backed YNAB compatibility adapter when those choices reproduce the same observable behavior.
+The project may intentionally use PostgreSQL, semantic command/application
+services, retained Actual authentication/provider infrastructure, different
+server algorithms, and evidence-backed Web/iOS compatibility adapters when
+those choices reproduce the same observable behavior. The deployed clients
+remain the primary presentation/domain clients rather than being reimplemented.
 
 The constraint is external fidelity, not internal imitation.
 
@@ -70,7 +80,7 @@ Where applicable, one observed stock behavior should support three connected par
 ```text
 stock YNAB observation
        |
-       +--> UI/interaction evidence --------> recreated web parity
+       +--> UI/interaction evidence --------> deployed Web parity
        |
        +--> semantic/calculation evidence ---> canonical domain parity
        |

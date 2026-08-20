@@ -24,7 +24,7 @@ v26.8.1. The baseline commit is
 | ACTUAL-004 | CRDT sync endpoint and relay             | Replace            | proposed       | Semantic commands and ordered knowledge ledger    |
 | ACTUAL-005 | Encrypted budget file as live authority  | Replace            | proposed       | Canonical PostgreSQL budget store                 |
 | ACTUAL-006 | `loot-core` domain handlers              | Extract and modify | proposed       | Evidence-verified semantic services               |
-| ACTUAL-007 | React application shell                  | Replace gradually  | migrating      | Clean Ember UI over semantic web API              |
+| ACTUAL-007 | React application shell                  | Retain selectively | deferred       | Actual admin/provider/fallback surfaces           |
 | ACTUAL-008 | Import, export, and backups              | Modify             | deferred       | Canonical-store adapters                          |
 | ACTUAL-009 | Bank-provider ingestion                  | Modify             | deferred       | Provider facts enter through semantic commands    |
 | ACTUAL-010 | Compatibility-server login               | Remove             | proposed       | Actual authentication adapter                     |
@@ -37,6 +37,7 @@ v26.8.1. The baseline commit is
 | ADD-007    | Local semantic development stack         | Add                | implemented    | Fork server plus PostgreSQL Compose environment   |
 | ADD-008    | Semantic plan client bridge              | Add                | implemented    | Typed worker boundary; no token access from React |
 | ADD-009    | Shared plan command application services | Add                | implemented    | One orchestration path for React and stock routes |
+| ADD-013    | Deployed stock Web runtime               | Add                | investigating  | Schema-44 gateway over canonical semantics        |
 
 ## Detailed entries
 
@@ -145,17 +146,14 @@ API` contains the expiry correction and first route integration.
 
 ### ACTUAL-007 — React application
 
-- **Disposition:** Retain during migration, then replace the budgeting UI.
+- **Disposition:** Retain selectively; do not use as the primary parity UI.
 - **Stock locations:** `packages/desktop-client` and
   `packages/component-library`.
-- **Reason:** React remains useful as a working fallback and as a reference for
-  reusable accessibility, localization, theme, and asset infrastructure. The
-  deep current-Web inspection, however, established an Ember route/service/
-  editor organization that maps more directly to the evidence-backed final UI.
-- **Replacement boundary:** A clean Ember workspace calls the semantic Web API
-  and retained Actual authentication. It does not import React, CRDT, database,
-  stock-minified, or iOS-wire modules. React routes remain reachable only until
-  equivalent Ember vertical slices pass conformance.
+- **Reason:** React remains useful for Actual administration, providers,
+  migration, and bounded fallback surfaces. Literal client parity is better
+  served by preserving the deployed stock YNAB Web runtime.
+- **Replacement boundary:** The deployed client uses the Web schema-44 gateway.
+  Neither React nor the frozen Ember experiment owns canonical budget state.
 - **Portability correction:** The component-library theme documentation now
   shares the lowercase `src/themes` directory used by its CSS package exports.
   Stock tracked the documentation under `src/Themes`, which succeeds on a
@@ -171,8 +169,10 @@ API` contains the expiry correction and first route integration.
 - **Verification:** Package formatting/template lint, strict Ember typecheck,
   browser unit and login-to-catalog acceptance tests, production build, and
   repository typecheck pass.
-- **Status:** migrating; the scaffold is implemented and React remains
-  unchanged as the fallback.
+- **Direction correction:** The Ember work is preserved under
+  `packages/ynab-web` but is frozen as experimental fallback. Its two commits
+  remain valid provenance and are not reverted.
+- **Status:** deferred for budgeting UI; retained surfaces remain available.
 
 ### ACTUAL-008 — Import, export, and backups
 
@@ -512,3 +512,27 @@ Copy this block for a new architectural delta:
   strict typecheck, and disposable PostgreSQL create -> rename -> delete
   integration with exact knowledge and remaining-balance assertions.
 - **Status:** implemented.
+
+### ADD-013 — Deployed stock Web runtime
+
+- **Disposition:** Add as the primary Web client boundary.
+- **Location:** local-only `web-stock-runtime/vendor/` assets plus versioned
+  manifests, runtime plans, schema-44 gateway modules, and client-patch records.
+- **Fork behavior:** Preserve the deployed YNAB Web shell, routes, templates,
+  editor, validation, entity/change-set, and interaction behavior. Redirect the
+  minimum runtime configuration, authentication, bootstrap, synchronization,
+  and SharedWorker boundaries to the project server.
+- **Reason:** Literal parity is best achieved by retaining the deployed client
+  behavior already shared with the stock Mobile lineage rather than
+  reimplementing it.
+- **Evidence:** Deep Web inspection dated 2026-08-19, schema-44 transaction
+  capture, STARTUP-001, PLAN-001, and the direction correction dated
+  2026-08-20.
+- **Wire boundary:** Web schema 44 remains separate from iOS schema 42. Both
+  project into the same semantic-core commands and PostgreSQL authority.
+- **Provenance:** Raw captured vendor assets are local-only and ignored by Git.
+  Every client patch records source/bundle location, reason, before/after hash,
+  and runtime verification.
+- **Status:** investigating runtime completeness; feature delivery is frozen
+  beyond bootstrap/plan lifecycle until the smallest relocatable experiment is
+  proven.

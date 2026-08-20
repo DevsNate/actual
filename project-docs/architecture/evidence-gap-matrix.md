@@ -3,65 +3,62 @@
 - Updated: 2026-08-20
 - Evidence index: `analysis/evidence/BEHAVIOR_KNOWLEDGE_BASE.md`
 - Deep Web capture: `web-capture/deep-client-inspection-2026-08-19`
+- Primary Web client: preserved deployed stock YNAB Web runtime
+- Mobile client: minimally patched stock YNAB iOS
 
-This matrix connects admitted stock behavior, recovered Web structure, and the
-next implementation boundary. It does not replace the detailed evidence
-ledger. A feature marked ready is ready only for its captured shapes.
+This matrix connects admitted behavior to the two stock-client wire boundaries
+and the shared canonical server. A recovered method or module proves an
+implementation surface, not an uncaptured server rule.
 
 ## Readiness matrix
 
-| Feature                 | Stock behavior                                                                      | Web client structure                                                     | Server implementation                                                      | Next boundary                                                             |
-| ----------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| Signed-in bootstrap     | Partial: signed-in bootstrap admitted; interactive login and expiry edges remain    | API/bootstrap modules recovered                                          | Actual sessions retained; principal adapter implemented                    | Connect Ember to retained session and current-user projection             |
-| Plan catalog/lifecycle  | Admitted                                                                            | Routes, services, catalog sync and plan switching recovered              | Canonical plans, memberships, receipts and first stock gateway implemented | First complete Ember vertical slice                                       |
-| Budget bootstrap        | Admitted for pristine bootstrap/backfill and first opened-budget delta              | Budget and sync services recovered                                       | Source/calculated projection and narrow delta ingestion implemented        | Expose framework-independent Web bootstrap API                            |
-| Checking account create | Admitted for repeated unlinked creation                                             | Account routes/services and dedicated direct-import invocation recovered | Dedicated account adapter implemented                                      | Ember account-create workflow and list projection                         |
-| Account rename          | Admitted                                                                            | Account editing path structurally recovered                              | Complete account/payee rename delta implemented                            | Web command plus account-list update                                      |
-| Account delete          | Admitted for pristine account                                                       | Account lifecycle surface recovered                                      | Evidence-backed derivation work in progress                                | Preserve current calculation work; add command after focused tests        |
-| Account close/reopen    | Admitted for captured Checking lifecycle                                            | Client surface recovered                                                 | Not complete                                                               | Implement adjustment, retained history, and reopen command atomically     |
-| Payees                  | Admitted for transaction-coupled create and unused rename/delete                    | Payee service and autofill modules recovered                             | Not complete                                                               | Canonical payee commands and autofill read model                          |
-| Categories              | Admitted for create/rename/move/hide/delete captured shapes                         | Category routes/services recovered                                       | Not complete                                                               | Category command and monthly-row vertical slice                           |
-| Ordinary transaction    | Client save path deeply recovered; full admitted ordinary protocol row still needed | Exact TransactionEditor-to-sync path recovered                           | Not complete                                                               | Seal request/ack/replay fixture, then implement basic transaction command |
-| Split transaction       | Admitted for captured create/edit/delete and independent child payees               | Shared editor and subtransaction surface recovered                       | Not complete                                                               | Atomic parent/children command and calculation projection                 |
-| Ordinary transfer       | Admitted for captured create/edit/delete via TR-003/TR-004                          | Transfer editor surface recovered                                        | Not complete                                                               | Exact reciprocal command with no uncaptured generalization                |
-| Credit-card payment     | Admitted for captured unlinked-card lifecycle                                       | Transfer/payment surface recovered                                       | Not complete                                                               | Payment specialization over reciprocal transfer command                   |
-| Targets                 | Admitted for definition, status, edge and delete matrix                             | Budget-goal services and calculation display recovered                   | Not complete                                                               | Target definition command plus canonical status calculations              |
-| Schedules               | Admitted for captured parent/occurrence lifecycle                                   | Future/scheduled editor methods and schedule modules recovered           | Not complete                                                               | Parent and occurrence commands with deterministic identities              |
-| Calculations            | Pristine, account, category and target subsets admitted                             | Web server-owned calculation boundary proven                             | Partial projectors implemented                                             | Add one evidence-backed dependency slice at a time                        |
-| Reconciliation          | Unknown as a complete server contract                                               | Reconcile modules are present                                            | Not started                                                                | Capture before implementation                                             |
-| Bank import/matching    | Provider infrastructure exists; stock YNAB behavior not admitted                    | Import/register modules are present                                      | Actual providers retained but semantic ingestion deferred                  | Capture matching/deduplication, then adapt provider facts                 |
-| Slik ownership          | Coexistence proven; ordinary Save remains TransactionEditor-owned                   | Repositories/use cases mapped                                            | No server decision required                                                | Revisit only when an active feature enters a Slik-owned path              |
+| Feature                 | Web client path                                            | Server behavior                                                            | iOS path                                             | Canonical rule                                                    | Web runtime                                                | iOS runtime                                        | Admitted?                                      |
+| ----------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------- | -------------------------------------------------- | ---------------------------------------------- |
+| Signed-in bootstrap     | Stock API/bootstrap and session modules recovered          | Actual sessions retained; principal adapter implemented                    | Stock startup traced                                 | One principal authority                                           | Structure captured; relocatability unverified              | Signed-in startup captured                         | Partial                                        |
+| Plan catalog/lifecycle  | Stock catalog sync, picker, switching and routes recovered | Canonical plans, memberships, receipts and first stock gateway implemented | Stock picker/open lifecycle captured                 | Atomic plan/membership lifecycle and ordered knowledge            | Protocol captured; local stock runtime unverified          | Runtime verified for PLAN-001                      | Yes                                            |
+| Budget bootstrap        | Stock budget/sync services recovered                       | Source/calculated projection and narrow delta ingestion implemented        | Stock budget open captured                           | One plan snapshot and ordered knowledge                           | Schema-44 bootstrap captured; relocation unverified        | Schema-42 bootstrap captured                       | Partial                                        |
+| Checking account create | Stock account route and direct-import path recovered       | Dedicated account adapter implemented                                      | Stock create/readback captured                       | Atomic account, transfer payee, Starting Balance and calculations | Invocation/protocol captured; relocated runtime unverified | Runtime verified for captured shape                | Yes                                            |
+| Account rename          | Stock account edit path recovered                          | Complete account/payee rename delta implemented                            | Stock rename readback captured                       | One source revision                                               | Protocol captured; relocated runtime unverified            | Runtime verified                                   | Yes                                            |
+| Account delete          | Stock lifecycle surface recovered                          | Pristine Checking derivation implemented                                   | Stock terminal readback captured                     | Exact captured three-row tombstone plus calculations              | Protocol captured; relocated runtime unverified            | Runtime verified                                   | Yes, pristine only                             |
+| Account close/reopen    | Stock lifecycle surface recovered                          | Not complete                                                               | Checking lifecycle captured                          | Must remain atomic with retained history/adjustment               | Not runtime-verified locally                               | Captured shape verified                            | Yes for captured shape; implementation frozen  |
+| Payees                  | Stock payee/autofill modules recovered                     | Not complete                                                               | Captured readback exists                             | Canonical payee commands and autofill projection                  | Not runtime-verified locally                               | Captured shapes verified                           | Yes for captured shapes; implementation frozen |
+| Categories              | Stock category routes/services recovered                   | Not complete                                                               | Captured readback exists                             | Canonical category/monthly-row commands                           | Not runtime-verified locally                               | Captured shapes verified                           | Yes for captured shapes; implementation frozen |
+| Ordinary transaction    | Exact stock TransactionEditor save path recovered          | Not complete                                                               | Same editor lineage proven                           | Atomic transaction command, calculations and replay               | Save/protocol captured; relocated runtime unverified       | Structural lineage proven; full fixture incomplete | Partial                                        |
+| Split transaction       | Stock editor/subtransaction surface recovered              | Not complete                                                               | Captured create/edit/delete readback                 | Atomic parent/children command                                    | Not runtime-verified locally                               | Runtime fixtures admitted                          | Yes for captured shapes; implementation frozen |
+| Ordinary transfer       | Stock transfer editor surface recovered                    | Not complete                                                               | Captured reciprocal lifecycle                        | Evidence-bounded reciprocal command                               | Not runtime-verified locally                               | Runtime fixtures admitted                          | Yes for captured shapes; implementation frozen |
+| Credit-card payment     | Stock payment/transfer surface recovered                   | Not complete                                                               | Captured unlinked-card lifecycle                     | Payment specialization over canonical transfer                    | Not runtime-verified locally                               | Runtime fixtures admitted                          | Yes for captured shapes; implementation frozen |
+| Targets                 | Stock budget-goal services/display recovered               | Not complete                                                               | Target definitions/status captured                   | Server-owned target definition and calculations                   | Not runtime-verified locally                               | Runtime fixtures admitted                          | Yes for captured shapes; implementation frozen |
+| Schedules               | Stock schedule/future editor paths recovered               | Not complete                                                               | Parent/occurrence lifecycle captured                 | Separate deterministic parent/occurrence commands                 | Not runtime-verified locally                               | Runtime fixtures admitted                          | Yes for captured shapes; implementation frozen |
+| Calculations            | Stock Web server-owned calculation boundary proven         | Partial projectors implemented                                             | Mobile local capability plus reconciliation observed | Server is canonical                                               | Captured transaction calculation response                  | Subsets captured                                   | Partial                                        |
+| Reconciliation          | Modules recovered                                          | Not started                                                                | Surface observed                                     | Unknown until captured                                            | No                                                         | No complete runtime fixture                        | No                                             |
+| Bank import/matching    | Stock import/register modules present                      | Actual providers retained; semantic ingestion deferred                     | Native provider surface exists                       | Provider facts enter canonical matching/dedupe commands           | No                                                         | No                                                 | No                                             |
 
-## Web reconstruction facts already sufficient
+## Runtime facts already established
 
-- Ember is the observed Web framework.
-- Webpack module factories, named Ember modules, dependencies, exports, and
-  transaction reverse-dependents are recovered.
-- The ordinary transaction path is `transaction-editor -> shared editor ->
-entity/change-set store -> API transport -> response merge`.
-- Web calculations for the captured shared-store path are server-owned.
-- The 60-second server poll and 10-millisecond local-change push delay are
-  recovered defaults.
-- Slik coexists with the shared editor and receives merged state; it does not
-  own the captured ordinary Save path.
+- The deployed Web client is Ember-based and packaged through Webpack.
+- Eight first-party JavaScript assets, 1,207 module factories, 232 named Ember
+  modules, and the live `csw.js` SharedWorker were preserved during the deep
+  inspection.
+- The ordinary save path is `transaction-editor -> shared editor ->
+entity/change-set store -> schema-44 sync -> response merge`.
+- Web calculations for the captured path are server-owned.
+- The recovered defaults are a 60-second server poll and 10-millisecond local
+  change push delay.
+- Current captures are sufficient for structural analysis but not yet a
+  complete independently runnable asset set.
 
-No further broad Web dump is required. Future Web captures must answer one
-named gap in the table.
+## Active implementation order
 
-## Implementation order
-
-1. Ember shell, retained Actual session, plan picker, and plan opening.
-2. Checking accounts and Starting Balance.
-3. Payees, categories, and ordinary transactions.
-4. Splits, transfers, and credit-card payments.
-5. Budget calculations and targets.
-6. Schedules and future transactions.
-7. Account close/reopen and reconciliation edges.
-8. Bank ingestion, matching, import/export, and migration.
+1. Inventory and preserve the complete deployed runtime.
+2. Prove shell/bootstrap relocation with minimal boundary patches.
+3. Authenticate, show the stock plan picker, and open one plan.
+4. Connect schema-44 catalog/budget bootstrap to existing canonical services.
+5. Resume account and transaction slices only after the runtime path passes.
+6. Continue feature slices against both stock Web and stock iOS clients.
 
 ## Admission rule
 
-Recovered method names and class surfaces prove where behavior can execute;
-they do not alone authorize destructive or cardinality rules. Server-owned
-effects require a captured request, acknowledgement, canonical readback, and
-stable replay before implementation.
+Recovered client internals may guide where compatibility is attached, but
+server-owned effects require a captured request, acknowledgment, canonical
+readback, and stable replay. Client patches require before/after hashes and a
+bounded infrastructure-only justification.
