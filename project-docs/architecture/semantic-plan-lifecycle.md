@@ -47,6 +47,9 @@ or none of them:
 The command returns stable plan and budget-version identities. A retry with the
 same principal, device, idempotency key, and payload digest replays the exact
 stored response. Reusing the key for another payload fails without mutation.
+The stock `POST /api/budgets` envelope carries no catalog device-knowledge
+range, so creation locks and preserves the device's existing catalog counter;
+it does not assume zero and does not invent or advance client knowledge.
 
 The admitted PLAN-001 bootstrap is implemented as a versioned semantic
 template. It creates the captured six master categories, fifteen
@@ -63,6 +66,14 @@ budget metadata name while preserving all stable identities, formats,
 permissions, and unrelated fields. Catalog and budget knowledge advance only
 after both projections commit.
 
+The stock Web client sends the two projections independently: one complete
+`ce_user_budgets` row through catalog sync and one complete `be_budget` row
+through budget sync. The gateway recognizes the latter as convergence on the
+already-committed semantic rename. It advances only that device's budget
+knowledge and stores a replay receipt; it does not perform a second rename.
+This also covers a client coalescing multiple local edits into one final
+`be_budget` row with a device-knowledge range larger than one.
+
 ## Delete
 
 Delete tombstones the membership while retaining its identities and
@@ -76,6 +87,11 @@ Selection and picker recovery are client workflows:
 - an inactive picker refreshes catalog explicitly;
 - a newly discovered plan remains unmaterialized and unselected; and
 - an empty catalog remains empty until a plan is explicitly created.
+
+An exact delete retry remains replayable after the membership is tombstoned.
+The gateway resolves the retained principal-scoped catalog identity before
+calling the lifecycle service, whose stored receipt is authoritative. A
+different request cannot use a tombstoned membership to perform a new write.
 
 ## Command boundary
 
@@ -100,9 +116,33 @@ The implementation sequence is:
    (**implemented**);
 4. expose the native React command API (**create, rename, and delete endpoints
    plus the authorized plan-read boundary implemented; UI wiring pending**);
-5. project the same commands through admitted YNAB-shaped endpoints; and
+5. project the same commands through admitted YNAB-shaped endpoints
+   (**create, rename, delete, catalog delivery, budget convergence, and exact
+   replay implemented**); and
 6. add physical cross-client acceptance fixtures without weakening the
    canonical invariants.
+
+## Conformance map
+
+| Behavior              | Evidence                                                        | Implemented boundary                                                  | Verification                                       |
+| --------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------- |
+| Create                | PLAN-001 create plus recovered deployed `createBudget` consumer | `POST /api/budgets`; atomic bootstrap, membership, knowledge, receipt | service, gateway, and PostgreSQL integration tests |
+| Catalog delivery      | PLAN-001 catalog lifecycle                                      | `syncCatalogData`; complete memberships and tombstones                | gateway tests                                      |
+| Open and switch       | PLAN-001 switch/bootstrap                                       | authorized `syncBudgetData`; no server-selected active plan           | gateway tests                                      |
+| Rename                | PLAN-001 paired catalog/budget rows                             | one atomic lifecycle rename plus device-only budget acknowledgement   | gateway, store, and PostgreSQL integration tests   |
+| Delete                | PLAN-001 delete and active-plan denial                          | `deleteBudget`; retained tombstone and exact replay                   | gateway, store, and PostgreSQL integration tests   |
+| Empty picker recovery | PLAN-001 picker recovery                                        | catalog remains queryable; no replacement or auto-create              | gateway tests; physical Web acceptance pending     |
+
+The preserved deployed Web build reads the create response through `.id`, so
+the compatibility response intentionally returns that field. An older
+sanitized fixture also lists `budget_id` and `budget_version_id`; this is kept
+as a build/capture discrepancy rather than guessed into the current contract.
+
+The rename capture also shows a catalog acknowledgement whose reported
+knowledge does not obviously advance with the renamed budget row. The
+canonical ledger still records an ordered catalog mutation so another device
+can receive it. We retain this discrepancy in the evidence ledger rather than
+weakening cross-device delivery or inventing an undocumented rule.
 
 ## Client boundary
 

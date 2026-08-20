@@ -81,6 +81,7 @@ export async function createPostgresSemanticCatalogHandlers(
     catalogWriter: store,
     planReader,
     changeWriter: store,
+    planLifecycleService,
     resolvePrincipal: resolveActualPrincipal,
   });
   const stockAccountHandlers = createStockAccountGateway({

@@ -8,6 +8,7 @@ import { AuthenticationError } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
+import type { PlanLifecycleService } from './plan-lifecycle-service';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
@@ -24,8 +25,15 @@ function app(
   planReader: BudgetVersionPlanReader = {
     readPlanByBudgetVersion: vi.fn(),
   },
-  changeWriter: StockBudgetChangeWriter = { commitChangeSet: vi.fn() },
+  changeWriter: StockBudgetChangeWriter = {
+    commitChangeSet: vi.fn(),
+    acknowledgeDevice: vi.fn(),
+  },
   catalogWriter: CatalogCommandWriter = { commitCatalogCommand: vi.fn() },
+  planLifecycleService: PlanLifecycleService = {
+    renamePlan: vi.fn(),
+    deletePlan: vi.fn(),
+  },
 ) {
   const result = express();
   result.use(
@@ -35,6 +43,7 @@ function app(
       catalogWriter,
       planReader,
       changeWriter,
+      planLifecycleService,
       resolvePrincipal,
     }),
   );
@@ -280,6 +289,204 @@ describe('stock catalog gateway', () => {
         ],
       }),
     );
+  });
+
+  test('coordinates the captured catalog rename as one semantic lifecycle command', async () => {
+    const catalogReader: CatalogReader = {
+      readCatalog: vi.fn().mockResolvedValue({
+        knowledge: { principalId: 'user-1', currentServerKnowledge: 4 },
+        memberships: [
+          {
+            id: 'membership-1',
+            planId: 'plan-1',
+            budgetVersionId: 'version-1',
+            principalId: 'user-1',
+            name: 'Old Plan',
+            permissions: 1,
+            lastModifiedAt: '2026-08-17T00:00:00.000Z',
+            source: null,
+            isTombstone: false,
+          },
+        ],
+      }),
+    };
+    const planLifecycleService: PlanLifecycleService = {
+      renamePlan: vi.fn().mockResolvedValue({
+        replayed: false,
+        catalogServerKnowledge: 5,
+        budgetServerKnowledge: 30,
+        response: {},
+      }),
+      deletePlan: vi.fn(),
+    };
+
+    const response = await stockRequest(
+      app(
+        catalogReader,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        planLifecycleService,
+      ),
+      syncRequest({
+        device_knowledge_of_server: 4,
+        ending_device_knowledge: 1,
+        changed_entities: {
+          ce_user_budgets: [
+            {
+              id: 'membership-1',
+              budget_id: 'plan-1',
+              budget_version_id: 'version-1',
+              user_id: 'user-1',
+              budget_name: 'Renamed Plan',
+              permissions: 1,
+              source: null,
+              is_tombstone: false,
+              last_modified_at: '2026-08-17T00:01:00.000Z',
+            },
+          ],
+        },
+      }),
+    ).expect(200);
+
+    expect(response.body).toEqual({
+      error: null,
+      schema_version_of_response: 16,
+      server_knowledge_of_device: 1,
+      current_server_knowledge: 5,
+      changed_entities: {},
+    });
+    expect(planLifecycleService.renamePlan).toHaveBeenCalledWith({
+      principalId: 'user-1',
+      planId: 'plan-1',
+      originDeviceId: 'device-1',
+      idempotencyKey: 'request-1',
+      name: 'Renamed Plan',
+      catalogDeviceKnowledge: { starting: 0, ending: 1 },
+    });
+  });
+
+  test('accepts the captured deleteBudget envelope and returns its exact response', async () => {
+    const catalogReader: CatalogReader = {
+      readCatalog: vi.fn().mockResolvedValue({
+        knowledge: { principalId: 'user-1', currentServerKnowledge: 4 },
+        memberships: [
+          {
+            id: 'membership-1',
+            planId: 'plan-1',
+            budgetVersionId: 'version-1',
+            principalId: 'user-1',
+            name: 'Plan',
+            permissions: 1,
+            lastModifiedAt: '2026-08-17T00:00:00.000Z',
+            source: null,
+            isTombstone: false,
+          },
+        ],
+      }),
+    };
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue({
+        planId: 'plan-1',
+        budgetVersionId: 'version-1',
+        name: 'Plan',
+        serverKnowledge: 4,
+        currencyFormat: {},
+        dateFormat: {},
+        entities: [],
+      }),
+    };
+    const planLifecycleService: PlanLifecycleService = {
+      renamePlan: vi.fn(),
+      deletePlan: vi.fn().mockResolvedValue({
+        replayed: false,
+        catalogServerKnowledge: 5,
+        budgetServerKnowledge: null,
+        response: {},
+      }),
+    };
+
+    await stockRequest(
+      app(
+        catalogReader,
+        undefined,
+        planReader,
+        undefined,
+        undefined,
+        planLifecycleService,
+      ),
+      {
+        operation_name: 'deleteBudget',
+        request_data: JSON.stringify({ budget_version_id: 'version-1' }),
+      },
+    ).expect(200, { error: null, shared_user_budget_ids: null });
+
+    expect(planLifecycleService.deletePlan).toHaveBeenCalledWith({
+      principalId: 'user-1',
+      planId: 'plan-1',
+      originDeviceId: 'device-1',
+      idempotencyKey: 'request-1',
+    });
+  });
+
+  test('replays deleteBudget after its catalog membership is tombstoned', async () => {
+    const catalogReader: CatalogReader = {
+      readCatalog: vi.fn().mockResolvedValue({
+        knowledge: { principalId: 'user-1', currentServerKnowledge: 5 },
+        memberships: [
+          {
+            id: 'membership-1',
+            planId: 'plan-1',
+            budgetVersionId: 'version-1',
+            principalId: 'user-1',
+            name: 'Unknown',
+            permissions: 1,
+            lastModifiedAt: '2026-08-17T00:01:00.000Z',
+            source: null,
+            isTombstone: true,
+          },
+        ],
+      }),
+    };
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(null),
+    };
+    const planLifecycleService: PlanLifecycleService = {
+      renamePlan: vi.fn(),
+      deletePlan: vi.fn().mockResolvedValue({
+        replayed: true,
+        catalogServerKnowledge: 5,
+        budgetServerKnowledge: null,
+        response: {},
+      }),
+    };
+
+    await stockRequest(
+      app(
+        catalogReader,
+        undefined,
+        planReader,
+        undefined,
+        undefined,
+        planLifecycleService,
+      ),
+      {
+        operation_name: 'deleteBudget',
+        request_data: JSON.stringify({ budget_version_id: 'version-1' }),
+      },
+    ).expect(200, { error: null, shared_user_budget_ids: null });
+
+    expect(planReader.readPlanByBudgetVersion).toHaveBeenCalledWith(
+      'user-1',
+      'version-1',
+    );
+    expect(planLifecycleService.deletePlan).toHaveBeenCalledWith({
+      principalId: 'user-1',
+      planId: 'plan-1',
+      originDeviceId: 'device-1',
+      idempotencyKey: 'request-1',
+    });
   });
 
   test('projects the captured initial-user envelope from Actual authority', async () => {

@@ -60,8 +60,6 @@ export function createPlanCreationService(
         originDeviceId: input.originDeviceId,
         expectedCatalogServerKnowledge:
           catalog.knowledge.currentServerKnowledge,
-        startingCatalogDeviceKnowledge: 0,
-        endingCatalogDeviceKnowledge: 0,
         schemaVersion: 1,
         idempotencyKey: input.idempotencyKey,
         payloadDigest: digest(input),

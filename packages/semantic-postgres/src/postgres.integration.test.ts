@@ -189,6 +189,92 @@ integrationTest('PostgresSemanticStore integration', () => {
     ).rejects.toBeInstanceOf(SemanticStoreError);
   });
 
+  test('records a coalesced device acknowledgement without a second change set', async () => {
+    await store.seedPlan({
+      planId: 'ack-plan-integration',
+      budgetVersionId: 'ack-version-integration',
+      membershipId: 'ack-membership-integration',
+      principalId: 'ack-principal-integration',
+      name: 'Acknowledgement plan',
+      permissions: 7,
+    });
+    await store.commitChangeSet({
+      changeSetId: 'ack-source-change-integration',
+      planId: 'ack-plan-integration',
+      originDeviceId: 'ack-device-integration',
+      startingDeviceKnowledge: 0,
+      endingDeviceKnowledge: 1,
+      expectedServerKnowledge: 0,
+      serverKnowledgeAdvance: 1,
+      schemaVersion: 1,
+      idempotencyKey: 'ack-source-request-integration',
+      payloadDigest: 'f'.repeat(64),
+      changes: [
+        {
+          entityKind: 'example',
+          entityId: 'ack-source-entity-integration',
+          isTombstone: false,
+          payload: { name: 'already committed rename' },
+        },
+      ],
+      response: { accepted: true },
+    });
+
+    const acknowledgement = {
+      planId: 'ack-plan-integration',
+      originDeviceId: 'ack-device-integration',
+      startingDeviceKnowledge: 1,
+      endingDeviceKnowledge: 3,
+      expectedServerKnowledge: 1,
+      idempotencyKey: 'ack-budget-request-integration',
+      payloadDigest: '1'.repeat(64),
+      response: { acknowledged: true },
+    } as const;
+    await expect(store.acknowledgeDevice(acknowledgement)).resolves.toEqual({
+      replayed: false,
+      serverKnowledge: 1,
+      endingDeviceKnowledge: 3,
+      response: { acknowledged: true },
+    });
+    await expect(store.acknowledgeDevice(acknowledgement)).resolves.toEqual({
+      replayed: true,
+      serverKnowledge: 1,
+      endingDeviceKnowledge: 3,
+      response: { acknowledged: true },
+    });
+
+    const state = await pool.query<{
+      server_knowledge: string;
+      server_knowledge_of_device: string;
+      change_count: string;
+      receipt_count: string;
+    }>(
+      `SELECT p.server_knowledge,
+              d.server_knowledge_of_device,
+              (SELECT count(*) FROM semantic_change_sets
+               WHERE plan_id = p.plan_id) AS change_count,
+              (SELECT count(*) FROM semantic_device_receipts
+               WHERE plan_id = p.plan_id) AS receipt_count
+       FROM semantic_plans p
+       JOIN semantic_devices d ON d.plan_id = p.plan_id
+       WHERE p.plan_id = $1 AND d.device_id = $2`,
+      ['ack-plan-integration', 'ack-device-integration'],
+    );
+    expect(state.rows[0]).toEqual({
+      server_knowledge: '1',
+      server_knowledge_of_device: '3',
+      change_count: '1',
+      receipt_count: '2',
+    });
+
+    await expect(
+      store.acknowledgeDevice({
+        ...acknowledgement,
+        payloadDigest: '2'.repeat(64),
+      }),
+    ).rejects.toBeInstanceOf(SemanticStoreError);
+  });
+
   test('atomically creates and exactly replays the admitted PLAN-001 bootstrap', async () => {
     const entities = buildStockPlanBootstrap({
       planId: 'created-plan-integration',
@@ -210,8 +296,6 @@ integrationTest('PostgresSemanticStore integration', () => {
       principalId: 'created-principal-integration',
       originDeviceId: 'created-device-integration',
       expectedCatalogServerKnowledge: 0,
-      startingCatalogDeviceKnowledge: 0,
-      endingCatalogDeviceKnowledge: 0,
       schemaVersion: 1,
       idempotencyKey: 'created-request-integration',
       payloadDigest: '1'.repeat(64),
@@ -225,6 +309,13 @@ integrationTest('PostgresSemanticStore integration', () => {
         budget_version_id: 'created-version-integration',
       },
     } as const;
+
+    await pool.query(
+      `INSERT INTO semantic_catalog_devices
+         (principal_id, device_id, server_knowledge_of_device)
+       VALUES ($1, $2, 7)`,
+      [operation.principalId, operation.originDeviceId],
+    );
 
     await expect(store.createPlan(operation)).resolves.toEqual({
       replayed: false,
@@ -254,6 +345,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       entity_snapshots: string;
       catalog_receipts: string;
       budget_receipts: string;
+      catalog_device_knowledge: string;
+      receipt_starting_knowledge: string;
+      receipt_ending_knowledge: string;
     }>(
       `SELECT
          (SELECT count(*) FROM semantic_plans WHERE plan_id = $1) AS plans,
@@ -263,8 +357,19 @@ integrationTest('PostgresSemanticStore integration', () => {
          (SELECT count(*) FROM semantic_entity_changes WHERE change_set_id = $3) AS entity_changes,
          (SELECT count(*) FROM semantic_plan_entities WHERE plan_id = $1) AS entity_snapshots,
          (SELECT count(*) FROM semantic_catalog_command_receipts WHERE principal_id = $2) AS catalog_receipts,
-         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS budget_receipts`,
-      [operation.planId, operation.principalId, operation.budgetChangeSetId],
+         (SELECT count(*) FROM semantic_device_receipts WHERE plan_id = $1) AS budget_receipts,
+         (SELECT server_knowledge_of_device FROM semantic_catalog_devices
+          WHERE principal_id = $2 AND device_id = $4) AS catalog_device_knowledge,
+         (SELECT starting_device_knowledge FROM semantic_catalog_command_receipts
+          WHERE principal_id = $2 AND device_id = $4) AS receipt_starting_knowledge,
+         (SELECT ending_device_knowledge FROM semantic_catalog_command_receipts
+          WHERE principal_id = $2 AND device_id = $4) AS receipt_ending_knowledge`,
+      [
+        operation.planId,
+        operation.principalId,
+        operation.budgetChangeSetId,
+        operation.originDeviceId,
+      ],
     );
     expect(state.rows[0]).toEqual({
       plans: '1',
@@ -275,6 +380,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       entity_snapshots: '58',
       catalog_receipts: '1',
       budget_receipts: '1',
+      catalog_device_knowledge: '7',
+      receipt_starting_knowledge: '7',
+      receipt_ending_knowledge: '7',
     });
 
     const byVersion = await planReader.readPlanByBudgetVersion(

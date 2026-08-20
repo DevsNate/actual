@@ -4,6 +4,7 @@ import type {
   CatalogSnapshot,
   CreatePlanCommand,
   CreatePlanResult,
+  PlanDeviceAcknowledgement,
   PlanMembership,
   PrincipalId,
 } from '@actual-app/semantic-core';
@@ -40,6 +41,11 @@ type CatalogDeviceKnowledgeRow = {
 };
 
 type CatalogReceiptRow = ReceiptRow;
+
+type DeviceCommand = Pick<
+  CommitChangeSetInput,
+  'planId' | 'originDeviceId' | 'idempotencyKey' | 'payloadDigest'
+>;
 
 type CatalogRow = {
   catalog_server_knowledge: string;
@@ -112,12 +118,6 @@ export class PostgresSemanticStore {
         client,
         command,
       );
-      if (catalogDeviceKnowledge !== command.startingCatalogDeviceKnowledge) {
-        throw new SemanticStoreError(
-          'DEVICE_KNOWLEDGE_MISMATCH',
-          `Expected catalog device knowledge ${command.startingCatalogDeviceKnowledge}, received ${catalogDeviceKnowledge}`,
-        );
-      }
 
       const nextCatalogKnowledge = catalogKnowledge + 1;
       const budgetKnowledge = 1;
@@ -160,8 +160,8 @@ export class PostgresSemanticStore {
           changeSetId: command.catalogChangeSetId,
           principalId: command.principalId,
           originDeviceId: command.originDeviceId,
-          startingDeviceKnowledge: command.startingCatalogDeviceKnowledge,
-          endingDeviceKnowledge: command.endingCatalogDeviceKnowledge,
+          startingDeviceKnowledge: catalogDeviceKnowledge,
+          endingDeviceKnowledge: catalogDeviceKnowledge,
           expectedServerKnowledge: command.expectedCatalogServerKnowledge,
           schemaVersion: command.schemaVersion,
           commandKind: 'create-plan',
@@ -218,16 +218,6 @@ export class PostgresSemanticStore {
         [command.principalId, nextCatalogKnowledge],
       );
       await client.query(
-        `UPDATE semantic_catalog_devices
-         SET server_knowledge_of_device = $3, updated_at = now()
-         WHERE principal_id = $1 AND device_id = $2`,
-        [
-          command.principalId,
-          command.originDeviceId,
-          command.endingCatalogDeviceKnowledge,
-        ],
-      );
-      await client.query(
         `INSERT INTO semantic_devices
            (plan_id, device_id, server_knowledge_of_device)
          VALUES ($1, $2, 0)`,
@@ -238,6 +228,7 @@ export class PostgresSemanticStore {
         command,
         nextCatalogKnowledge,
         budgetKnowledge,
+        catalogDeviceKnowledge,
       );
 
       return {
@@ -450,6 +441,76 @@ export class PostgresSemanticStore {
     });
   }
 
+  async acknowledgeDevice(
+    input: PlanDeviceAcknowledgement,
+  ): Promise<CommitChangeSetResult> {
+    validateDeviceAcknowledgement(input);
+    return this.transact(async client => {
+      await lockIdempotencyKey(client, input);
+      const replay = await findReceipt(client, input);
+      if (replay) {
+        return replay;
+      }
+      const plan = await client.query<PlanKnowledgeRow>(
+        `SELECT server_knowledge FROM semantic_plans
+         WHERE plan_id = $1 AND is_tombstone = false FOR UPDATE`,
+        [input.planId],
+      );
+      if (plan.rowCount !== 1) {
+        throw new SemanticStoreError(
+          'PLAN_NOT_FOUND',
+          `Active plan ${input.planId} was not found`,
+        );
+      }
+      const serverKnowledge = toSafeInteger(
+        plan.rows[0].server_knowledge,
+        'plan server knowledge',
+      );
+      if (serverKnowledge !== input.expectedServerKnowledge) {
+        throw new SemanticStoreError(
+          'SERVER_KNOWLEDGE_MISMATCH',
+          `Expected server knowledge ${input.expectedServerKnowledge}, received ${serverKnowledge}`,
+        );
+      }
+      const deviceKnowledge = await lockDeviceKnowledge(client, input);
+      if (deviceKnowledge !== input.startingDeviceKnowledge) {
+        throw new SemanticStoreError(
+          'DEVICE_KNOWLEDGE_MISMATCH',
+          `Expected device knowledge ${input.startingDeviceKnowledge}, received ${deviceKnowledge}`,
+        );
+      }
+      await client.query(
+        `UPDATE semantic_devices
+         SET server_knowledge_of_device = $3, updated_at = now()
+         WHERE plan_id = $1 AND device_id = $2`,
+        [input.planId, input.originDeviceId, input.endingDeviceKnowledge],
+      );
+      await client.query(
+        `INSERT INTO semantic_device_receipts
+           (plan_id, device_id, idempotency_key, payload_digest,
+            starting_device_knowledge, ending_device_knowledge,
+            server_knowledge, response)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+        [
+          input.planId,
+          input.originDeviceId,
+          input.idempotencyKey,
+          input.payloadDigest,
+          input.startingDeviceKnowledge,
+          input.endingDeviceKnowledge,
+          serverKnowledge,
+          input.response,
+        ],
+      );
+      return {
+        replayed: false,
+        serverKnowledge,
+        endingDeviceKnowledge: input.endingDeviceKnowledge,
+        response: input.response,
+      };
+    });
+  }
+
   private async transact<T>(
     work: (client: PoolClient) => Promise<T>,
   ): Promise<T> {
@@ -539,6 +600,7 @@ async function insertCreatePlanReceipts(
   command: CreatePlanCommand,
   catalogServerKnowledge: number,
   budgetServerKnowledge: number,
+  catalogDeviceKnowledge: number,
 ): Promise<void> {
   await client.query(
     `INSERT INTO semantic_catalog_command_receipts
@@ -551,8 +613,8 @@ async function insertCreatePlanReceipts(
       command.originDeviceId,
       command.idempotencyKey,
       command.payloadDigest,
-      command.startingCatalogDeviceKnowledge,
-      command.endingCatalogDeviceKnowledge,
+      catalogDeviceKnowledge,
+      catalogDeviceKnowledge,
       catalogServerKnowledge,
       command.response,
     ],
@@ -716,7 +778,7 @@ async function insertCatalogEntityChanges(
 
 async function lockIdempotencyKey(
   client: PoolClient,
-  input: CommitChangeSetInput,
+  input: DeviceCommand,
 ): Promise<void> {
   await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
     `${input.planId}\u001f${input.originDeviceId}\u001f${input.idempotencyKey}`,
@@ -725,7 +787,7 @@ async function lockIdempotencyKey(
 
 async function findReceipt(
   client: PoolClient,
-  input: CommitChangeSetInput,
+  input: DeviceCommand,
 ): Promise<CommitChangeSetResult | null> {
   const receipt = await client.query<ReceiptRow>(
     `SELECT payload_digest, ending_device_knowledge,
@@ -758,7 +820,7 @@ async function findReceipt(
 
 async function lockDeviceKnowledge(
   client: PoolClient,
-  input: CommitChangeSetInput,
+  input: DeviceCommand,
 ): Promise<number> {
   await client.query(
     `INSERT INTO semantic_devices
@@ -921,11 +983,9 @@ function validateSeedPlan(input: SeedPlanInput): void {
 }
 
 function validateCreatePlanCommand(command: CreatePlanCommand): void {
-  const validKnowledge = [
-    command.expectedCatalogServerKnowledge,
-    command.startingCatalogDeviceKnowledge,
-    command.endingCatalogDeviceKnowledge,
-  ].every(value => Number.isSafeInteger(value) && value >= 0);
+  const validKnowledge =
+    Number.isSafeInteger(command.expectedCatalogServerKnowledge) &&
+    command.expectedCatalogServerKnowledge >= 0;
   const identities = command.entities.map(
     entity => `${entity.entityKind}\u001f${entity.entityId}`,
   );
@@ -946,8 +1006,6 @@ function validateCreatePlanCommand(command: CreatePlanCommand): void {
     !command.idempotencyKey ||
     !command.name.trim() ||
     !validKnowledge ||
-    command.endingCatalogDeviceKnowledge <
-      command.startingCatalogDeviceKnowledge ||
     !Number.isSafeInteger(command.permissions) ||
     command.permissions < 0 ||
     !Number.isSafeInteger(command.schemaVersion) ||
@@ -1021,6 +1079,26 @@ function validateChangeSet(input: CommitChangeSetInput): void {
     throw new SemanticStoreError(
       'INVALID_OPERATION',
       'Change set failed semantic storage validation',
+    );
+  }
+}
+
+function validateDeviceAcknowledgement(input: PlanDeviceAcknowledgement): void {
+  if (
+    !input.planId ||
+    !input.originDeviceId ||
+    !input.idempotencyKey ||
+    !Number.isSafeInteger(input.startingDeviceKnowledge) ||
+    !Number.isSafeInteger(input.endingDeviceKnowledge) ||
+    !Number.isSafeInteger(input.expectedServerKnowledge) ||
+    input.startingDeviceKnowledge < 0 ||
+    input.endingDeviceKnowledge <= input.startingDeviceKnowledge ||
+    input.expectedServerKnowledge <= 0 ||
+    !/^[0-9a-f]{64}$/u.test(input.payloadDigest)
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Device acknowledgement failed semantic storage validation',
     );
   }
 }

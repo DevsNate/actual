@@ -1,7 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-import type { CatalogCommand } from '@actual-app/semantic-core';
+import type {
+  CatalogCommand,
+  PlanDeviceAcknowledgement,
+} from '@actual-app/semantic-core';
 import type { Pool } from 'pg';
 
 import type { SemanticStoreError } from './errors';
@@ -98,6 +101,22 @@ function catalogCommand(
         payload: { name: 'My plan' },
       },
     ],
+    response: { accepted: true },
+    ...overrides,
+  };
+}
+
+function deviceAcknowledgement(
+  overrides: Partial<PlanDeviceAcknowledgement> = {},
+): PlanDeviceAcknowledgement {
+  return {
+    planId: 'plan-1',
+    originDeviceId: 'device-1',
+    startingDeviceKnowledge: 0,
+    endingDeviceKnowledge: 2,
+    expectedServerKnowledge: 30,
+    idempotencyKey: 'rename-budget-request-1',
+    payloadDigest: digest,
     response: { accepted: true },
     ...overrides,
   };
@@ -205,6 +224,42 @@ describe('PostgresSemanticStore', () => {
         query.text.includes('UPDATE semantic_plans'),
       )?.values,
     ).toEqual(['plan-1', 39]);
+  });
+
+  test('acknowledges coalesced device knowledge without another server mutation', async () => {
+    const database = new ScriptedDatabase();
+    database.enqueue([]); // BEGIN
+    database.enqueue([]); // idempotency lock
+    database.enqueue([]); // no receipt
+    database.enqueue([{ server_knowledge: '30' }]);
+    database.enqueue([]); // ensure device
+    database.enqueue([{ server_knowledge_of_device: '0' }]);
+
+    const store = new PostgresSemanticStore(database.pool);
+    await expect(
+      store.acknowledgeDevice(deviceAcknowledgement()),
+    ).resolves.toEqual({
+      replayed: false,
+      serverKnowledge: 30,
+      endingDeviceKnowledge: 2,
+      response: { accepted: true },
+    });
+
+    const statements = database.queries.map(query => query.text);
+    expect(statements).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('UPDATE semantic_devices'),
+        expect.stringContaining('INSERT INTO semantic_device_receipts'),
+      ]),
+    );
+    expect(statements).not.toEqual(
+      expect.arrayContaining([
+        expect.stringContaining('UPDATE semantic_plans'),
+        expect.stringContaining('INSERT INTO semantic_change_sets'),
+        expect.stringContaining('INSERT INTO semantic_entity_changes'),
+      ]),
+    );
+    expect(statements.at(-1)).toBe('COMMIT');
   });
 
   test('commits an ordered catalog command and receipt atomically', async () => {

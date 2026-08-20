@@ -62,8 +62,8 @@ zero/null calculated defaults, and deterministic calculation identities.
 
 ## Implemented slice
 
-`stock-catalog-gateway.ts` implements the read-only `syncCatalogData` plan
-membership projection at `/api/v1/catalog`:
+`stock-catalog-gateway.ts` implements `syncCatalogData` membership reads and
+the admitted PLAN-001 lifecycle writes at `/api/v1/catalog`:
 
 - retained Actual sessions authenticate `x-session-token`;
 - the authenticated principal must match `request_data.user_id`;
@@ -73,8 +73,12 @@ membership projection at `/api/v1/catalog`:
   `ce_user_budgets` records, including tombstones;
 - a client already at current server knowledge receives an empty membership
   delta;
-- the client request ID is echoed in the response; and
-- unknown operations, catalog writes, malformed knowledge ranges, and
+- the client request ID is echoed in the response;
+- complete catalog rename rows invoke the atomic lifecycle rename;
+- the paired budget rename row is acknowledged without a duplicate mutation;
+- `deleteBudget` tombstones the membership and exact retries replay after the
+  tombstone is visible; and
+- unknown operations, unadmitted writes, malformed knowledge ranges, and
   knowledge from the future fail closed.
 
 The same endpoint now dispatches `syncBudgetData` without duplicating
@@ -95,11 +99,10 @@ budget slice:
 - rejects every other write, non-pristine formula, malformed knowledge, and
   unauthorized budget version.
 
-For an older catalog knowledge value, this first implementation sends a
+For an older catalog knowledge value, the implementation sends a
 coalesced complete snapshot of the fork-owned membership records rather than
 reconstructing every intermediate wire delta. Complete entity replacement is
-idempotent and preserves stable identities. Incremental catalog writes and
-their exact stock error envelopes remain a separate admitted slice.
+idempotent and preserves stable identities.
 
 ## Not implemented here
 
@@ -108,7 +111,6 @@ their exact stock error envelopes remain a separate admitted slice.
 - budget delta projection or write ingestion beyond the exact admitted
   `opened_budget` onboarding delta;
 - nonzero account, transaction, transfer, target, and schedule calculations;
-- catalog rename/delete ingestion;
 - stock error-envelope compatibility; or
 - Castle, analytics, experiments, telemetry, billing, or help services.
 

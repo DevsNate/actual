@@ -8,6 +8,7 @@ import { buildStockPlanBootstrap } from '@actual-app/semantic-core';
 import express from 'express';
 import request from 'supertest';
 
+import type { PlanLifecycleService } from './plan-lifecycle-service';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { projectStockEntity } from './stock-budget-projection';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
@@ -44,12 +45,19 @@ function createSnapshot() {
 
 function application(
   planReader: BudgetVersionPlanReader,
-  changeWriter: StockBudgetChangeWriter = { commitChangeSet: vi.fn() },
+  changeWriter: StockBudgetChangeWriter = {
+    commitChangeSet: vi.fn(),
+    acknowledgeDevice: vi.fn(),
+  },
 ) {
   const result = express();
   const catalogReader: CatalogReader = { readCatalog: vi.fn() };
   const catalogWriter: CatalogCommandWriter = {
     commitCatalogCommand: vi.fn(),
+  };
+  const planLifecycleService: PlanLifecycleService = {
+    renamePlan: vi.fn(),
+    deletePlan: vi.fn(),
   };
   result.use(
     '/api/v1',
@@ -58,6 +66,7 @@ function application(
       catalogWriter,
       planReader,
       changeWriter,
+      planLifecycleService,
       resolvePrincipal: () => principal,
     }),
   );
@@ -195,6 +204,7 @@ describe('stock budget gateway', () => {
       readPlanByBudgetVersion: vi.fn().mockResolvedValue(createSnapshot()),
     };
     const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
       commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,
@@ -279,6 +289,7 @@ describe('stock budget gateway', () => {
       readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
       commitChangeSet: vi.fn(),
     };
 
@@ -292,6 +303,65 @@ describe('stock budget gateway', () => {
       },
       changeWriter,
     ).expect(200);
+    expect(changeWriter.commitChangeSet).not.toHaveBeenCalled();
+  });
+
+  test('acknowledges the second leg of an already-atomic plan rename', async () => {
+    const base = createSnapshot();
+    const entities = base.entities.map(entity =>
+      entity.entityKind === 'be_budget'
+        ? {
+            ...entity,
+            payload: { ...entity.payload, budgetName: 'Renamed Plan' },
+          }
+        : entity,
+    );
+    const snapshot = {
+      ...base,
+      name: 'Renamed Plan',
+      serverKnowledge: 30,
+      entities,
+    };
+    const budget = entities.find(entity => entity.entityKind === 'be_budget')!;
+    const planReader: BudgetVersionPlanReader = {
+      readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn().mockImplementation(async input => ({
+        replayed: false,
+        serverKnowledge: input.expectedServerKnowledge,
+        endingDeviceKnowledge: input.endingDeviceKnowledge,
+        response: input.response,
+      })),
+      commitChangeSet: vi.fn(),
+    };
+
+    const response = await stockRequest(
+      planReader,
+      'delta',
+      {
+        starting_device_knowledge: 0,
+        ending_device_knowledge: 2,
+        device_knowledge_of_server: 29,
+        changed_entities: { be_budget: projectStockEntity(budget) },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 30,
+      server_knowledge_of_device: 2,
+      changed_entities: {},
+    });
+    expect(changeWriter.acknowledgeDevice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        planId: 'plan-1',
+        originDeviceId: 'device-1',
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 30,
+      }),
+    );
     expect(changeWriter.commitChangeSet).not.toHaveBeenCalled();
   });
 
@@ -352,6 +422,7 @@ describe('stock budget gateway', () => {
       readPlanByBudgetVersion: vi.fn().mockResolvedValue(snapshot),
     };
     const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
       commitChangeSet: vi.fn().mockImplementation(input =>
         Promise.resolve({
           replayed: false,

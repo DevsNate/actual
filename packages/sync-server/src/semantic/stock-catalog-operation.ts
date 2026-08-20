@@ -7,6 +7,7 @@ import type {
   PlanMembership,
 } from '@actual-app/semantic-core';
 
+import type { PlanLifecycleService } from './plan-lifecycle-service';
 import {
   isRecord,
   nonnegativeInteger,
@@ -28,6 +29,7 @@ export async function handleStockCatalogSync(
   dependencies: {
     catalogReader: CatalogReader;
     catalogWriter: CatalogCommandWriter;
+    planLifecycleService: PlanLifecycleService;
   },
 ): Promise<StockOperationResponse> {
   const syncRequest = parseCatalogSyncRequest(context.requestData);
@@ -37,24 +39,58 @@ export async function handleStockCatalogSync(
   if (syncRequest.userId !== context.principal.id) {
     return operationError(403, 'principal_mismatch');
   }
-
-  const outgoingChanges = parseOutgoingChanges(
-    syncRequest.changedEntities,
-    context.principal.id,
-  );
-  if (outgoingChanges === null) {
+  if (
+    !validOutgoingEnvelope(syncRequest.changedEntities, context.principal.id)
+  ) {
     return operationError(400, 'invalid_catalog_request');
   }
 
   const catalog = await dependencies.catalogReader.readCatalog(
     context.principal.id,
   );
+  const outgoing = parseOutgoingChanges(
+    syncRequest.changedEntities,
+    context.principal.id,
+    catalog.memberships,
+  );
+  if (outgoing === null) {
+    return operationError(400, 'invalid_catalog_request');
+  }
   if (
     syncRequest.deviceKnowledgeOfServer >
     catalog.knowledge.currentServerKnowledge
   ) {
     return operationError(409, 'server_knowledge_mismatch');
   }
+  if (outgoing.kind === 'rename') {
+    if (
+      syncRequest.endingDeviceKnowledge -
+        syncRequest.startingDeviceKnowledge !==
+      1
+    ) {
+      return operationError(400, 'invalid_catalog_knowledge_range');
+    }
+    const result = await dependencies.planLifecycleService.renamePlan({
+      principalId: context.principal.id,
+      planId: outgoing.planId,
+      originDeviceId: context.deviceId,
+      idempotencyKey: context.clientRequestId,
+      name: outgoing.name,
+      catalogDeviceKnowledge: {
+        starting: syncRequest.startingDeviceKnowledge,
+        ending: syncRequest.endingDeviceKnowledge,
+      },
+    });
+    return {
+      status: 200,
+      body: catalogResponse(
+        syncRequest.endingDeviceKnowledge,
+        result.catalogServerKnowledge,
+        {},
+      ),
+    };
+  }
+  const outgoingChanges = outgoing.changes;
   if (outgoingChanges.length > 0) {
     const nextKnowledge = catalog.knowledge.currentServerKnowledge + 1;
     const body = catalogResponse(
@@ -159,12 +195,26 @@ function parseCatalogSyncRequest(value: string): CatalogSyncRequest | null {
 function parseOutgoingChanges(
   changedEntities: Readonly<Record<string, unknown>>,
   principalId: string,
-): readonly CatalogCommandChange[] | null {
+  memberships: readonly PlanMembership[],
+):
+  | { kind: 'changes'; changes: readonly CatalogCommandChange[] }
+  | { kind: 'rename'; planId: string; name: string }
+  | null {
   const keys = Object.keys(changedEntities);
   if (keys.length === 0) {
-    return [];
+    return { kind: 'changes', changes: [] };
   }
-  if (keys.length !== 1 || keys[0] !== 'ce_user_settings') {
+  if (keys.length !== 1) {
+    return null;
+  }
+  if (keys[0] === 'ce_user_budgets') {
+    return parsePlanRename(
+      changedEntities.ce_user_budgets,
+      principalId,
+      memberships,
+    );
+  }
+  if (keys[0] !== 'ce_user_settings') {
     return null;
   }
   const rows = changedEntities.ce_user_settings;
@@ -183,7 +233,87 @@ function parseOutgoingChanges(
       payload: row,
     });
   }
-  return changes;
+  return { kind: 'changes', changes };
+}
+
+function parsePlanRename(
+  value: unknown,
+  principalId: string,
+  memberships: readonly PlanMembership[],
+): { kind: 'rename'; planId: string; name: string } | null {
+  if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) {
+    return null;
+  }
+  const row = value[0];
+  if (!validPlanRenameRow(row, principalId)) {
+    return null;
+  }
+  const membership = memberships.find(
+    candidate =>
+      candidate.id === row.id &&
+      candidate.planId === row.budget_id &&
+      candidate.budgetVersionId === row.budget_version_id &&
+      candidate.principalId === row.user_id &&
+      candidate.permissions === row.permissions &&
+      !candidate.isTombstone,
+  );
+  if (!membership || membership.name === row.budget_name.trim()) {
+    return null;
+  }
+  return {
+    kind: 'rename',
+    planId: membership.planId,
+    name: row.budget_name.trim(),
+  };
+}
+
+function validOutgoingEnvelope(
+  changedEntities: Readonly<Record<string, unknown>>,
+  principalId: string,
+): boolean {
+  const keys = Object.keys(changedEntities);
+  if (keys.length === 0) {
+    return true;
+  }
+  if (keys.length !== 1) {
+    return false;
+  }
+  const rows = changedEntities[keys[0]];
+  if (!Array.isArray(rows) || rows.length === 0) {
+    return false;
+  }
+  if (keys[0] === 'ce_user_settings') {
+    return rows.every(
+      row => isRecord(row) && validUserSetting(row, principalId),
+    );
+  }
+  return (
+    keys[0] === 'ce_user_budgets' &&
+    rows.length === 1 &&
+    isRecord(rows[0]) &&
+    validPlanRenameRow(rows[0], principalId)
+  );
+}
+
+function validPlanRenameRow(
+  row: Readonly<Record<string, unknown>>,
+  principalId: string,
+): boolean {
+  return (
+    Object.keys(row).sort().join(',') ===
+      'budget_id,budget_name,budget_version_id,id,is_tombstone,last_modified_at,permissions,source,user_id' &&
+    typeof row.id === 'string' &&
+    typeof row.budget_id === 'string' &&
+    typeof row.budget_version_id === 'string' &&
+    typeof row.budget_name === 'string' &&
+    Boolean(row.budget_name.trim()) &&
+    row.user_id === principalId &&
+    Number.isSafeInteger(row.permissions) &&
+    row.is_tombstone === false &&
+    row.source === null &&
+    typeof row.last_modified_at === 'string' &&
+    !Number.isNaN(Date.parse(row.last_modified_at))
+  );
 }
 
 function validUserSetting(

@@ -10,10 +10,16 @@ type Context = {
   planId: string;
   originDeviceId: string;
   idempotencyKey: string;
+  catalogDeviceKnowledge?: { starting: number; ending: number };
 };
 
 export type PlanLifecycleService = {
-  renamePlan(context: Context & { name: string }): Promise<PlanLifecycleResult>;
+  renamePlan(
+    context: Context & {
+      name: string;
+      budgetDeviceKnowledge?: { starting: number; ending: number };
+    },
+  ): Promise<PlanLifecycleResult>;
   deletePlan(context: Context): Promise<PlanLifecycleResult>;
 };
 
@@ -39,6 +45,8 @@ export function createPlanLifecycleService({
           name: context.name,
         }),
         newName: context.name,
+        catalogDeviceKnowledge: context.catalogDeviceKnowledge,
+        budgetDeviceKnowledge: context.budgetDeviceKnowledge,
         response,
       });
     },
@@ -53,6 +61,7 @@ export function createPlanLifecycleService({
         schemaVersion: 1,
         idempotencyKey: context.idempotencyKey,
         payloadDigest: digest('delete-plan', context, {}),
+        catalogDeviceKnowledge: context.catalogDeviceKnowledge,
         response,
       });
     },

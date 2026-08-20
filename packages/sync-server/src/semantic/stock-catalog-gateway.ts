@@ -7,6 +7,7 @@ import type {
 } from '@actual-app/semantic-core';
 import express from 'express';
 
+import type { PlanLifecycleService } from './plan-lifecycle-service';
 import { handleStockBudgetSync } from './stock-budget-operation';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
 import { handleStockCatalogSync } from './stock-catalog-operation';
@@ -14,12 +15,14 @@ import { handleStockFamilySync } from './stock-family-operation';
 import { handleStockInitialUserData } from './stock-initial-user-operation';
 import { operationError, STOCK_API_VERSION } from './stock-operation';
 import type { StockOperationResponse } from './stock-operation';
+import { handleStockPlanDelete } from './stock-plan-delete-operation';
 
 export type StockCatalogGatewayDependencies = {
   catalogReader: CatalogReader;
   catalogWriter: CatalogCommandWriter;
   planReader: BudgetVersionPlanReader;
   changeWriter: StockBudgetChangeWriter;
+  planLifecycleService: PlanLifecycleService;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
 };
 
@@ -74,13 +77,20 @@ export function createStockCatalogGateway(
               ? await handleStockCatalogSync(context, {
                   catalogReader: dependencies.catalogReader,
                   catalogWriter: dependencies.catalogWriter,
+                  planLifecycleService: dependencies.planLifecycleService,
                 })
               : operation === 'syncBudgetData'
                 ? await handleStockBudgetSync(context, {
                     planReader: dependencies.planReader,
                     changeWriter: dependencies.changeWriter,
                   })
-                : operationError(501, 'unsupported_operation');
+                : operation === 'deleteBudget'
+                  ? await handleStockPlanDelete(context, {
+                      catalogReader: dependencies.catalogReader,
+                      planReader: dependencies.planReader,
+                      planLifecycleService: dependencies.planLifecycleService,
+                    })
+                  : operationError(501, 'unsupported_operation');
       send(response, result);
     } catch (error) {
       console.error('Stock compatibility projection failed', error);

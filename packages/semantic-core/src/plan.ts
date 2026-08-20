@@ -33,6 +33,23 @@ export type PlanChangeWriter = {
   commitChangeSet(command: PlanChangeSetCommand): Promise<PlanChangeSetResult>;
 };
 
+export type PlanDeviceAcknowledgement = {
+  planId: string;
+  originDeviceId: string;
+  startingDeviceKnowledge: number;
+  endingDeviceKnowledge: number;
+  expectedServerKnowledge: number;
+  idempotencyKey: string;
+  payloadDigest: string;
+  response: Readonly<Record<string, unknown>>;
+};
+
+export type PlanDeviceAcknowledgementWriter = {
+  acknowledgeDevice(
+    command: PlanDeviceAcknowledgement,
+  ): Promise<PlanChangeSetResult>;
+};
+
 export type CreatePlanCommand = {
   catalogChangeSetId: string;
   budgetChangeSetId: string;
@@ -42,8 +59,6 @@ export type CreatePlanCommand = {
   principalId: PrincipalId;
   originDeviceId: string;
   expectedCatalogServerKnowledge: number;
-  startingCatalogDeviceKnowledge: number;
-  endingCatalogDeviceKnowledge: number;
   schemaVersion: number;
   idempotencyKey: string;
   payloadDigest: string;

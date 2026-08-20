@@ -47,6 +47,14 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       const budgetKnowledge = integer(state.budget_server_knowledge);
       const catalogDeviceKnowledge = await lockCatalogDevice(client, command);
       const budgetDeviceKnowledge = await lockBudgetDevice(client, command);
+      const catalogRange = knowledgeRange(
+        command.catalogDeviceKnowledge,
+        catalogDeviceKnowledge,
+      );
+      const budgetRange = knowledgeRange(
+        command.budgetDeviceKnowledge,
+        budgetDeviceKnowledge,
+      );
       const nextCatalogKnowledge = catalogKnowledge + 1;
       const nextBudgetKnowledge = budgetKnowledge + 1;
       const name = command.newName.trim();
@@ -67,7 +75,8 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
         client,
         command,
         'rename-plan',
-        catalogDeviceKnowledge,
+        catalogRange.starting,
+        catalogRange.ending,
         nextCatalogKnowledge,
         false,
         catalogPayload,
@@ -75,7 +84,8 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       await insertBudgetMutation(
         client,
         command,
-        budgetDeviceKnowledge,
+        budgetRange.starting,
+        budgetRange.ending,
         nextBudgetKnowledge,
         budgetPayload,
       );
@@ -91,10 +101,13 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
          WHERE plan_id = $1`,
         [command.planId, nextBudgetKnowledge],
       );
+      await updateCatalogDevice(client, command, catalogRange.ending);
+      await updateBudgetDevice(client, command, budgetRange.ending);
       await insertReceipts(
         client,
         command,
-        catalogDeviceKnowledge,
+        catalogRange,
+        budgetRange,
         nextCatalogKnowledge,
         nextBudgetKnowledge,
       );
@@ -119,6 +132,10 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
       assertLiveMembership(state);
       const catalogKnowledge = integer(state.catalog_server_knowledge);
       const catalogDeviceKnowledge = await lockCatalogDevice(client, command);
+      const catalogRange = knowledgeRange(
+        command.catalogDeviceKnowledge,
+        catalogDeviceKnowledge,
+      );
       const nextCatalogKnowledge = catalogKnowledge + 1;
       const catalogPayload = membershipPayload(command, state, 'Unknown', true);
 
@@ -132,7 +149,8 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
         client,
         command,
         'delete-plan',
-        catalogDeviceKnowledge,
+        catalogRange.starting,
+        catalogRange.ending,
         nextCatalogKnowledge,
         true,
         catalogPayload,
@@ -143,10 +161,12 @@ export class PostgresPlanLifecycleStore implements PlanLifecycleWriter {
          WHERE principal_id = $1`,
         [command.principalId, nextCatalogKnowledge],
       );
+      await updateCatalogDevice(client, command, catalogRange.ending);
       await insertCatalogReceipt(
         client,
         command,
-        catalogDeviceKnowledge,
+        catalogRange.starting,
+        catalogRange.ending,
         nextCatalogKnowledge,
       );
       return result(false, nextCatalogKnowledge, null, command.response);
@@ -304,6 +324,52 @@ async function lockBudgetDevice(
   return integer(row.rows[0].server_knowledge_of_device);
 }
 
+function knowledgeRange(
+  requested: { starting: number; ending: number } | undefined,
+  current: number,
+) {
+  const range = requested ?? { starting: current, ending: current };
+  if (
+    !Number.isSafeInteger(range.starting) ||
+    !Number.isSafeInteger(range.ending) ||
+    range.starting < 0 ||
+    range.ending < range.starting ||
+    range.starting !== current
+  ) {
+    throw new SemanticStoreError(
+      'DEVICE_KNOWLEDGE_MISMATCH',
+      `Expected device knowledge ${range.starting}, received ${current}`,
+    );
+  }
+  return range;
+}
+
+async function updateCatalogDevice(
+  client: PoolClient,
+  command: DeletePlanCommand,
+  endingDeviceKnowledge: number,
+) {
+  await client.query(
+    `UPDATE semantic_catalog_devices
+     SET server_knowledge_of_device = $3, updated_at = now()
+     WHERE principal_id = $1 AND device_id = $2`,
+    [command.principalId, command.originDeviceId, endingDeviceKnowledge],
+  );
+}
+
+async function updateBudgetDevice(
+  client: PoolClient,
+  command: RenamePlanCommand,
+  endingDeviceKnowledge: number,
+) {
+  await client.query(
+    `UPDATE semantic_devices
+     SET server_knowledge_of_device = $3, updated_at = now()
+     WHERE plan_id = $1 AND device_id = $2`,
+    [command.planId, command.originDeviceId, endingDeviceKnowledge],
+  );
+}
+
 function membershipPayload(
   command: DeletePlanCommand,
   state: LifecycleState,
@@ -350,7 +416,8 @@ async function insertCatalogMutation(
   client: PoolClient,
   command: DeletePlanCommand,
   commandKind: string,
-  deviceKnowledge: number,
+  startingDeviceKnowledge: number,
+  endingDeviceKnowledge: number,
   serverKnowledge: number,
   isTombstone: boolean,
   payload: Readonly<Record<string, unknown>>,
@@ -360,13 +427,14 @@ async function insertCatalogMutation(
        (change_set_id, principal_id, server_knowledge, origin_device_id,
         starting_device_knowledge, ending_device_knowledge, schema_version,
         command_kind, idempotency_key, payload_digest)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8, $9)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
     [
       command.catalogChangeSetId,
       command.principalId,
       serverKnowledge,
       command.originDeviceId,
-      deviceKnowledge,
+      startingDeviceKnowledge,
+      endingDeviceKnowledge,
       command.schemaVersion,
       commandKind,
       command.idempotencyKey,
@@ -384,7 +452,8 @@ async function insertCatalogMutation(
 async function insertBudgetMutation(
   client: PoolClient,
   command: RenamePlanCommand,
-  deviceKnowledge: number,
+  startingDeviceKnowledge: number,
+  endingDeviceKnowledge: number,
   serverKnowledge: number,
   payload: Readonly<Record<string, unknown>>,
 ) {
@@ -393,13 +462,14 @@ async function insertBudgetMutation(
        (change_set_id, plan_id, server_knowledge, origin_device_id,
         starting_device_knowledge, ending_device_knowledge, schema_version,
         idempotency_key, payload_digest)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7, $8)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
     [
       command.budgetChangeSetId,
       command.planId,
       serverKnowledge,
       command.originDeviceId,
-      deviceKnowledge,
+      startingDeviceKnowledge,
+      endingDeviceKnowledge,
       command.schemaVersion,
       command.idempotencyKey,
       command.payloadDigest,
@@ -423,14 +493,16 @@ async function insertBudgetMutation(
 async function insertReceipts(
   client: PoolClient,
   command: RenamePlanCommand,
-  deviceKnowledge: number,
+  catalogRange: { starting: number; ending: number },
+  budgetRange: { starting: number; ending: number },
   catalogKnowledge: number,
   budgetKnowledge: number,
 ) {
   await insertCatalogReceipt(
     client,
     command,
-    deviceKnowledge,
+    catalogRange.starting,
+    catalogRange.ending,
     catalogKnowledge,
   );
   await client.query(
@@ -438,13 +510,14 @@ async function insertReceipts(
        (plan_id, device_id, idempotency_key, payload_digest,
         starting_device_knowledge, ending_device_knowledge,
         server_knowledge, response)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       command.planId,
       command.originDeviceId,
       command.idempotencyKey,
       command.payloadDigest,
-      deviceKnowledge,
+      budgetRange.starting,
+      budgetRange.ending,
       budgetKnowledge,
       command.response,
     ],
@@ -454,7 +527,8 @@ async function insertReceipts(
 async function insertCatalogReceipt(
   client: PoolClient,
   command: DeletePlanCommand,
-  deviceKnowledge: number,
+  startingDeviceKnowledge: number,
+  endingDeviceKnowledge: number,
   serverKnowledge: number,
 ) {
   await client.query(
@@ -462,13 +536,14 @@ async function insertCatalogReceipt(
        (principal_id, device_id, idempotency_key, payload_digest,
         starting_device_knowledge, ending_device_knowledge,
         server_knowledge, response)
-     VALUES ($1, $2, $3, $4, $5, $5, $6, $7)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
     [
       command.principalId,
       command.originDeviceId,
       command.idempotencyKey,
       command.payloadDigest,
-      deviceKnowledge,
+      startingDeviceKnowledge,
+      endingDeviceKnowledge,
       serverKnowledge,
       command.response,
     ],

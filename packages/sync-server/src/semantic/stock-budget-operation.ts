@@ -1,9 +1,11 @@
 import { createHash } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 
 import type {
   BudgetVersionPlanReader,
   PlanChangeSetCommand,
   PlanChangeWriter,
+  PlanDeviceAcknowledgementWriter,
   PlanSnapshot,
 } from '@actual-app/semantic-core';
 
@@ -13,6 +15,7 @@ import {
   buildStockBudgetBootstrap,
   buildStockBudgetEmptyDelta,
 } from './stock-budget-bootstrap';
+import { projectStockEntity } from './stock-budget-projection';
 import {
   isRecord,
   nonnegativeInteger,
@@ -26,7 +29,8 @@ import type {
 } from './stock-operation';
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
 
-export type StockBudgetChangeWriter = PlanChangeWriter;
+export type StockBudgetChangeWriter = PlanChangeWriter &
+  PlanDeviceAcknowledgementWriter;
 
 type StockBudgetSyncDependencies = {
   planReader: BudgetVersionPlanReader;
@@ -89,6 +93,31 @@ export async function handleStockBudgetSync(
       syncRequest.endingDeviceKnowledge,
       buildStockBudgetEmptyDelta(snapshot),
     );
+  }
+
+  if (
+    parsePlanRenameConvergence(syncRequest.changedEntities, snapshot) &&
+    syncRequest.endingDeviceKnowledge > syncRequest.startingDeviceKnowledge &&
+    syncRequest.deviceKnowledgeOfServer === snapshot.serverKnowledge - 1
+  ) {
+    const response = successResponse(
+      snapshot.serverKnowledge,
+      syncRequest.endingDeviceKnowledge,
+      buildStockBudgetEmptyDelta(snapshot),
+    );
+    const acknowledged = await dependencies.changeWriter.acknowledgeDevice({
+      planId: snapshot.planId,
+      originDeviceId: context.deviceId,
+      startingDeviceKnowledge: syncRequest.startingDeviceKnowledge,
+      endingDeviceKnowledge: syncRequest.endingDeviceKnowledge,
+      expectedServerKnowledge: snapshot.serverKnowledge,
+      idempotencyKey: context.clientRequestId,
+      payloadDigest: createHash('sha256')
+        .update(context.requestData)
+        .digest('hex'),
+      response: response.body,
+    });
+    return { status: 200, body: acknowledged.response };
   }
 
   const openedBudgetChanges = parseOpenedBudgetDelta(
@@ -282,6 +311,28 @@ function parseOpenedBudgetDelta(
       },
     },
   ];
+}
+
+function parsePlanRenameConvergence(
+  changedEntities: Record<string, unknown>,
+  snapshot: PlanSnapshot,
+): boolean {
+  if (!hasExactKeys(changedEntities, ['be_budget'])) {
+    return false;
+  }
+  const outgoing = changedEntities.be_budget;
+  const current = snapshot.entities.find(
+    entity =>
+      entity.entityKind === 'be_budget' &&
+      entity.entityId === snapshot.budgetVersionId &&
+      !entity.isTombstone,
+  );
+  return Boolean(
+    current &&
+    isRecord(outgoing) &&
+    outgoing.budget_name === snapshot.name &&
+    isDeepStrictEqual(outgoing, projectStockEntity(current)),
+  );
 }
 
 function successResponse(
