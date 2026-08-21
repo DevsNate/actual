@@ -1,8 +1,9 @@
 /**
- * Project-owned projection for the exact checking-account calculation rows
- * proven by the controlled stock captures. This is intentionally separate from
- * monthly category and Ready-to-Assign calculations and rejects unsupported
- * months, balances, and transaction shapes at its caller boundary.
+ * Project-owned projection for the exact account calculation rows proven by
+ * the controlled stock captures. The admitted evidence includes checking and
+ * credit accounts. This remains separate from monthly category and
+ * Ready-to-Assign calculations and rejects unsupported months and balances at
+ * its caller boundary.
  */
 
 import type { BudgetEntity } from '@actual-app/semantic-core';
@@ -12,17 +13,17 @@ import type {
   StockMonthlyAccountCalculation,
 } from './stock-calculation-entities';
 
-type CapturedCheckingAccountRows = Readonly<{
+type CapturedAccountRows = Readonly<{
   accountCalculations: readonly StockAccountCalculation[];
   monthlyAccountCalculations: readonly StockMonthlyAccountCalculation[];
 }>;
 
-export function projectCapturedCheckingAccountRows(
+export function projectCapturedAccountRows(
   accounts: readonly BudgetEntity[],
   transactions: readonly BudgetEntity[],
   currentMonth: string,
   nextMonth: string,
-): CapturedCheckingAccountRows {
+): CapturedAccountRows {
   requireMonthStart(currentMonth);
   requireMonthStart(nextMonth);
 

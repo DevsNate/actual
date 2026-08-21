@@ -1,6 +1,6 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-import { projectCapturedCheckingAccountRows } from './stock-account-calculation-projection';
+import { projectCapturedAccountRows } from './stock-account-calculation-projection';
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import type { StockBudgetCalculationEntities } from './stock-calculation-entities';
 import { projectCapturedMonthlyBudgetRows } from './stock-monthly-budget-calculation-projection';
@@ -174,7 +174,7 @@ export function projectStockCheckingAccountCalculations(
   ) {
     throw new Error('Starting Balance total must be a safe integer');
   }
-  const accountRows = projectCapturedCheckingAccountRows(
+  const accountRows = projectCapturedAccountRows(
     accounts,
     liveTransactions,
     currentMonth,
