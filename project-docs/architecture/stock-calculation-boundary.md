@@ -67,6 +67,12 @@ until their mutation domains are admitted. TARGET-001 did not retain the
 unfunded definition state's percentage field, so the compatibility server does
 not invent it.
 
+The recovered assignment call chain is recorded separately in
+`semantic-category-assignment.md`. It proves that stock assignment is an
+updated monthly-category row plus an immutable money movement, not a direct
+field-only edit. Its exact server acknowledgement/replay envelope remains the
+next evidence gate.
+
 `stock-monthly-budget-calculation-projection.ts` owns the captured two-row
 monthly-budget projection for Starting Balance income plus admitted cash
 outflows. It validates safe integer arithmetic and exact current/next source
