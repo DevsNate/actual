@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   AuthenticatedPrincipal,
   BudgetReader,
+  BudgetVersionReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
@@ -18,7 +19,7 @@ import { STOCK_API_VERSION } from './stock-operation';
 
 type Dependencies = {
   accountCreationService: AccountCreationService;
-  budgetReader: BudgetReader;
+  budgetReader: BudgetReader & BudgetVersionReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
   allocateRequestId?(): string;
 };
@@ -30,7 +31,7 @@ export function createStockAccountGateway(
   handlers.use(express.json({ limit: '64kb' }));
 
   handlers.post(
-    '/direct_import/budgets/:budgetId/accounts',
+    '/direct_import/budgets/:budgetVersionId/accounts',
     async (request, response) => {
       const principal = authenticateStockTokenRequest(
         request,
@@ -45,17 +46,18 @@ export function createStockAccountGateway(
         return;
       }
 
-      const stockBudgetId = request.params.budgetId?.trim() ?? '';
+      const stockBudgetVersionId =
+        request.params.budgetVersionId?.trim() ?? '';
       const body = parseStockCheckingAccountBody(request.body);
-      if (!stockBudgetId || !body) {
+      if (!stockBudgetVersionId || !body) {
         response.status(400).send({ error: { id: 'invalid_account_request' } });
         return;
       }
 
       try {
-        const budget = await dependencies.budgetReader.readBudget(
+        const budget = await dependencies.budgetReader.readBudgetByVersion(
           principal.id,
-          stockBudgetId,
+          stockBudgetVersionId,
         );
         if (!budget) {
           response.status(404).send({ error: { id: 'budget-not-found' } });
@@ -76,7 +78,12 @@ export function createStockAccountGateway(
           );
         response
           .status(201)
-          .send(projectStockCreatedAccount(result.response, stockBudgetId));
+          .send(
+            projectStockCreatedAccount(
+              result.response,
+              stockBudgetVersionId,
+            ),
+          );
       } catch (error) {
         if (error instanceof AccountCreationError) {
           response.status(error.code === 'budget-not-found' ? 404 : 400).send({

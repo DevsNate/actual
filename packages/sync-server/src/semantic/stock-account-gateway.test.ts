@@ -31,7 +31,7 @@ describe('stock account gateway', () => {
     const app = createApp(service);
 
     await request(app)
-      .post('/api/direct_import/budgets/plan-1/accounts')
+      .post('/api/direct_import/budgets/version-1/accounts')
       .set('authorization', 'Token token=actual-session')
       .set('x-ynab-api-version', '2026-01-01')
       .send(capturedBody())
@@ -40,11 +40,11 @@ describe('stock account gateway', () => {
         account_name: 'Account Capture 3',
         account_type: 'Checking',
         balance_millicents: 345670,
-        budget_id: 'plan-1',
+        budget_id: 'version-1',
       });
     expect(service.createUnlinkedCheckingAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
-      budgetId: 'plan-1',
+      budgetId: 'canonical-budget-1',
       originDeviceId: 'stock-web-direct-import',
       idempotencyKey: 'stock-account-create:request-1',
       name: 'Account Capture 3',
@@ -86,8 +86,9 @@ function createApp(service: AccountCreationService): express.Express {
     createStockAccountGateway({
       accountCreationService: service,
       budgetReader: {
-        readBudget: vi.fn().mockResolvedValue({
-          budgetId: 'plan-1',
+        readBudget: vi.fn(),
+        readBudgetByVersion: vi.fn().mockResolvedValue({
+          budgetId: 'canonical-budget-1',
           budgetVersionId: 'version-1',
           name: 'Plan',
           serverKnowledge: 1,
