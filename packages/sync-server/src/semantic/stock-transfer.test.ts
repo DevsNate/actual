@@ -221,4 +221,23 @@ describe('stock ordinary transfer boundary', () => {
     partialDelete.be_transaction_groups[0].be_transaction.is_tombstone = true;
     expect(parseStockTransferMutation(partialDelete, live)).toBeNull();
   });
+
+  test('keeps the captured credit-card payment envelope fail-closed', () => {
+    const paymentEnvelope = {
+      be_accounts: [
+        {
+          id: 'acct-credit',
+          is_tombstone: false,
+          account_type: 'CreditCard',
+          account_name: 'Credit Account',
+          last_payment_payee_id: 'payee-checking',
+          is_closed: false,
+          on_budget: true,
+        },
+      ],
+      ...createRequest(),
+    };
+
+    expect(parseStockTransferMutation(paymentEnvelope, fixture())).toBeNull();
+  });
 });
