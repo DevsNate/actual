@@ -47,6 +47,13 @@ kept separate from category and Ready-to-Assign calculations, validates safe
 integer balances and captured month identities, and does not admit debt,
 tracking, closed-account, or generalized multi-month behavior.
 
+`stock-monthly-category-calculation-projection.ts` owns only the captured cash
+category states already used by the checking-account boundary: uncategorized
+cash, categorized split lines, and Starting Balance Immediate Income across the
+captured current/next-month rows. Target status, categorized refunds, credit
+spending, carryover, and other monthly-category behavior remain outside this
+projector until their own admission phases.
+
 The current projectors admit only:
 
 1. the exact pristine/default bootstrap state captured in BUDGET-001; and
