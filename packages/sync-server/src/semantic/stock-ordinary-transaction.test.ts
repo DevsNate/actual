@@ -291,11 +291,11 @@ describe('stock ordinary transaction and payee boundary', () => {
       ),
     ).toBeNull();
 
-    const capturedButUnadmittedCategory = snapshot.entities.find(
+    const capturedCategory = snapshot.entities.find(
       entity =>
         entity.entityKind === 'be_subcategories' &&
         !entity.isTombstone &&
-        entity.payload.internalName === 'Category/__ImmediateIncome__',
+        entity.payload.name === '🏠 Rent/Mortgage',
     )!.entityId;
     expect(
       parseStockOrdinaryMutation(
@@ -306,7 +306,7 @@ describe('stock ordinary transaction and payee boundary', () => {
               be_transaction: {
                 ...transactionRow(),
                 entities_payee_id: null,
-                entities_subcategory_id: capturedButUnadmittedCategory,
+                entities_subcategory_id: capturedCategory,
               },
               be_subtransactions: null,
             },
@@ -316,18 +316,120 @@ describe('stock ordinary transaction and payee boundary', () => {
       ),
     ).toBeNull();
 
-    // ORDINARY-001 proves this categorized create shape at the stock Web and
-    // server boundaries, and ORDINARY-001 now also proves the Web deletion and
-    // terminal replay, including unchanged replay after edit. Native iOS
-    // delivery/readback remains uncaptured. Keep the active mutation parser
-    // closed until that cross-client gate is complete instead of inferring it.
+    const categorized = parseStockOrdinaryMutation(
+      {
+        be_payees: [
+          {
+            ...payeeRow('Phase Four Payee'),
+            auto_fill_subcategory_id: capturedCategory,
+          },
+        ],
+        be_transaction_groups: [
+          {
+            id: 'transaction-1',
+            be_transaction: {
+              ...transactionRow(),
+              entities_subcategory_id: capturedCategory,
+              memo: 'Phase Four Categorized',
+              amount: -4560,
+              cleared: 'Cleared',
+            },
+            be_subtransactions: null,
+          },
+        ],
+      },
+      snapshot,
+    );
+    expect(categorized).toMatchObject({
+      mutationDomain: 'transaction',
+      mutation: {
+        kind: 'create-with-payee',
+        payee: {
+          id: 'payee-4',
+          autoFillCategoryId: capturedCategory,
+        },
+        transaction: {
+          categoryId: capturedCategory,
+          amount: -4560,
+          memo: 'Phase Four Categorized',
+          cleared: 'Cleared',
+        },
+      },
+      expectedDeviceAdvance: 3,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(categorized?.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({
+        id: 'transaction-1',
+        entities_subcategory_id: capturedCategory,
+        amount: -4560,
+        cash_amount: -4560,
+      }),
+    ]);
+
+    const categorizedSnapshot = {
+      ...snapshot,
+      entities: [...snapshot.entities, ...(categorized?.changes ?? [])],
+    };
+    const categorizedTransaction = categorizedSnapshot.entities.find(
+      entity => entity.entityId === 'transaction-1',
+    )!;
+    const edited = parseStockOrdinaryMutation(
+      {
+        be_transaction_groups: [
+          {
+            id: 'transaction-1',
+            be_transaction: {
+              ...projectStockEntity(categorizedTransaction),
+              amount: -5670,
+              cash_amount: -4560,
+              memo: 'Phase Four Edited',
+            },
+            be_subtransactions: null,
+          },
+        ],
+      },
+      categorizedSnapshot,
+    );
+    expect(edited).toMatchObject({
+      mutationDomain: 'transaction',
+      mutation: {
+        kind: 'edit',
+        expected: { amount: -4560, memo: 'Phase Four Categorized' },
+        transaction: { amount: -5670, memo: 'Phase Four Edited' },
+      },
+      expectedDeviceAdvance: 2,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(edited?.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({ amount: -5670, cash_amount: -5670 }),
+    ]);
+    expect(
+      parseStockOrdinaryMutation(
+        {
+          be_transaction_groups: [
+            {
+              id: 'transaction-1',
+              be_transaction: {
+                ...projectStockEntity(categorizedTransaction),
+                amount: -5670,
+                cash_amount: 0,
+                memo: 'Phase Four Edited',
+              },
+              be_subtransactions: null,
+            },
+          ],
+        },
+        categorizedSnapshot,
+      ),
+    ).toBeNull();
     expect(
       parseStockOrdinaryMutation(
         {
           be_payees: [
             {
               ...payeeRow('Phase Four Payee'),
-              auto_fill_subcategory_id: capturedButUnadmittedCategory,
+              auto_fill_subcategory_id: null,
             },
           ],
           be_transaction_groups: [
@@ -335,9 +437,7 @@ describe('stock ordinary transaction and payee boundary', () => {
               id: 'transaction-1',
               be_transaction: {
                 ...transactionRow(),
-                entities_subcategory_id: capturedButUnadmittedCategory,
-                memo: 'Phase Four Categorized',
-                amount: -4560,
+                entities_subcategory_id: capturedCategory,
               },
               be_subtransactions: null,
             },

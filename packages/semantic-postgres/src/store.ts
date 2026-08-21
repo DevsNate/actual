@@ -1,6 +1,7 @@
 import type {
   BudgetDeviceAcknowledgement,
   BudgetMembership,
+  CanonicalOrdinaryTransaction,
   CatalogCommand,
   CatalogCommandResult,
   CatalogSnapshot,
@@ -20,7 +21,6 @@ import type {
   CreateBudgetCommand,
   CreateBudgetResult,
   PrincipalId,
-  CanonicalOrdinaryTransaction,
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
 
@@ -1011,6 +1011,62 @@ async function writeCanonicalOrdinaryTransactionMutation(
       );
     }
     await insertCanonicalOrdinaryTransaction(client, mutation.transaction);
+    return;
+  }
+
+  if (mutation.kind === 'edit') {
+    const { expected, transaction } = mutation;
+    if (
+      expected.id !== transaction.id ||
+      expected.budgetId !== transaction.budgetId ||
+      expected.accountId !== transaction.accountId ||
+      expected.payeeId !== transaction.payeeId ||
+      expected.categoryId !== transaction.categoryId ||
+      expected.date !== transaction.date ||
+      expected.cleared !== transaction.cleared ||
+      expected.accepted !== transaction.accepted ||
+      expected.checkNumber !== transaction.checkNumber ||
+      expected.flag !== transaction.flag
+    ) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Ordinary transaction edit identities do not match',
+      );
+    }
+    const edited = await client.query(
+      `UPDATE semantic_transactions
+       SET amount_milliunits = $13, memo = $14, updated_at = now()
+       WHERE budget_id = $1 AND transaction_id = $2
+         AND account_id = $3 AND payee_id IS NOT DISTINCT FROM $4
+         AND category_id IS NOT DISTINCT FROM $5
+         AND transaction_date = $6 AND amount_milliunits = $7
+         AND memo IS NOT DISTINCT FROM $8 AND cleared_state = $9
+         AND is_approved = $10 AND check_number IS NOT DISTINCT FROM $11
+         AND flag IS NOT DISTINCT FROM $12
+         AND transaction_kind = 'ordinary' AND is_tombstone = false`,
+      [
+        expected.budgetId,
+        expected.id,
+        expected.accountId,
+        expected.payeeId,
+        expected.categoryId,
+        expected.date,
+        expected.amount,
+        expected.memo,
+        expected.cleared,
+        expected.accepted,
+        expected.checkNumber,
+        expected.flag,
+        transaction.amount,
+        transaction.memo,
+      ],
+    );
+    if (edited.rowCount !== 1) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Ordinary transaction edit did not match one exact live transaction',
+      );
+    }
     return;
   }
 

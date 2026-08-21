@@ -968,6 +968,37 @@ integrationTest('PostgresSemanticStore integration', () => {
       serverKnowledge: 4,
     });
 
+    const originalTransaction = create.mutation.transaction;
+    await store.commitOrdinaryTransactionMutation({
+      mutation: {
+        kind: 'edit',
+        expected: originalTransaction,
+        transaction: {
+          ...originalTransaction,
+          amount: -5670,
+          memo: 'Phase Four Edited',
+        },
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'ordinary-edit-change',
+        startingDeviceKnowledge: 2,
+        endingDeviceKnowledge: 4,
+        expectedServerKnowledge: 4,
+        serverKnowledgeAdvance: 2,
+        idempotencyKey: 'ordinary-edit-request',
+        payloadDigest: '8'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_transactions',
+            entityId: 'ordinary-transaction',
+            isTombstone: false,
+            payload: { amount: -5670, memo: 'Phase Four Edited' },
+          },
+        ],
+      },
+    });
+
     await expect(
       store.commitOrdinaryPayeeMutation({
         mutation: {
@@ -978,9 +1009,9 @@ integrationTest('PostgresSemanticStore integration', () => {
         delivery: {
           ...create.delivery,
           changeSetId: 'ordinary-live-payee-delete-change',
-          startingDeviceKnowledge: 2,
-          endingDeviceKnowledge: 3,
-          expectedServerKnowledge: 4,
+          startingDeviceKnowledge: 4,
+          endingDeviceKnowledge: 5,
+          expectedServerKnowledge: 6,
           serverKnowledgeAdvance: 1,
           idempotencyKey: 'ordinary-live-payee-delete-request',
           payloadDigest: '6'.repeat(64),
@@ -998,9 +1029,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       delivery: {
         ...create.delivery,
         changeSetId: 'ordinary-delete-change',
-        startingDeviceKnowledge: 2,
-        endingDeviceKnowledge: 3,
-        expectedServerKnowledge: 4,
+        startingDeviceKnowledge: 4,
+        endingDeviceKnowledge: 5,
+        expectedServerKnowledge: 6,
         idempotencyKey: 'ordinary-delete-request',
         payloadDigest: '3'.repeat(64),
         changes: [
@@ -1024,9 +1055,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       delivery: {
         ...create.delivery,
         changeSetId: 'ordinary-payee-rename-change',
-        startingDeviceKnowledge: 3,
-        endingDeviceKnowledge: 4,
-        expectedServerKnowledge: 6,
+        startingDeviceKnowledge: 5,
+        endingDeviceKnowledge: 6,
+        expectedServerKnowledge: 8,
         serverKnowledgeAdvance: 1,
         idempotencyKey: 'ordinary-payee-rename-request',
         payloadDigest: '4'.repeat(64),
@@ -1045,9 +1076,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       delivery: {
         ...create.delivery,
         changeSetId: 'ordinary-payee-delete-change',
-        startingDeviceKnowledge: 4,
-        endingDeviceKnowledge: 5,
-        expectedServerKnowledge: 7,
+        startingDeviceKnowledge: 6,
+        endingDeviceKnowledge: 7,
+        expectedServerKnowledge: 9,
         serverKnowledgeAdvance: 1,
         idempotencyKey: 'ordinary-payee-delete-request',
         payloadDigest: '5'.repeat(64),
@@ -1082,9 +1113,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       delivery: {
         ...create.delivery,
         changeSetId: 'ordinary-no-payee-create-change',
-        startingDeviceKnowledge: 5,
-        endingDeviceKnowledge: 6,
-        expectedServerKnowledge: 8,
+        startingDeviceKnowledge: 7,
+        endingDeviceKnowledge: 8,
+        expectedServerKnowledge: 10,
         serverKnowledgeAdvance: 1,
         idempotencyKey: 'ordinary-no-payee-create-request',
         payloadDigest: '7'.repeat(64),
@@ -1125,12 +1156,12 @@ integrationTest('PostgresSemanticStore integration', () => {
     expect(terminal.rows[0]).toEqual({
       name: 'Payee 5',
       payee_tombstone: true,
-      amount: '-1000',
-      memo: 'Payee Test 1',
+      amount: '-5670',
+      memo: 'Phase Four Edited',
       cleared_state: 'Uncleared',
       transaction_tombstone: true,
-      server_knowledge: '9',
-      device_knowledge: '6',
+      server_knowledge: '11',
+      device_knowledge: '8',
       create_receipts: '1',
       no_payee_amount: '-1230',
       no_payee_id: null,

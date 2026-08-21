@@ -1,8 +1,11 @@
 # Canonical ordinary transaction and payee boundary
 
-PAYEE-001 admits one narrow schema-44 lifecycle: a new ordinary payee created
+PAYEE-001 and ORDINARY-001 admit two related schema-44 lifecycles: a new ordinary payee created
 atomically with its first ordinary transaction, deletion of that transaction,
 rename of the retained payee, and deletion of the payee once unused.
+ORDINARY-001 adds a categorized create whose payee autofill category matches
+the transaction category, an exact amount-and-memo edit, deletion, stable
+replay, and terminal stock-iOS readback.
 
 ## Boundary
 
@@ -23,6 +26,10 @@ explicit evidence-backed server effect, not a generic amount rule.
 
 - payee plus transaction creation advances device knowledge by two and server
   knowledge by two;
+- categorized payee plus transaction creation advances device knowledge by
+  three and server knowledge by two;
+- the captured amount-and-memo edit advances both device and server knowledge
+  by two;
 - transaction deletion advances device knowledge by one and server knowledge
   by two;
 - payee rename and unused-payee deletion each advance both by one; and
@@ -32,9 +39,11 @@ explicit evidence-backed server effect, not a generic amount rule.
 ## Fail-closed limits
 
 - Creation requires exactly one new ordinary payee and one unsplit,
-  unscheduled, non-transfer transaction using a known live account.
-- The only admitted create fixture is uncategorized. Categorized ordinary
-  creation remains gated until its complete request/response chain is admitted.
+  unscheduled, non-transfer transaction using a known live account. A category
+  must be live and must match the new payee's captured autofill category.
+- Editing is limited to ORDINARY-001's exact amount-and-memo change. The
+  request-side cash amount must equal the prior normalized amount; the response
+  normalizes it to the new amount.
 - Transaction deletion requires the complete current transaction row plus its
   tombstone bit.
 - Payee rename may change only the name.
@@ -42,8 +51,8 @@ explicit evidence-backed server effect, not a generic amount rule.
   reference.
 - Standalone payee creation, payee merge, referenced-payee deletion, splits,
   transfers, credit-card payments, schedules, imports, matching, and general
-  transaction editing are separate domains and remain unsupported.
+  other transaction edits are separate domains and remain unsupported.
 
-These limits keep PAYEE-001 from becoming an inferred general transaction
+These limits keep PAYEE-001/ORDINARY-001 from becoming an inferred general transaction
 engine. Later slices should extend the canonical aggregate and remove the
 corresponding rejection only when their evidence is complete.

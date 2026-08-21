@@ -42,6 +42,11 @@ export type CanonicalOrdinaryTransactionMutation =
       transaction: CanonicalOrdinaryTransaction;
     }
   | {
+      kind: 'edit';
+      expected: CanonicalOrdinaryTransaction;
+      transaction: CanonicalOrdinaryTransaction;
+    }
+  | {
       kind: 'delete';
       budgetId: string;
       transactionId: string;

@@ -87,6 +87,7 @@ export function parseStockOrdinaryMutation(
   return (
     parseCreateWithoutPayee(changedEntities, snapshot) ??
     parseCreateWithPayee(changedEntities, snapshot) ??
+    parseTransactionEdit(changedEntities, snapshot) ??
     parseTransactionDelete(changedEntities, snapshot) ??
     parsePayeeMutation(changedEntities, snapshot)
   );
@@ -155,8 +156,12 @@ function parseCreateWithPayee(
     !transactionRow ||
     group.id !== transactionRow.id ||
     group.be_subtransactions !== null ||
-    !isNewOrdinaryPayee(payeeRow) ||
-    !isNewOrdinaryTransaction(transactionRow, String(payeeRow.id)) ||
+    !isNewOrdinaryPayee(payeeRow, transactionRow.entities_subcategory_id) ||
+    !isNewOrdinaryTransaction(
+      transactionRow,
+      String(payeeRow.id),
+      transactionRow.entities_subcategory_id,
+    ) ||
     snapshot.entities.some(entity =>
       [payeeRow.id, transactionRow.id].includes(entity.entityId),
     ) ||
@@ -164,7 +169,8 @@ function parseCreateWithPayee(
       snapshot,
       'be_accounts',
       String(transactionRow.entities_account_id),
-    )
+    ) ||
+    !isLiveOptionalCategory(snapshot, transactionRow.entities_subcategory_id)
   ) {
     return null;
   }
@@ -210,6 +216,68 @@ function parseCreateWithPayee(
       ...empty,
       ...calculationDelta(snapshot, augmented),
       be_transactions: [projectStockEntity(transaction)],
+    },
+    expectedDeviceAdvance:
+      transactionRow.entities_subcategory_id === null ? 2 : 3,
+    serverKnowledgeAdvance: 2,
+  };
+}
+
+function parseTransactionEdit(
+  changedEntities: Record<string, unknown>,
+  snapshot: BudgetSnapshot,
+): StockOrdinaryMutation | null {
+  if (!hasExactKeys(changedEntities, ['be_transaction_groups'])) return null;
+  const group = exactlyOneRecord(changedEntities.be_transaction_groups);
+  const row =
+    group && isRecord(group.be_transaction) ? group.be_transaction : null;
+  if (
+    !group ||
+    !row ||
+    group.id !== row.id ||
+    group.be_subtransactions !== null ||
+    typeof row.id !== 'string'
+  ) {
+    return null;
+  }
+  const current = liveEntity(snapshot, 'be_transactions', row.id);
+  if (!current || !isCanonicalOrdinaryEntity(current)) return null;
+  const expected = projectStockEntity(current);
+  const changed = changedKeys(expected, row);
+  if (
+    !isDeepStrictEqual(changed.sort(), ['amount', 'memo']) ||
+    row.cash_amount !== expected.amount ||
+    !Number.isSafeInteger(row.amount) ||
+    row.amount === 0 ||
+    (row.memo !== null && typeof row.memo !== 'string') ||
+    !isDeepStrictEqual(row, {
+      ...expected,
+      amount: row.amount,
+      cash_amount: expected.amount,
+      memo: row.memo,
+    })
+  ) {
+    return null;
+  }
+  const edited = transactionEntity(snapshot, row);
+  const augmented = {
+    ...snapshot,
+    entities: snapshot.entities.map(entity =>
+      entity === current ? edited : entity,
+    ),
+  };
+  return {
+    mutationDomain: 'transaction',
+    mutation: {
+      kind: 'edit',
+      expected: canonicalTransaction(snapshot.budgetId, current),
+      transaction: canonicalTransaction(snapshot.budgetId, edited),
+    },
+    changes: [edited],
+    changedEntities: {
+      ...buildStockBudgetEmptyDelta(snapshot),
+      ...calculationDelta(snapshot, augmented),
+      be_transactions: [projectStockEntity(edited)],
     },
     expectedDeviceAdvance: 2,
     serverKnowledgeAdvance: 2,
@@ -415,7 +483,10 @@ function canonicalTransaction(budgetId: string, entity: BudgetEntity) {
   };
 }
 
-function isNewOrdinaryPayee(row: Readonly<Record<string, unknown>>): boolean {
+function isNewOrdinaryPayee(
+  row: Readonly<Record<string, unknown>>,
+  categoryId: unknown,
+): boolean {
   return (
     hasExactKeys(row, PAYEE_KEYS) &&
     typeof row.id === 'string' &&
@@ -423,7 +494,7 @@ function isNewOrdinaryPayee(row: Readonly<Record<string, unknown>>): boolean {
     row.is_tombstone === false &&
     row.entities_account_id === null &&
     row.enabled === true &&
-    row.auto_fill_subcategory_id === null &&
+    row.auto_fill_subcategory_id === categoryId &&
     row.auto_fill_user_defined_subcategory_id === null &&
     row.auto_fill_memo === null &&
     row.auto_fill_amount === 0 &&
@@ -440,6 +511,7 @@ function isNewOrdinaryPayee(row: Readonly<Record<string, unknown>>): boolean {
 function isNewOrdinaryTransaction(
   row: Readonly<Record<string, unknown>>,
   payeeId: string | null,
+  categoryId: unknown = null,
 ): boolean {
   return (
     hasExactKeys(row, TRANSACTION_KEYS) &&
@@ -448,7 +520,7 @@ function isNewOrdinaryTransaction(
     row.is_tombstone === false &&
     typeof row.entities_account_id === 'string' &&
     row.entities_payee_id === payeeId &&
-    row.entities_subcategory_id === null &&
+    row.entities_subcategory_id === categoryId &&
     row.entities_scheduled_transaction_id === null &&
     requireDateOrNull(row.date) !== null &&
     row.date_entered_from_schedule === null &&
@@ -474,6 +546,17 @@ function isNewOrdinaryTransaction(
     row.provider_cleansed_payee === null &&
     row.source === null &&
     row.debt_transaction_type === null
+  );
+}
+
+function isLiveOptionalCategory(
+  snapshot: BudgetSnapshot,
+  categoryId: unknown,
+): boolean {
+  return (
+    categoryId === null ||
+    (typeof categoryId === 'string' &&
+      Boolean(liveEntity(snapshot, 'be_subcategories', categoryId)))
   );
 }
 

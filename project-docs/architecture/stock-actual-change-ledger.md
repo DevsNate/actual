@@ -641,14 +641,18 @@ Copy this block for a new architectural delta:
   first unsplit transaction in one schema-44 request. The response normalizes
   `cash_amount` from zero to the transaction amount. Exact transaction deletion
   leaves the payee live; the retained payee can then be renamed and deleted
-  once unused.
+  once unused. ORDINARY-001 creates a categorized transaction with matching
+  payee autofill, edits amount and memo while sending the prior normalized cash
+  amount, deletes the complete row, replays stably, and reaches stock iOS as
+  exact terminal tombstones.
 - **Fork behavior:** A strict stock adapter emits typed transaction/payee
   commands. Canonical rows, compatibility projections, calculation changes,
   knowledge, and exact replay receipts commit atomically. Live-reference payee
   deletion fails closed.
-- **Boundary:** Only the uncategorized, unscheduled, non-transfer PAYEE-001
-  shape is admitted. Standalone creation, merge, categorized edits, splits,
-  transfers, payments, schedules, imports, and matching remain gated.
+- **Boundary:** The uncategorized PAYEE-001 shape and exact categorized
+  ORDINARY-001 create/amount-and-memo-edit/delete lifecycle are admitted.
+  Standalone creation, merge, other edit shapes, splits, transfers, payments,
+  schedules, imports, and matching remain gated.
 - **Verification:** Focused positive and adversarial parser tests, strict
   TypeScript checks, all local package suites, clean disposable PostgreSQL
   create/replay/delete/rename/delete readback, and authenticated runtime
