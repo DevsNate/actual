@@ -7,7 +7,7 @@ import type {
   CanonicalCreditCardPaymentMutation,
 } from '@actual-app/semantic-core';
 
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockTransferMutation } from './stock-transfer';
 
 export type StockCreditCardPaymentMutation = {
@@ -53,7 +53,7 @@ export function parseStockCreditCardPaymentMutation(
     const requested = accounts[0];
     if (!requested || typeof requested !== 'object') return null;
     const expected = {
-      ...projectStockEntity(creditAccount),
+      ...projectStockRequestEntity(creditAccount),
       last_payment_payee_id: creditPayeeId,
     };
     if (!isDeepStrictEqual(requested, expected)) return null;

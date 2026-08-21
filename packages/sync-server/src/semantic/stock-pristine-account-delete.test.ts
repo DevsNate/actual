@@ -1,7 +1,7 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockPristineAccountDelete } from './stock-pristine-account-delete';
 
 describe('stock pristine account delete', () => {
@@ -212,7 +212,7 @@ function addAccount(
 }
 
 function tombstone(entity: BudgetEntity): Readonly<Record<string, unknown>> {
-  return { ...projectStockEntity(entity), is_tombstone: true };
+  return { ...projectStockRequestEntity(entity), is_tombstone: true };
 }
 
 function find(

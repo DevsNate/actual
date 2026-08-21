@@ -10,7 +10,10 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import {
+  projectStockRequestEntity,
+  projectStockResponseEntity,
+} from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 const PARENT_KEYS = [
@@ -128,7 +131,7 @@ function parseCreate(
   }
   const currentPayee = live(snapshot, 'be_payees', payeeRow.id);
   if (!currentPayee) return null;
-  const expectedPayee = projectStockEntity(currentPayee);
+  const expectedPayee = projectStockRequestEntity(currentPayee);
   const payeeDiff = changedKeys(expectedPayee, payeeRow);
   if (
     !hasSameKeys(expectedPayee, payeeRow) ||
@@ -175,7 +178,7 @@ function parseExisting(
   snapshot: BudgetSnapshot,
 ): StockScheduledTransactionMutation | null {
   if (current.isTombstone || !validParentRow(row, snapshot)) return null;
-  const expected = projectStockEntity(current);
+  const expected = projectStockRequestEntity(current);
   const diff = changedKeys(expected, row);
 
   if (
@@ -433,9 +436,11 @@ function responseDelta(
   return {
     ...buildStockBudgetEmptyDelta(before),
     ...calculationDelta(before, after),
-    be_scheduled_transactions: parent ? [projectStockEntity(parent)] : [],
+    be_scheduled_transactions: parent
+      ? [projectStockResponseEntity(parent)]
+      : [],
     ...(occurrence
-      ? { be_transactions: [projectStockEntity(occurrence)] }
+      ? { be_transactions: [projectStockResponseEntity(occurrence)] }
       : {}),
   };
 }

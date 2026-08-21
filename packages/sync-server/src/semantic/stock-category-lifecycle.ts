@@ -9,7 +9,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 export type StockCategoryMutation = {
@@ -138,7 +138,7 @@ function parseCreate(
     changes: [category, current, next],
     changedEntities: {
       ...empty,
-      be_monthly_subcategory_budgets: [projectStockEntity(next)],
+      be_monthly_subcategory_budgets: [projectStockRequestEntity(next)],
       be_monthly_subcategory_budget_calculations: calculationRows,
     },
     expectedDeviceAdvance: 2,
@@ -210,7 +210,7 @@ function parseUpdateOrDelete(
       changes: [categoryTombstone, ...monthTombstones],
       changedEntities: {
         ...buildStockBudgetEmptyDelta(snapshot),
-        be_monthly_subcategory_budgets: monthTombstones.map(projectStockEntity),
+        be_monthly_subcategory_budgets: monthTombstones.map(projectStockRequestEntity),
         be_monthly_subcategory_budget_calculations: calculations,
       },
       expectedDeviceAdvance: 3,

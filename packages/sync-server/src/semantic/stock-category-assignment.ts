@@ -9,7 +9,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 
 export type StockCategoryAssignment = Readonly<{
   assignment: CanonicalCategoryAssignment;
@@ -135,7 +135,7 @@ export function parseStockCategoryAssignmentReplay(
   );
   if (
     !movement ||
-    !isDeepStrictEqual(projectStockEntity(existing), {
+    !isDeepStrictEqual(projectStockRequestEntity(existing), {
       ...rows.movement,
       move_started_at: normalizeClientTimestamp(
         String(rows.movement.move_started_at),
@@ -191,8 +191,8 @@ function assignmentResponse(
   }
   return {
     ...buildStockBudgetEmptyDelta(snapshot),
-    be_money_movements: [projectStockEntity(movement)],
-    be_monthly_subcategory_budgets: [projectStockEntity(monthly)],
+    be_money_movements: [projectStockRequestEntity(movement)],
+    be_monthly_subcategory_budgets: [projectStockRequestEntity(monthly)],
     be_monthly_budget_calculations: calculations.be_monthly_budget_calculations,
     be_monthly_subcategory_budget_calculations: categoryRows,
   };

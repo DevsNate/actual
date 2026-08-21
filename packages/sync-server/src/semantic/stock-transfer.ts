@@ -10,7 +10,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 import { normalizeCapturedReciprocalTransferAmounts } from './stock-transaction-normalization';
 
@@ -114,7 +114,7 @@ function parseCreate(
     changedEntities: {
       ...buildStockBudgetEmptyDelta(snapshot),
       ...calculationDelta(snapshot, after),
-      be_transactions: entities.map(projectStockEntity),
+      be_transactions: entities.map(projectStockRequestEntity),
     },
     expectedDeviceAdvance: 8,
     serverKnowledgeAdvance: 2,
@@ -169,8 +169,8 @@ function parseExisting(
   const changed = entities.filter(
     (item, index) =>
       !isDeepStrictEqual(
-        projectStockEntity(item),
-        projectStockEntity(current[index]),
+        projectStockRequestEntity(item),
+        projectStockRequestEntity(current[index]),
       ),
   );
   const isAmountUpdate = sameExcept(current, entities, [
@@ -191,7 +191,7 @@ function parseExisting(
     changedEntities: {
       ...buildStockBudgetEmptyDelta(snapshot),
       ...calculationDelta(snapshot, replace(snapshot, entities)),
-      be_transactions: entities.map(projectStockEntity),
+      be_transactions: entities.map(projectStockRequestEntity),
     },
     expectedDeviceAdvance: 2,
     serverKnowledgeAdvance: isAmountUpdate ? 2 : 1,
@@ -278,7 +278,7 @@ function validDeletion(
   current: Pair<BudgetEntity>,
 ): boolean {
   return rows.every((row, index) => {
-    const expected = projectStockEntity(current[index]);
+    const expected = projectStockRequestEntity(current[index]);
     return Object.entries(expected).every(([key, value]) => {
       if (key === 'is_tombstone') return row[key] === true;
       if (

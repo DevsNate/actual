@@ -2,7 +2,7 @@ import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { stockAccountBudgetEntityAdapter } from './account-budget-entity-adapter';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockOrdinaryMutation } from './stock-ordinary-transaction';
 
 function fixture() {
@@ -217,7 +217,7 @@ describe('stock ordinary transaction and payee boundary', () => {
           {
             id: transaction.entityId,
             be_transaction: {
-              ...projectStockEntity(transaction),
+              ...projectStockRequestEntity(transaction),
               is_tombstone: true,
             },
             be_subtransactions: null,
@@ -244,7 +244,7 @@ describe('stock ordinary transaction and payee boundary', () => {
       entity => entity.entityId === 'payee-4',
     )!;
     const renamed = parseStockOrdinaryMutation(
-      { be_payees: [{ ...projectStockEntity(payee), name: 'Payee 5' }] },
+      { be_payees: [{ ...projectStockRequestEntity(payee), name: 'Payee 5' }] },
       terminal,
     )!;
     expect(renamed.mutation).toMatchObject({ kind: 'rename', name: 'Payee 5' });
@@ -258,7 +258,7 @@ describe('stock ordinary transaction and payee boundary', () => {
     const tombstoned = parseStockOrdinaryMutation(
       {
         be_payees: [
-          { ...projectStockEntity(renamedPayee), is_tombstone: true },
+          { ...projectStockRequestEntity(renamedPayee), is_tombstone: true },
         ],
       },
       renamedSnapshot,
@@ -380,7 +380,7 @@ describe('stock ordinary transaction and payee boundary', () => {
           {
             id: 'transaction-1',
             be_transaction: {
-              ...projectStockEntity(categorizedTransaction),
+              ...projectStockRequestEntity(categorizedTransaction),
               amount: -5670,
               cash_amount: -4560,
               memo: 'Phase Four Edited',
@@ -411,7 +411,7 @@ describe('stock ordinary transaction and payee boundary', () => {
             {
               id: 'transaction-1',
               be_transaction: {
-                ...projectStockEntity(categorizedTransaction),
+                ...projectStockRequestEntity(categorizedTransaction),
                 amount: -5670,
                 cash_amount: 0,
                 memo: 'Phase Four Edited',
@@ -488,7 +488,7 @@ describe('stock ordinary transaction and payee boundary', () => {
     expect(
       parseStockOrdinaryMutation(
         {
-          be_payees: [{ ...projectStockEntity(payee), is_tombstone: true }],
+          be_payees: [{ ...projectStockRequestEntity(payee), is_tombstone: true }],
         },
         live,
       ),

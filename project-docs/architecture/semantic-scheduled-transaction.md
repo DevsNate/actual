@@ -18,9 +18,12 @@ The stock schema-44 adapter accepts only the captured schedule forms:
 - tombstone only the parent on deletion;
 - replay an identical request from the stored receipt without another write.
 
-The stock wire field `upcoming_instances` remains the captured PostgreSQL array
-literal string (`{YYYY-MM-DD}`) at the adapter boundary. The canonical model
-stores one typed date and PostgreSQL persists it as a one-element `date[]`.
+The stock request field `upcoming_instances` remains the captured PostgreSQL
+array literal string (`{YYYY-MM-DD}`). The stock server response is a JSON date
+array (`["YYYY-MM-DD"]`), which the unchanged Web deserializer iterates before
+constructing its date objects. The canonical model stores one typed date and
+PostgreSQL persists it as a one-element `date[]`; request and response
+projections are deliberately separate.
 
 ## Canonical storage
 

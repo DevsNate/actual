@@ -2,7 +2,7 @@ import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { stockAccountBudgetEntityAdapter } from './account-budget-entity-adapter';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockTransferMutation } from './stock-transfer';
 
 function fixture() {
@@ -173,7 +173,7 @@ describe('stock ordinary transfer boundary', () => {
         .map(item => ({
           id: item.entityId,
           be_transaction: {
-            ...projectStockEntity(item),
+            ...projectStockRequestEntity(item),
             is_tombstone: true,
             entities_payee_id: null,
             transfer_account_id: null,

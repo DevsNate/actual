@@ -1,6 +1,9 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-import { projectStockEntity } from './stock-budget-projection';
+import {
+  projectStockRequestEntity,
+  projectStockResponseEntity,
+} from './stock-budget-projection';
 import { parseStockScheduledTransactionMutation } from './stock-scheduled-transaction';
 
 vi.mock('./stock-budget-calculation-projection', () => ({
@@ -117,6 +120,29 @@ function occurrence() {
 }
 
 describe('stock scheduled transaction boundary', () => {
+  test('keeps request and response schedule date encodings distinct', () => {
+    const scheduled = entity('be_scheduled_transactions', 'schedule-1', {
+      budgetVersionId: 'version-1',
+      accountId: 'account-1',
+      payeeId: 'payee-1',
+      subCategoryId: 'category-1',
+      date: '2026-08-17',
+      frequency: 'Monthly',
+      amount: -10000,
+      memo: 'Schedule Test',
+      flag: null,
+      transferAccountId: null,
+      upcomingInstances: ['2026-08-17'],
+      debtTransactionType: null,
+    });
+    expect(projectStockRequestEntity(scheduled).upcoming_instances).toBe(
+      '{2026-08-17}',
+    );
+    expect(projectStockResponseEntity(scheduled).upcoming_instances).toEqual([
+      '2026-08-17',
+    ]);
+  });
+
   test('admits the captured create and payee autofill side effect', () => {
     const snapshot = fixture();
     const payee = snapshot.entities.find(item => item.entityId === 'payee-1')!;
@@ -124,7 +150,7 @@ describe('stock scheduled transaction boundary', () => {
       {
         be_payees: [
           {
-            ...projectStockEntity(payee),
+            ...projectStockRequestEntity(payee),
             auto_fill_subcategory_id: 'category-1',
           },
         ],
@@ -146,7 +172,7 @@ describe('stock scheduled transaction boundary', () => {
       {
         be_payees: [
           {
-            ...projectStockEntity(payee),
+            ...projectStockRequestEntity(payee),
             auto_fill_subcategory_id: 'category-1',
           },
         ],

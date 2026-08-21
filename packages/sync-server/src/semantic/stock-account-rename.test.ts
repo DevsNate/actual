@@ -1,7 +1,7 @@
 import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
 import { parseStockAccountRenameDelta } from './stock-account-rename';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 
 describe('stock account rename delta', () => {
   test('accepts only the captured complete account plus bound-payee rename', () => {
@@ -10,11 +10,11 @@ describe('stock account rename delta', () => {
     const payee = snapshot.entities[1];
     const changedEntities = {
       be_accounts: [
-        { ...projectStockEntity(account), account_name: 'Account Renamed 3' },
+        { ...projectStockRequestEntity(account), account_name: 'Account Renamed 3' },
       ],
       be_payees: [
         {
-          ...projectStockEntity(payee),
+          ...projectStockRequestEntity(payee),
           name: 'Transfer : Account Renamed 3',
         },
       ],

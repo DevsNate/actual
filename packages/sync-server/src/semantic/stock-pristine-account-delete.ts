@@ -6,7 +6,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 export type StockPristineAccountDelete = {
@@ -95,15 +95,15 @@ export function parseStockPristineAccountDelete(
   }
   if (
     !sameRecord(accountRow, {
-      ...projectStockEntity(account),
+      ...projectStockRequestEntity(account),
       is_tombstone: true,
     }) ||
     !sameRecord(payeeRow, {
-      ...projectStockEntity(payee),
+      ...projectStockRequestEntity(payee),
       is_tombstone: true,
     }) ||
     !sameRecord(transactionRow, {
-      ...projectStockEntity(transaction),
+      ...projectStockRequestEntity(transaction),
       is_tombstone: true,
     })
   ) {

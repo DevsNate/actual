@@ -3,7 +3,7 @@ import type {
   BudgetSnapshot,
 } from '@actual-app/semantic-core';
 
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 export function parseStockAccountRenameDelta(
@@ -62,11 +62,11 @@ export function parseStockAccountRenameDelta(
     return null;
   }
   const expectedAccount = {
-    ...projectStockEntity(account),
+    ...projectStockRequestEntity(account),
     account_name: newName,
   };
   const expectedPayee = {
-    ...projectStockEntity(payee),
+    ...projectStockRequestEntity(payee),
     name: `Transfer : ${newName}`,
   };
   if (

@@ -1,6 +1,6 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockCreditCardPaymentMutation } from './stock-credit-card-payment';
 import { parseStockTransferMutation } from './stock-transfer';
 
@@ -130,7 +130,7 @@ describe('stock credit-card payment boundary', () => {
       {
         be_accounts: [
           {
-            ...projectStockEntity(credit),
+            ...projectStockRequestEntity(credit),
             last_payment_payee_id: 'payee-to-checking',
           },
         ],
@@ -176,7 +176,7 @@ describe('stock credit-card payment boundary', () => {
         {
           be_accounts: [
             {
-              ...projectStockEntity(credit),
+              ...projectStockRequestEntity(credit),
               account_name: 'changed-too',
               last_payment_payee_id: 'payee-to-checking',
             },

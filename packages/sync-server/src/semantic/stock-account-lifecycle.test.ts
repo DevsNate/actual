@@ -2,7 +2,7 @@ import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { parseStockAccountLifecycleDelta } from './stock-account-lifecycle';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 
 describe('stock Checking account close and reopen', () => {
   test('admits the captured adjustment close and account-only reopen', () => {
@@ -47,7 +47,7 @@ describe('stock Checking account close and reopen', () => {
     };
     const close = parseStockAccountLifecycleDelta(
       {
-        be_accounts: [{ ...projectStockEntity(account), is_closed: true }],
+        be_accounts: [{ ...projectStockRequestEntity(account), is_closed: true }],
         be_transaction_groups: [
           {
             id: adjustment.id,
@@ -88,7 +88,7 @@ describe('stock Checking account close and reopen', () => {
     expect(
       parseStockAccountLifecycleDelta(
         {
-          be_accounts: [{ ...projectStockEntity(account), is_closed: true }],
+          be_accounts: [{ ...projectStockRequestEntity(account), is_closed: true }],
           be_transaction_groups: [
             {
               id: adjustment.id,
@@ -103,7 +103,7 @@ describe('stock Checking account close and reopen', () => {
     expect(
       parseStockAccountLifecycleDelta(
         {
-          be_accounts: [{ ...projectStockEntity(account), is_closed: true }],
+          be_accounts: [{ ...projectStockRequestEntity(account), is_closed: true }],
           be_transaction_groups: [
             {
               id: adjustment.id,
@@ -121,7 +121,7 @@ describe('stock Checking account close and reopen', () => {
     const reopen = parseStockAccountLifecycleDelta(
       {
         be_accounts: [
-          { ...projectStockEntity(closedAccount), is_closed: false },
+          { ...projectStockRequestEntity(closedAccount), is_closed: false },
         ],
       },
       closed,

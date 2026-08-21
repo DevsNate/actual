@@ -7,7 +7,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 
 const MANUAL_ADJUSTMENT_KEYS = [
@@ -91,7 +91,7 @@ function parseReopen(
     account.isTombstone ||
     account.payload.accountType !== 'Checking' ||
     account.payload.isClosed !== true ||
-    !sameRecord(row, { ...projectStockEntity(account), is_closed: false })
+    !sameRecord(row, { ...projectStockRequestEntity(account), is_closed: false })
   ) {
     return null;
   }
@@ -151,7 +151,7 @@ function parseClose(
         item.entityKind === 'be_transactions' && item.entityId === group.id,
     ) ||
     !sameRecord(accountRow, {
-      ...projectStockEntity(account),
+      ...projectStockRequestEntity(account),
       is_closed: true,
     }) ||
     !hasExactKeys(row, MANUAL_ADJUSTMENT_KEYS) ||

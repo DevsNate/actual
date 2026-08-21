@@ -25,7 +25,7 @@ import {
   buildStockBudgetEmptyDelta,
   buildStockBudgetReadDelta,
 } from './stock-budget-bootstrap';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import {
   parseStockCategoryAssignment,
   parseStockCategoryAssignmentReplay,
@@ -651,7 +651,7 @@ function parseBudgetRenameConvergence(
     current &&
     isRecord(outgoing) &&
     outgoing.budget_name === snapshot.name &&
-    isDeepStrictEqual(outgoing, projectStockEntity(current)),
+    isDeepStrictEqual(outgoing, projectStockRequestEntity(current)),
   );
 }
 

@@ -3,7 +3,7 @@ import type { BudgetSnapshot } from '@actual-app/semantic-core';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
 import {
   projectStockBudgetSource,
-  projectStockEntity,
+  projectStockResponseEntity,
 } from './stock-budget-projection';
 
 const bootstrapArrayTables = [
@@ -165,7 +165,7 @@ export function buildStockBudgetReadDelta(
 
   for (const entity of changed) {
     if (entity.entityKind === 'be_budget') {
-      result.be_budget = projectStockEntity(entity);
+      result.be_budget = projectStockResponseEntity(entity);
       continue;
     }
     if (!deltaArrayTableSet.has(entity.entityKind)) {
@@ -177,7 +177,7 @@ export function buildStockBudgetReadDelta(
         `Stock delta table is not an array: ${entity.entityKind}`,
       );
     }
-    rows.push(projectStockEntity(entity));
+    rows.push(projectStockResponseEntity(entity));
   }
 
   if (

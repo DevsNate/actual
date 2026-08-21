@@ -17,7 +17,7 @@ export function projectStockBudgetSource(
       );
     }
     const rows = grouped.get(entity.entityKind) ?? [];
-    rows.push(projectStockEntity(entity));
+    rows.push(projectStockResponseEntity(entity));
     grouped.set(entity.entityKind, rows);
   }
 
@@ -50,7 +50,7 @@ export function projectStockBudgetSource(
   };
 }
 
-export function projectStockEntity(
+export function projectStockRequestEntity(
   entity: BudgetEntity,
 ): Readonly<Record<string, unknown>> {
   const payload = projectEntityPayload(entity.entityKind, entity.payload);
@@ -64,6 +64,24 @@ export function projectStockEntity(
     id: entity.entityId,
     is_tombstone: entity.isTombstone,
   };
+}
+
+export function projectStockResponseEntity(
+  entity: BudgetEntity,
+): Readonly<Record<string, unknown>> {
+  const projected = projectStockRequestEntity(entity);
+  if (entity.entityKind !== 'be_scheduled_transactions') {
+    return projected;
+  }
+  const upcoming = projected.upcoming_instances;
+  const match =
+    typeof upcoming === 'string'
+      ? /^\{(\d{4}-\d{2}-\d{2})\}$/u.exec(upcoming)
+      : null;
+  if (!match) {
+    throw new Error('Stock schedule response requires one upcoming date');
+  }
+  return { ...projected, upcoming_instances: [match[1]] };
 }
 
 function projectEntityPayload(

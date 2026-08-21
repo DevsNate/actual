@@ -10,7 +10,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 import { normalizeCapturedCheckingTransactionAmounts } from './stock-transaction-normalization';
 
@@ -132,7 +132,7 @@ function parseCreateWithoutPayee(
     changedEntities: {
       ...buildStockBudgetEmptyDelta(snapshot),
       ...calculationDelta(snapshot, augmented),
-      be_transactions: [projectStockEntity(transaction)],
+      be_transactions: [projectStockRequestEntity(transaction)],
     },
     expectedDeviceAdvance: 1,
     serverKnowledgeAdvance: 1,
@@ -215,7 +215,7 @@ function parseCreateWithPayee(
     changedEntities: {
       ...empty,
       ...calculationDelta(snapshot, augmented),
-      be_transactions: [projectStockEntity(transaction)],
+      be_transactions: [projectStockRequestEntity(transaction)],
     },
     expectedDeviceAdvance:
       transactionRow.entities_subcategory_id === null ? 2 : 3,
@@ -242,7 +242,7 @@ function parseTransactionEdit(
   }
   const current = liveEntity(snapshot, 'be_transactions', row.id);
   if (!current || !isCanonicalOrdinaryEntity(current)) return null;
-  const expected = projectStockEntity(current);
+  const expected = projectStockRequestEntity(current);
   const changed = changedKeys(expected, row);
   if (
     !isDeepStrictEqual(changed.sort(), ['amount', 'memo']) ||
@@ -277,7 +277,7 @@ function parseTransactionEdit(
     changedEntities: {
       ...buildStockBudgetEmptyDelta(snapshot),
       ...calculationDelta(snapshot, augmented),
-      be_transactions: [projectStockEntity(edited)],
+      be_transactions: [projectStockRequestEntity(edited)],
     },
     expectedDeviceAdvance: 2,
     serverKnowledgeAdvance: 2,
@@ -306,7 +306,7 @@ function parseTransactionDelete(
     !current ||
     !isCanonicalOrdinaryEntity(current) ||
     !isDeepStrictEqual(row, {
-      ...projectStockEntity(current),
+      ...projectStockRequestEntity(current),
       is_tombstone: true,
     })
   ) {
@@ -347,7 +347,7 @@ function parsePayeeMutation(
   }
   const current = liveEntity(snapshot, 'be_payees', row.id);
   if (!current || current.payload.accountId !== null) return null;
-  const expected = projectStockEntity(current);
+  const expected = projectStockRequestEntity(current);
   if (row.is_tombstone === true) {
     if (
       !isDeepStrictEqual(row, { ...expected, is_tombstone: true }) ||

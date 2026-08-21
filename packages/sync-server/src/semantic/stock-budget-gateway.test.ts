@@ -10,7 +10,7 @@ import request from 'supertest';
 
 import type { BudgetLifecycleService } from './budget-lifecycle-service';
 import type { StockBudgetChangeWriter } from './stock-budget-operation';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { createStockCatalogGateway } from './stock-catalog-gateway';
 
 const principal: AuthenticatedPrincipal = {
@@ -411,7 +411,7 @@ describe('stock budget gateway', () => {
         starting_device_knowledge: 0,
         ending_device_knowledge: 2,
         device_knowledge_of_server: 29,
-        changed_entities: { be_budget: projectStockEntity(budget) },
+        changed_entities: { be_budget: projectStockRequestEntity(budget) },
       },
       changeWriter,
     ).expect(200);
@@ -518,13 +518,13 @@ describe('stock budget gateway', () => {
         changed_entities: {
           be_accounts: [
             {
-              ...projectStockEntity(account),
+              ...projectStockRequestEntity(account),
               account_name: 'Account Renamed 3',
             },
           ],
           be_payees: [
             {
-              ...projectStockEntity(payee),
+              ...projectStockRequestEntity(payee),
               name: 'Transfer : Account Renamed 3',
             },
           ],
@@ -663,7 +663,7 @@ describe('stock budget gateway', () => {
         entity.payload.internalName === null &&
         entity.payload.goalType === null,
     )!;
-    const projected = projectStockEntity(category);
+    const projected = projectStockRequestEntity(category);
     const changeWriter: StockBudgetChangeWriter = {
       acknowledgeDevice: vi.fn(),
       commitAccountRename: vi.fn(),
@@ -790,7 +790,7 @@ describe('stock budget gateway', () => {
         ending_device_knowledge: 5,
         device_knowledge_of_server: 84,
         changed_entities: {
-          be_payees: [{ ...projectStockEntity(payee), name: 'Payee 5' }],
+          be_payees: [{ ...projectStockRequestEntity(payee), name: 'Payee 5' }],
         },
       },
       changeWriter,

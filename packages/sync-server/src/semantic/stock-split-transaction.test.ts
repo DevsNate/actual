@@ -2,7 +2,7 @@ import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { stockAccountBudgetEntityAdapter } from './account-budget-entity-adapter';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { parseStockSplitMutation } from './stock-split-transaction';
 
 function fixture() {
@@ -194,7 +194,7 @@ describe('stock split transaction boundary', () => {
     );
     const group = (
       parentRow: Record<string, unknown>,
-      lineRows = lines.map(projectStockEntity),
+      lineRows = lines.map(projectStockRequestEntity),
     ) => ({
       be_transaction_groups: [
         {
@@ -206,7 +206,7 @@ describe('stock split transaction boundary', () => {
     });
     const payeeEdit = parseStockSplitMutation(
       group({
-        ...projectStockEntity(parent),
+        ...projectStockRequestEntity(parent),
         entities_payee_id: 'payee-child-1',
       }),
       live,
@@ -224,12 +224,12 @@ describe('stock split transaction boundary', () => {
         entity.entityId !== lines[1].payload.subCategoryId,
     )!.entityId;
     const categoryEdit = parseStockSplitMutation(
-      group(projectStockEntity(parent), [
+      group(projectStockRequestEntity(parent), [
         {
-          ...projectStockEntity(lines[0]),
+          ...projectStockRequestEntity(lines[0]),
           entities_subcategory_id: newCategory,
         },
-        projectStockEntity(lines[1]),
+        projectStockRequestEntity(lines[1]),
       ]),
       live,
     );
@@ -240,9 +240,9 @@ describe('stock split transaction boundary', () => {
 
     const deleted = parseStockSplitMutation(
       group(
-        { ...projectStockEntity(parent), is_tombstone: true },
+        { ...projectStockRequestEntity(parent), is_tombstone: true },
         lines.map(line => ({
-          ...projectStockEntity(line),
+          ...projectStockRequestEntity(line),
           is_tombstone: true,
         })),
       ),

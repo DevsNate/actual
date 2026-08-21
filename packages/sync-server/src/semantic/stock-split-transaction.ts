@@ -9,7 +9,7 @@ import type {
 
 import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockEntity } from './stock-budget-projection';
+import { projectStockRequestEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
 import {
   lineEntity,
@@ -162,8 +162,8 @@ function parseCreate(
     changedEntities: {
       ...buildStockBudgetEmptyDelta(snapshot),
       ...calculationDelta(snapshot, after),
-      be_transactions: [projectStockEntity(parent)],
-      be_subtransactions: lines.map(projectStockEntity),
+      be_transactions: [projectStockRequestEntity(parent)],
+      be_subtransactions: lines.map(projectStockRequestEntity),
     },
     expectedDeviceAdvance: changes.length,
     serverKnowledgeAdvance: 2,
@@ -187,8 +187,8 @@ function parseExistingAggregate(
   ) {
     return null;
   }
-  const expectedParent = projectStockEntity(currentParent);
-  const expectedLines = currentLines.map(line => projectStockEntity(line!));
+  const expectedParent = projectStockRequestEntity(currentParent);
+  const expectedLines = currentLines.map(line => projectStockRequestEntity(line!));
   const parentDiff = semanticChangedKeys(expectedParent, parentRow);
   const lineDiffs = lineRows.map((row, index) =>
     semanticChangedKeys(expectedLines[index], row),
