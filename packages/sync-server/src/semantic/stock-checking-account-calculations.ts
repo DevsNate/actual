@@ -1,11 +1,14 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-import type { StockFreshBudgetCalculations } from './stock-budget-calculations';
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
+import type {
+  StockBudgetCalculationEntities,
+  StockMonthlyAccountCalculation,
+} from './stock-calculation-entities';
 
 export function projectStockCheckingAccountCalculations(
   snapshot: BudgetSnapshot,
-): StockFreshBudgetCalculations {
+): StockBudgetCalculationEntities {
   const accounts = snapshot.entities.filter(
     entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
   );
@@ -557,7 +560,7 @@ function monthlyAccountCalculation(
   rollingBalance: number,
   transactionCount: number,
   warningCount: number,
-): Readonly<Record<string, unknown>> {
+): StockMonthlyAccountCalculation {
   return {
     id: `mac/${month.slice(0, 7)}/${accountId}`,
     entities_account_id: accountId,

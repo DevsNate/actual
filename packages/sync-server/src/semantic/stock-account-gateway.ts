@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type {
   AuthenticatedPrincipal,
-  BudgetVersionReader,
+  BudgetReader,
 } from '@actual-app/semantic-core';
 import { SemanticStoreError } from '@actual-app/semantic-postgres';
 import express from 'express';
@@ -18,7 +18,7 @@ import { STOCK_API_VERSION } from './stock-operation';
 
 type Dependencies = {
   accountCreationService: AccountCreationService;
-  budgetReader: BudgetVersionReader;
+  budgetReader: BudgetReader;
   resolvePrincipal(sessionToken: string): AuthenticatedPrincipal;
   allocateRequestId?(): string;
 };
@@ -53,7 +53,7 @@ export function createStockAccountGateway(
       }
 
       try {
-        const budget = await dependencies.budgetReader.readBudgetByVersion(
+        const budget = await dependencies.budgetReader.readBudget(
           principal.id,
           stockBudgetId,
         );

@@ -50,7 +50,7 @@ export type StockTransferMutation = {
   changes: BudgetChangeSetCommand['changes'];
   changedEntities: Readonly<Record<string, unknown>>;
   expectedDeviceAdvance: number;
-  serverKnowledgeAdvance: 2;
+  serverKnowledgeAdvance: 1 | 2;
 };
 
 export function parseStockTransferMutation(
@@ -155,10 +155,14 @@ function parseExisting(
         projectStockEntity(current[index]),
       ),
   );
+  const isAmountUpdate = sameExcept(current, entities, [
+    'amount',
+    'cashAmount',
+  ]);
+  const isMemoUpdate = sameExcept(current, entities, ['memo']);
   if (
     changed.length !== 2 ||
-    (!sameExcept(current, entities, ['amount', 'cashAmount']) &&
-      !sameExcept(current, entities, ['memo']))
+    (!isAmountUpdate && !isMemoUpdate)
   ) {
     return null;
   }
@@ -175,7 +179,7 @@ function parseExisting(
       be_transactions: entities.map(projectStockEntity),
     },
     expectedDeviceAdvance: 2,
-    serverKnowledgeAdvance: 2,
+    serverKnowledgeAdvance: isAmountUpdate ? 2 : 1,
   };
 }
 

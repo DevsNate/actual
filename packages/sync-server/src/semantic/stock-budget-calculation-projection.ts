@@ -1,12 +1,12 @@
 import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
-import type { StockFreshBudgetCalculations } from './stock-budget-calculations';
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
+import type { StockBudgetCalculationEntities } from './stock-calculation-entities';
 import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
 
 export function projectStockBudgetCalculations(
   snapshot: BudgetSnapshot,
-): StockFreshBudgetCalculations {
+): StockBudgetCalculationEntities {
   const accounts = snapshot.entities.filter(
     entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
   );

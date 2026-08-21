@@ -44,7 +44,7 @@ describe('stock account gateway', () => {
       });
     expect(service.createUnlinkedCheckingAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
-      budgetId: 'canonical-budget-1',
+      budgetId: 'plan-1',
       originDeviceId: 'stock-web-direct-import',
       idempotencyKey: 'stock-account-create:request-1',
       name: 'Account Capture 3',
@@ -86,9 +86,9 @@ function createApp(service: AccountCreationService): express.Express {
     createStockAccountGateway({
       accountCreationService: service,
       budgetReader: {
-        readBudgetByVersion: vi.fn().mockResolvedValue({
-          budgetId: 'canonical-budget-1',
-          budgetVersionId: 'plan-1',
+        readBudget: vi.fn().mockResolvedValue({
+          budgetId: 'plan-1',
+          budgetVersionId: 'version-1',
           name: 'Plan',
           serverKnowledge: 1,
           currencyFormat: {},

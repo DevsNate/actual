@@ -145,6 +145,19 @@ describe('stock ordinary transfer boundary', () => {
     const memo = parseStockTransferMutation(edit, live);
     expect(memo?.mutation.kind).toBe('update');
     expect(memo?.expectedDeviceAdvance).toBe(2);
+    expect(memo?.serverKnowledgeAdvance).toBe(1);
+
+    const amountEdit = createRequest();
+    for (const group of amountEdit.be_transaction_groups) {
+      group.be_transaction.amount =
+        group.be_transaction.amount < 0 ? -23450 : 23450;
+      group.be_transaction.cash_amount = group.be_transaction.amount;
+    }
+    expect(parseStockTransferMutation(amountEdit, live)).toMatchObject({
+      mutation: { kind: 'update' },
+      expectedDeviceAdvance: 2,
+      serverKnowledgeAdvance: 2,
+    });
 
     const current = {
       ...live,

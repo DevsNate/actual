@@ -45,6 +45,33 @@ describe('stock fresh-budget calculations', () => {
       age_of_money: null,
       is_tombstone: false,
     });
+    expect(
+      Object.keys(result.be_monthly_budget_calculations[0]).sort(),
+    ).toEqual(
+      [
+        'additional_to_be_budgeted',
+        'age_of_money',
+        'available_to_budget',
+        'balance',
+        'budgeted',
+        'cash_outflows',
+        'credit_outflows',
+        'deferred_income',
+        'entities_monthly_budget_id',
+        'hidden_balance',
+        'hidden_budgeted',
+        'hidden_cash_outflows',
+        'hidden_credit_outflows',
+        'id',
+        'immediate_income',
+        'is_tombstone',
+        'over_spent',
+        'previous_income',
+        'uncategorized_balance',
+        'uncategorized_cash_outflows',
+        'uncategorized_credit_outflows',
+      ].sort(),
+    );
     expect(result.be_monthly_subcategory_budget_calculations[0]).toEqual(
       expect.objectContaining({
         id: expect.stringMatching(/^mcbc\//u),
@@ -56,6 +83,45 @@ describe('stock fresh-budget calculations', () => {
         overspending_affects_buffer: true,
         is_tombstone: false,
       }),
+    );
+    expect(
+      Object.keys(result.be_monthly_subcategory_budget_calculations[0]).sort(),
+    ).toEqual(
+      [
+        'additional_to_be_budgeted',
+        'all_spending',
+        'all_spending_since_last_payment',
+        'balance',
+        'balance_previous_month',
+        'budgeted_average',
+        'budgeted_cash_outflows',
+        'budgeted_credit_outflows',
+        'budgeted_previous_month',
+        'budgeted_spending',
+        'cash_outflows',
+        'credit_outflows',
+        'entities_monthly_subcategory_budget_id',
+        'goal_expected_completion',
+        'goal_overall_funded',
+        'goal_overall_left',
+        'goal_overall_outflows',
+        'goal_percentage_complete',
+        'goal_target',
+        'goal_under_funded',
+        'id',
+        'is_tombstone',
+        'overspending_affects_buffer',
+        'payment_average',
+        'payment_previous_month',
+        'positive_cash_outflows',
+        'spent_average',
+        'spent_previous_month',
+        'unbudgeted_cash_outflows',
+        'unbudgeted_credit_outflows',
+        'upcoming_transactions',
+        'upcoming_transactions_count',
+        'upcoming_transactions_first_date',
+      ].sort(),
     );
   });
 
@@ -164,6 +230,21 @@ describe('stock checking-account calculations', () => {
         transaction_count: 1,
       }),
     ]);
+    expect(Object.keys(result.be_account_calculations[0]).sort()).toEqual(
+      [
+        'cleared_balance',
+        'debt_last_payment_date',
+        'debt_payments',
+        'entities_account_id',
+        'error_count',
+        'id',
+        'info_count',
+        'is_tombstone',
+        'transaction_count',
+        'uncleared_balance',
+        'warning_count',
+      ].sort(),
+    );
     expect(result.be_monthly_account_calculations).toHaveLength(2);
     expect(result.be_monthly_account_calculations[0]).toMatchObject({
       cleared_balance: 123450,
@@ -175,6 +256,30 @@ describe('stock checking-account calculations', () => {
       rolling_balance: 123450,
       transaction_count: 0,
     });
+    expect(
+      Object.keys(result.be_monthly_account_calculations[0]).sort(),
+    ).toEqual(
+      [
+        'cleared_balance',
+        'debt_escrow_paid',
+        'debt_estimated_escrow_paid',
+        'debt_estimated_interest_paid',
+        'debt_interest_due',
+        'debt_interest_paid',
+        'debt_last_payment_date',
+        'debt_payments',
+        'entities_account_id',
+        'error_count',
+        'id',
+        'info_count',
+        'is_tombstone',
+        'month',
+        'rolling_balance',
+        'transaction_count',
+        'uncleared_balance',
+        'warning_count',
+      ].sort(),
+    );
     expect(result.be_monthly_budget_calculations).toEqual([
       expect.objectContaining({
         immediate_income: 123450,

@@ -1,13 +1,10 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
-export type StockFreshBudgetCalculations = {
-  be_monthly_budget_calculations: readonly Readonly<Record<string, unknown>>[];
-  be_monthly_subcategory_budget_calculations: readonly Readonly<
-    Record<string, unknown>
-  >[];
-  be_account_calculations: readonly Readonly<Record<string, unknown>>[];
-  be_monthly_account_calculations: readonly Readonly<Record<string, unknown>>[];
-};
+import type {
+  StockBudgetCalculationEntities,
+  StockMonthlyBudgetCalculation,
+  StockMonthlySubcategoryBudgetCalculation,
+} from './stock-calculation-entities';
 
 const calculationSensitiveKinds = new Set([
   'be_accounts',
@@ -20,7 +17,7 @@ const calculationSensitiveKinds = new Set([
 
 export function projectStockFreshBudgetCalculations(
   snapshot: BudgetSnapshot,
-): StockFreshBudgetCalculations {
+): StockBudgetCalculationEntities {
   assertPristineBudget(snapshot.entities);
 
   const monthlyBudgets = entitiesOfKind(
@@ -70,7 +67,7 @@ function assertPristineBudget(entities: readonly BudgetEntity[]): void {
 
 function projectMonthlyBudget(
   entity: BudgetEntity,
-): Readonly<Record<string, unknown>> {
+): StockMonthlyBudgetCalculation {
   const id = replaceIdentityPrefix(entity.entityId, 'mb/', 'mbc/');
   return {
     id,
@@ -100,7 +97,7 @@ function projectMonthlyBudget(
 function projectMonthlyCategoryBudget(
   entity: BudgetEntity,
   monthlyBudgetIds: ReadonlySet<string>,
-): Readonly<Record<string, unknown>> {
+): StockMonthlySubcategoryBudgetCalculation {
   const monthlyBudgetId = requireString(
     entity.payload.monthlyBudgetId,
     'monthlyBudgetId',
