@@ -12,6 +12,7 @@ import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
 import { projectStockEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
+import { normalizeCapturedCheckingTransactionAmounts } from './stock-transaction-normalization';
 
 const PAYEE_KEYS = [
   'auto_fill_amount',
@@ -363,6 +364,7 @@ function transactionEntity(
   snapshot: BudgetSnapshot,
   row: Readonly<Record<string, unknown>>,
 ): BudgetEntity {
+  const amounts = normalizeCapturedCheckingTransactionAmounts(row.amount);
   return {
     entityKind: 'be_transactions',
     entityId: String(row.id),
@@ -375,11 +377,7 @@ function transactionEntity(
       scheduledTransactionId: null,
       date: row.date,
       dateEnteredFromSchedule: null,
-      amount: row.amount,
-      cashAmount: row.amount,
-      creditAmount: 0,
-      creditAmountAdjusted: 0,
-      subcategoryCreditAmountPreceding: 0,
+      ...amounts,
       memo: row.memo,
       cleared: row.cleared,
       accepted: row.accepted,

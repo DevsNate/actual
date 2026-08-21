@@ -6,10 +6,16 @@ import type {
   CanonicalOrdinaryPayee,
 } from '@actual-app/semantic-core';
 
+import {
+  normalizeCapturedCheckingSubtransactionAmounts,
+  normalizeCapturedCheckingTransactionAmounts,
+} from './stock-transaction-normalization';
+
 export function parentEntity(
   snapshot: BudgetSnapshot,
   row: Record<string, unknown>,
 ): BudgetEntity {
+  const amounts = normalizeCapturedCheckingTransactionAmounts(row.amount);
   return {
     entityKind: 'be_transactions',
     entityId: requireString(row.id),
@@ -22,11 +28,7 @@ export function parentEntity(
       scheduledTransactionId: null,
       date: row.date,
       dateEnteredFromSchedule: null,
-      amount: row.amount,
-      cashAmount: row.amount,
-      creditAmount: 0,
-      creditAmountAdjusted: 0,
-      subcategoryCreditAmountPreceding: 0,
+      ...amounts,
       memo: row.memo ?? null,
       cleared: row.cleared,
       accepted: row.accepted,
@@ -51,6 +53,7 @@ export function lineEntity(
   snapshot: BudgetSnapshot,
   row: Record<string, unknown>,
 ): BudgetEntity {
+  const amounts = normalizeCapturedCheckingSubtransactionAmounts(row.amount);
   return {
     entityKind: 'be_subtransactions',
     entityId: requireString(row.id),
@@ -60,9 +63,7 @@ export function lineEntity(
       transactionId: row.entities_transaction_id,
       payeeId: row.entities_payee_id,
       subCategoryId: row.entities_subcategory_id,
-      amount: row.amount,
-      cashAmount: row.amount,
-      creditAmount: 0,
+      ...amounts,
       memo: row.memo ?? null,
       transferAccountId: null,
       transferTransactionId: null,

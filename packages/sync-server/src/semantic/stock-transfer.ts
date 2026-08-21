@@ -12,6 +12,7 @@ import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
 import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
 import { projectStockEntity } from './stock-budget-projection';
 import { isRecord } from './stock-operation';
+import { normalizeCapturedReciprocalTransferAmounts } from './stock-transaction-normalization';
 
 const TRANSFER_KEYS = new Set([
   'accepted',
@@ -160,10 +161,7 @@ function parseExisting(
     'cashAmount',
   ]);
   const isMemoUpdate = sameExcept(current, entities, ['memo']);
-  if (
-    changed.length !== 2 ||
-    (!isAmountUpdate && !isMemoUpdate)
-  ) {
+  if (changed.length !== 2 || (!isAmountUpdate && !isMemoUpdate)) {
     return null;
   }
   return {
@@ -259,6 +257,7 @@ function transferEntity(
   snapshot: BudgetSnapshot,
   row: Record<string, unknown>,
 ): BudgetEntity {
+  const amounts = normalizeCapturedReciprocalTransferAmounts(row.amount);
   return {
     entityKind: 'be_transactions',
     entityId: string(row.id),
@@ -271,11 +270,7 @@ function transferEntity(
       scheduledTransactionId: null,
       date: row.date,
       dateEnteredFromSchedule: null,
-      amount: row.amount,
-      cashAmount: row.amount,
-      creditAmount: 0,
-      creditAmountAdjusted: 0,
-      subcategoryCreditAmountPreceding: 0,
+      ...amounts,
       memo: row.memo ?? null,
       cleared: row.cleared,
       accepted: row.accepted,

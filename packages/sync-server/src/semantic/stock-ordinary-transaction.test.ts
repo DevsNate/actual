@@ -108,7 +108,7 @@ function transactionRow(tombstone = false, cashAmount = 0) {
 }
 
 describe('stock ordinary transaction and payee boundary', () => {
-  test('admits the captured payee-less ordinary transaction group', () => {
+  test('preserves the provisional stock-client payee-less request shape', () => {
     const snapshot = fixture();
     const parsed = parseStockOrdinaryMutation(
       {
@@ -282,6 +282,51 @@ describe('stock ordinary transaction and payee boundary', () => {
               be_transaction: {
                 ...transactionRow(),
                 transfer_account_id: 'account-2',
+              },
+              be_subtransactions: null,
+            },
+          ],
+        },
+        snapshot,
+      ),
+    ).toBeNull();
+
+    const capturedButUnadmittedCategory = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        !entity.isTombstone &&
+        entity.payload.internalName === 'Category/__ImmediateIncome__',
+    )!.entityId;
+    expect(
+      parseStockOrdinaryMutation(
+        {
+          be_transaction_groups: [
+            {
+              id: 'transaction-1',
+              be_transaction: {
+                ...transactionRow(),
+                entities_payee_id: null,
+                entities_subcategory_id: capturedButUnadmittedCategory,
+              },
+              be_subtransactions: null,
+            },
+          ],
+        },
+        snapshot,
+      ),
+    ).toBeNull();
+    expect(
+      parseStockOrdinaryMutation(
+        {
+          be_transaction_groups: [
+            {
+              id: 'transaction-1',
+              be_transaction: {
+                ...transactionRow(),
+                entities_payee_id: null,
+                cash_amount: 0,
+                credit_amount: -1000,
+                credit_amount_adjusted: -1000,
               },
               be_subtransactions: null,
             },
