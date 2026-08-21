@@ -12,14 +12,8 @@ import {
 
 function snapshot(): BudgetSnapshot {
   let sequence = 0;
-  const result: BudgetSnapshot = {
-    budgetId: 'budget-1',
-    budgetVersionId: 'version-1',
-    name: 'Budget',
-    serverKnowledge: 45,
-    currencyFormat: {},
-    dateFormat: {},
-    entities: buildStockBudgetBootstrap({
+  const entities: BudgetEntity[] = [
+    ...buildStockBudgetBootstrap({
       budgetId: 'budget-1',
       budgetVersionId: 'version-1',
       principalId: 'user-1',
@@ -30,6 +24,15 @@ function snapshot(): BudgetSnapshot {
       createdAtMilliseconds: Date.UTC(2026, 7, 16),
       allocateId: label => `${label}:${sequence++}`,
     }),
+  ];
+  const result: BudgetSnapshot = {
+    budgetId: 'budget-1',
+    budgetVersionId: 'version-1',
+    name: 'Budget',
+    serverKnowledge: 45,
+    currencyFormat: {},
+    dateFormat: {},
+    entities,
   };
   const startingPayee = result.entities.find(
     entity => entity.payload.internalName === 'StartingBalancePayee',
@@ -37,7 +40,7 @@ function snapshot(): BudgetSnapshot {
   const immediateIncome = result.entities.find(
     entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
   )!;
-  result.entities.push(
+  entities.push(
     {
       entityKind: 'be_accounts',
       entityId: 'account-1',
