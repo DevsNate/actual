@@ -15,7 +15,7 @@ export type StockTargetMutation = Readonly<{
   mutation: Extract<CanonicalCategoryMutation, { kind: 'replace-target' }>;
   changes: BudgetChangeSetCommand['changes'];
   changedEntities: Readonly<Record<string, unknown>>;
-  expectedDeviceAdvance: number;
+  expectedDeviceAdvance: number | readonly number[];
   serverKnowledgeAdvance: 2;
 }>;
 
@@ -122,8 +122,12 @@ export function parseStockTargetMutation(
 function capturedKnowledgeAdvance(
   previous: CanonicalTargetDefinition | null,
   next: CanonicalTargetDefinition | null,
-): number | null {
-  if (previous === null && isMonthly(next)) return 7;
+): number | readonly number[] | null {
+  // TARGET-001 observed a seven-step coalesced create. The preserved stock Web
+  // runtime independently emitted the same complete monthly definition after
+  // five local knowledge steps. Both ranges are client-owned edit histories;
+  // the canonical mutation and two-step server acknowledgement are identical.
+  if (previous === null && isMonthly(next)) return [5, 7];
   if (isMonthly(previous) && isYearly(next)) return 2;
   if (isYearly(previous) && isWeeklySaturday(next)) return 4;
   if (isWeeklySaturday(previous) && isEveryTwoMonths(next)) return 5;

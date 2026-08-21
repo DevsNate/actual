@@ -91,7 +91,7 @@ test('parses the exact TARGET-001 definition lifecycle and knowledge advances', 
       entity.payload.internalName === null,
   )!;
   const states = [
-    [monthly, 7, [100000, 100000]],
+    [monthly, [5, 7], [100000, 100000]],
     [
       { ...monthly, goal_target_date: '2026-09-01', goal_cadence: 13 },
       2,
@@ -163,6 +163,22 @@ test('parses the exact TARGET-001 definition lifecycle and knowledge advances', 
     expectedDeviceAdvance: 7,
     serverKnowledgeAdvance: 2,
   });
+});
+
+test('accepts both observed stock Web monthly-create knowledge histories', () => {
+  const current = snapshot();
+  const category = current.entities.find(
+    entity =>
+      entity.entityKind === 'be_subcategories' &&
+      entity.payload.goalType === null &&
+      entity.payload.internalName === null,
+  )!;
+  const parsed = parseStockTargetMutation(
+    { be_subcategories: [row(category, monthly)] },
+    current,
+  );
+
+  expect(parsed?.expectedDeviceAdvance).toEqual([5, 7]);
 });
 
 test('treats bootstrap target templates as inactive and rejects uncaptured definitions', () => {
