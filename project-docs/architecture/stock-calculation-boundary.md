@@ -41,6 +41,12 @@ authoritatively calculates and persists those rows locally.
 the BUDGET-001 capture and recovered serializer. It intentionally contains no
 formulas.
 
+`stock-account-calculation-projection.ts` is the project-owned compatibility
+projection for the captured checking-account and two-month account rows. It is
+kept separate from category and Ready-to-Assign calculations, validates safe
+integer balances and captured month identities, and does not admit debt,
+tracking, closed-account, or generalized multi-month behavior.
+
 The current projectors admit only:
 
 1. the exact pristine/default bootstrap state captured in BUDGET-001; and

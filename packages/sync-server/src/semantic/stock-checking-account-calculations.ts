@@ -1,10 +1,8 @@
 import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 
+import { projectCapturedCheckingAccountRows } from './stock-account-calculation-projection';
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
-import type {
-  StockBudgetCalculationEntities,
-  StockMonthlyAccountCalculation,
-} from './stock-calculation-entities';
+import type { StockBudgetCalculationEntities } from './stock-calculation-entities';
 
 export function projectStockCheckingAccountCalculations(
   snapshot: BudgetSnapshot,
@@ -167,6 +165,12 @@ export function projectStockCheckingAccountCalculations(
   ) {
     throw new Error('Starting Balance total must be a safe integer');
   }
+  const accountRows = projectCapturedCheckingAccountRows(
+    accounts,
+    liveTransactions,
+    currentMonth,
+    nextMonth,
+  );
 
   return {
     ...base,
@@ -286,45 +290,8 @@ export function projectStockCheckingAccountCalculations(
           'Immediate Income calculation references another month',
         );
       }),
-    be_account_calculations: groups.map(group => {
-      const totals = accountTotals(group.account.entityId, liveTransactions);
-      return {
-        id: `ac/${group.account.entityId}`,
-        entities_account_id: group.account.entityId,
-        is_tombstone: false,
-        cleared_balance: totals.cleared,
-        uncleared_balance: totals.uncleared,
-        info_count: 0,
-        warning_count: totals.warningCount,
-        error_count: 0,
-        transaction_count: totals.count,
-        debt_last_payment_date: null,
-        debt_payments: null,
-      };
-    }),
-    be_monthly_account_calculations: groups.flatMap(group => {
-      const totals = accountTotals(group.account.entityId, liveTransactions);
-      return [
-        monthlyAccountCalculation(
-          group.account.entityId,
-          currentMonth,
-          totals.cleared,
-          totals.uncleared,
-          totals.cleared + totals.uncleared,
-          totals.count,
-          totals.warningCount,
-        ),
-        monthlyAccountCalculation(
-          group.account.entityId,
-          nextMonth,
-          0,
-          0,
-          totals.cleared + totals.uncleared,
-          0,
-          0,
-        ),
-      ];
-    }),
+    be_account_calculations: accountRows.accountCalculations,
+    be_monthly_account_calculations: accountRows.monthlyAccountCalculations,
   };
 }
 
@@ -495,34 +462,6 @@ function ordinaryTransactionAmount(
   return Number(transaction.payload.amount);
 }
 
-function accountTotals(
-  accountId: string,
-  transactions: readonly BudgetEntity[],
-): { cleared: number; uncleared: number; count: number; warningCount: number } {
-  const rows = transactions.filter(row => row.payload.accountId === accountId);
-  const cleared = rows
-    .filter(row => row.payload.cleared === 'Cleared')
-    .reduce((sum, row) => sum + Number(row.payload.amount), 0);
-  const uncleared = rows
-    .filter(row => row.payload.cleared === 'Uncleared')
-    .reduce((sum, row) => sum + Number(row.payload.amount), 0);
-  if (![cleared, uncleared].every(Number.isSafeInteger)) {
-    throw new Error('Account balance must be a safe integer');
-  }
-  return {
-    cleared,
-    uncleared,
-    count: rows.length,
-    warningCount: rows.some(
-      row =>
-        row.payload.subCategoryId === null &&
-        row.payload.transferAccountId === null,
-    )
-      ? 1
-      : 0,
-  };
-}
-
 function validateTransferCalculationState(
   transfers: readonly BudgetEntity[],
   accounts: readonly BudgetEntity[],
@@ -550,37 +489,6 @@ function validateTransferCalculationState(
       throw new Error('Unsupported reciprocal transfer calculation state');
     }
   }
-}
-
-function monthlyAccountCalculation(
-  accountId: string,
-  month: string,
-  clearedBalance: number,
-  unclearedBalance: number,
-  rollingBalance: number,
-  transactionCount: number,
-  warningCount: number,
-): StockMonthlyAccountCalculation {
-  return {
-    id: `mac/${month.slice(0, 7)}/${accountId}`,
-    entities_account_id: accountId,
-    is_tombstone: false,
-    month,
-    cleared_balance: clearedBalance,
-    uncleared_balance: unclearedBalance,
-    rolling_balance: rollingBalance,
-    info_count: 0,
-    warning_count: warningCount,
-    error_count: 0,
-    transaction_count: transactionCount,
-    debt_interest_due: null,
-    debt_interest_paid: null,
-    debt_escrow_paid: null,
-    debt_last_payment_date: null,
-    debt_payments: null,
-    debt_estimated_interest_paid: null,
-    debt_estimated_escrow_paid: null,
-  };
 }
 
 function exactlyOne(
