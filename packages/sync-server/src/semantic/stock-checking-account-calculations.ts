@@ -3,6 +3,7 @@ import type { BudgetEntity, BudgetSnapshot } from '@actual-app/semantic-core';
 import { projectCapturedCheckingAccountRows } from './stock-account-calculation-projection';
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import type { StockBudgetCalculationEntities } from './stock-calculation-entities';
+import { projectCapturedMonthlyBudgetRows } from './stock-monthly-budget-calculation-projection';
 import { projectCapturedMonthlyCategoryRows } from './stock-monthly-category-calculation-projection';
 
 export function projectStockCheckingAccountCalculations(
@@ -175,39 +176,14 @@ export function projectStockCheckingAccountCalculations(
 
   return {
     ...base,
-    be_monthly_budget_calculations: base.be_monthly_budget_calculations.map(
-      row => ({
-        ...row,
-        immediate_income:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? incomeAmount
-            : 0,
-        cash_outflows:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? totalCashOutflows
-            : 0,
-        balance:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? totalCashOutflows
-            : 0,
-        over_spent:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? Math.min(0, totalCashOutflows)
-            : 0,
-        available_to_budget:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? incomeAmount
-            : incomeAmount + totalCashOutflows,
-        uncategorized_cash_outflows:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? uncategorizedAmount
-            : 0,
-        uncategorized_balance:
-          row.entities_monthly_budget_id === monthlyBudgets[0].entityId
-            ? uncategorizedAmount
-            : 0,
-      }),
-    ),
+    be_monthly_budget_calculations: projectCapturedMonthlyBudgetRows({
+      baseRows: base.be_monthly_budget_calculations,
+      currentMonthlyBudgetId: monthlyBudgets[0].entityId,
+      nextMonthlyBudgetId: monthlyBudgets[1].entityId,
+      immediateIncome: incomeAmount,
+      cashOutflows: totalCashOutflows,
+      uncategorizedCashOutflows: uncategorizedAmount,
+    }),
     be_monthly_subcategory_budget_calculations:
       projectCapturedMonthlyCategoryRows({
         baseRows: base.be_monthly_subcategory_budget_calculations,

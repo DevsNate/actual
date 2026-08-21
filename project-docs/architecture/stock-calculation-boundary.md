@@ -54,6 +54,12 @@ captured current/next-month rows. Target status, categorized refunds, credit
 spending, carryover, and other monthly-category behavior remain outside this
 projector until their own admission phases.
 
+`stock-monthly-budget-calculation-projection.ts` owns the captured two-row
+monthly-budget projection for Starting Balance income plus admitted cash
+outflows. It validates safe integer arithmetic and exact current/next source
+identities. Assignments, rollover, income variants, overspending rollover, and
+general future-month propagation remain unsupported.
+
 The current projectors admit only:
 
 1. the exact pristine/default bootstrap state captured in BUDGET-001; and
