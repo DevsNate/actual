@@ -12,7 +12,7 @@ function source(
     entityKind: 'be_monthly_subcategory_budgets',
     entityId: id,
     isTombstone: false,
-    payload: { monthlyBudgetId, subCategoryId },
+    payload: { monthlyBudgetId, subCategoryId, budgeted: 0 },
   };
 }
 

@@ -81,6 +81,8 @@ export function buildStockBudgetBootstrap(
   const allowedSourceTables = new Set<string>([
     'be_budget',
     ...bootstrapArrayTables,
+    'be_money_movement_groups',
+    'be_money_movements',
   ]);
   for (const table of Object.keys(source.changedEntities)) {
     if (!allowedSourceTables.has(table)) {
@@ -108,11 +110,17 @@ export function buildStockBudgetBackfill(
   if (!source.firstMonth || !source.lastMonth) {
     throw new Error('Stock budget backfill requires a current month');
   }
-  return {
-    ...Object.fromEntries(backfillArrayTables.map(table => [table, []])),
-    first_month: source.firstMonth,
-    last_month: source.lastMonth,
-  };
+  const calculations = projectStockBudgetCalculations(snapshot);
+  const result: Record<string, unknown> = {};
+  for (const table of backfillArrayTables) {
+    result[table] =
+      calculations[table as keyof typeof calculations] ??
+      source.changedEntities[table] ??
+      [];
+  }
+  result.first_month = source.firstMonth;
+  result.last_month = source.lastMonth;
+  return result;
 }
 
 export function buildStockBudgetEmptyDelta(

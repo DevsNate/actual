@@ -608,6 +608,24 @@ describe('semantic foundation migration', () => {
     expect(migration).not.toContain('be_subcategories');
   });
 
+  test('stores captured assignments as canonical money movements', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0013_canonical_money_movement.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE semantic_money_movements');
+    expect(migration).toContain("source = 'manual_assign'");
+    expect(migration).toContain('amount_milliunits BIGINT NOT NULL');
+    expect(migration).toContain('REFERENCES semantic_monthly_category_budgets');
+    expect(migration).not.toContain('be_money_movements');
+  });
+
   test('stores split parents and ordered lines as one canonical aggregate', async () => {
     const migration = await readFile(
       fileURLToPath(

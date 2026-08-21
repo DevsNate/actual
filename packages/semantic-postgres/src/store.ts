@@ -7,6 +7,7 @@ import type {
   CommitCanonicalAccountClose,
   CommitCanonicalAccountRename,
   CommitCanonicalAccountReopen,
+  CommitCanonicalCategoryAssignment,
   CommitCanonicalCategoryMutation,
   CommitCanonicalOrdinaryPayeeMutation,
   CommitCanonicalOrdinaryTransactionMutation,
@@ -21,6 +22,7 @@ import type {
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
 
+import { writeCanonicalCategoryAssignment } from './assignment-store';
 import { SemanticStoreError } from './errors';
 import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
 import { writeCanonicalTargetReplacement } from './target-store';
@@ -446,6 +448,17 @@ export class PostgresSemanticStore {
     return this.transact(client =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalCategoryMutation(client, command),
+      ),
+    );
+  }
+
+  async commitCategoryAssignment(
+    command: CommitCanonicalCategoryAssignment,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalCategoryAssignment(client, command),
       ),
     );
   }

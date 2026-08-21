@@ -96,17 +96,24 @@ export function projectStockCheckingAccountCalculations(
   );
   const base = projectStockFreshBudgetCalculations({
     ...snapshot,
-    entities: snapshot.entities.filter(
-      entity =>
-        !entity.isTombstone &&
-        entity.entityKind !== 'be_accounts' &&
-        entity.entityKind !== 'be_transactions' &&
-        entity.entityKind !== 'be_subtransactions' &&
-        !(
-          entity.entityKind === 'be_payees' &&
-          accountIds.has(String(entity.payload.accountId))
-        ),
-    ),
+    entities: snapshot.entities
+      .filter(
+        entity =>
+          !entity.isTombstone &&
+          entity.entityKind !== 'be_accounts' &&
+          entity.entityKind !== 'be_transactions' &&
+          entity.entityKind !== 'be_subtransactions' &&
+          entity.entityKind !== 'be_money_movements' &&
+          !(
+            entity.entityKind === 'be_payees' &&
+            accountIds.has(String(entity.payload.accountId))
+          ),
+      )
+      .map(entity =>
+        entity.entityKind === 'be_monthly_subcategory_budgets'
+          ? { ...entity, payload: { ...entity.payload, budgeted: 0 } }
+          : entity,
+      ),
   });
   const monthlyBudgets = snapshot.entities
     .filter(
@@ -173,6 +180,56 @@ export function projectStockCheckingAccountCalculations(
     currentMonth,
     nextMonth,
   );
+  const monthlyCategoryRows = projectCapturedMonthlyCategoryRows({
+    baseRows: base.be_monthly_subcategory_budget_calculations,
+    sourceRows: snapshot.entities.filter(
+      entity => entity.entityKind === 'be_monthly_subcategory_budgets',
+    ),
+    currentMonthlyBudgetId: monthlyBudgets[0].entityId,
+    nextMonthlyBudgetId: monthlyBudgets[1].entityId,
+    noneCategoryId: noneCategory.entityId,
+    immediateIncomeCategoryId: immediateIncomeCategory.entityId,
+    uncategorizedCashOutflows: uncategorizedAmount,
+    categorizedCashOutflows: splitOutflows,
+    immediateIncome: incomeAmount,
+  });
+  const sourceByCalculationId = new Map(
+    snapshot.entities
+      .filter(entity => entity.entityKind === 'be_monthly_subcategory_budgets')
+      .map(entity => [`mcbc/${entity.entityId.slice('mcb/'.length)}`, entity]),
+  );
+  const currentCategoryRows = monthlyCategoryRows.filter(row => {
+    const source = sourceByCalculationId.get(String(row.id));
+    return (
+      source?.payload.monthlyBudgetId === monthlyBudgets[0].entityId &&
+      source.payload.subCategoryId !== immediateIncomeCategory.entityId
+    );
+  });
+  if (currentCategoryRows.length === 0) {
+    throw new Error('Current category calculation rows are unavailable');
+  }
+  const currentBudgeted = snapshot.entities
+    .filter(
+      entity =>
+        entity.entityKind === 'be_monthly_subcategory_budgets' &&
+        entity.payload.monthlyBudgetId === monthlyBudgets[0].entityId,
+    )
+    .reduce(
+      (sum, entity) => sum + requireMonthlyBudgeted(entity.payload.budgeted),
+      0,
+    );
+  const currentCategoryBalance = currentCategoryRows.reduce(
+    (sum, row) => sum + row.balance,
+    0,
+  );
+  const currentOverspent = currentCategoryRows.reduce(
+    (sum, row) => sum + Math.min(0, row.balance),
+    0,
+  );
+  const positiveCategoryCarry = currentCategoryRows.reduce(
+    (sum, row) => sum + Math.max(0, row.balance),
+    0,
+  );
 
   return {
     ...base,
@@ -183,24 +240,22 @@ export function projectStockCheckingAccountCalculations(
       immediateIncome: incomeAmount,
       cashOutflows: totalCashOutflows,
       uncategorizedCashOutflows: uncategorizedAmount,
+      currentBudgeted,
+      currentCategoryBalance,
+      currentOverspent,
+      positiveCategoryCarry,
     }),
-    be_monthly_subcategory_budget_calculations:
-      projectCapturedMonthlyCategoryRows({
-        baseRows: base.be_monthly_subcategory_budget_calculations,
-        sourceRows: snapshot.entities.filter(
-          entity => entity.entityKind === 'be_monthly_subcategory_budgets',
-        ),
-        currentMonthlyBudgetId: monthlyBudgets[0].entityId,
-        nextMonthlyBudgetId: monthlyBudgets[1].entityId,
-        noneCategoryId: noneCategory.entityId,
-        immediateIncomeCategoryId: immediateIncomeCategory.entityId,
-        uncategorizedCashOutflows: uncategorizedAmount,
-        categorizedCashOutflows: splitOutflows,
-        immediateIncome: incomeAmount,
-      }),
+    be_monthly_subcategory_budget_calculations: monthlyCategoryRows,
     be_account_calculations: accountRows.accountCalculations,
     be_monthly_account_calculations: accountRows.monthlyAccountCalculations,
   };
+}
+
+function requireMonthlyBudgeted(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error('Monthly category budget must be nonnegative');
+  }
+  return Number(value);
 }
 
 function validateSplitCalculationState(

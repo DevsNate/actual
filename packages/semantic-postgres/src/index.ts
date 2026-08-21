@@ -11,6 +11,7 @@ export { semanticCanonicalOrdinaryTransactionMigration } from './canonical-ordin
 export { semanticCanonicalSplitTransactionMigration } from './canonical-split-transaction-migration';
 export { semanticCanonicalTransferMigration } from './canonical-transfer-migration';
 export { semanticCanonicalTargetDefinitionMigration } from './canonical-target-definition-migration';
+export { semanticCanonicalMoneyMovementMigration } from './canonical-money-movement-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

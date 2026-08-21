@@ -1,8 +1,8 @@
 /**
  * Project-owned projection for the exact two-month budget calculation states
  * proven by the controlled Starting Balance and captured cash-outflow fixtures.
- * Assignments, rollover, and generalized future-month behavior are not admitted
- * here.
+ * The assignment inputs are limited to the exact current/next-month behavior
+ * admitted by ASSIGNMENT-001.
  */
 
 import type { StockMonthlyBudgetCalculation } from './stock-calculation-entities';
@@ -14,6 +14,10 @@ type CapturedMonthlyBudgetInput = Readonly<{
   immediateIncome: number;
   cashOutflows: number;
   uncategorizedCashOutflows: number;
+  currentBudgeted: number;
+  currentCategoryBalance: number;
+  currentOverspent: number;
+  positiveCategoryCarry: number;
 }>;
 
 export function projectCapturedMonthlyBudgetRows(
@@ -22,6 +26,10 @@ export function projectCapturedMonthlyBudgetRows(
   requireSafeInteger(input.immediateIncome);
   requireSafeInteger(input.cashOutflows);
   requireSafeInteger(input.uncategorizedCashOutflows);
+  requireSafeInteger(input.currentBudgeted);
+  requireSafeInteger(input.currentCategoryBalance);
+  requireSafeInteger(input.currentOverspent);
+  requireSafeInteger(input.positiveCategoryCarry);
   const nextAvailableToBudget = input.immediateIncome + input.cashOutflows;
   requireSafeInteger(nextAvailableToBudget);
 
@@ -33,10 +41,11 @@ export function projectCapturedMonthlyBudgetRows(
       return {
         ...row,
         immediate_income: input.immediateIncome,
+        budgeted: input.currentBudgeted,
         cash_outflows: input.cashOutflows,
-        balance: input.cashOutflows,
-        over_spent: Math.min(0, input.cashOutflows),
-        available_to_budget: input.immediateIncome,
+        balance: input.currentCategoryBalance,
+        over_spent: input.currentOverspent,
+        available_to_budget: input.immediateIncome - input.currentBudgeted,
         uncategorized_cash_outflows: input.uncategorizedCashOutflows,
         uncategorized_balance: input.uncategorizedCashOutflows,
       };
@@ -47,9 +56,10 @@ export function projectCapturedMonthlyBudgetRows(
         ...row,
         immediate_income: 0,
         cash_outflows: 0,
-        balance: 0,
+        balance: input.positiveCategoryCarry,
         over_spent: 0,
-        available_to_budget: nextAvailableToBudget,
+        available_to_budget:
+          nextAvailableToBudget - input.positiveCategoryCarry,
         uncategorized_cash_outflows: 0,
         uncategorized_balance: 0,
       };

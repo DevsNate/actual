@@ -36,6 +36,10 @@ describe('captured stock monthly-budget calculation projection', () => {
       immediateIncome: 123450,
       cashOutflows: -10000,
       uncategorizedCashOutflows: -10000,
+      currentBudgeted: 0,
+      currentCategoryBalance: -10000,
+      currentOverspent: -10000,
+      positiveCategoryCarry: 0,
     });
 
     expect(result).toEqual([
@@ -75,6 +79,10 @@ describe('captured stock monthly-budget calculation projection', () => {
         immediateIncome: 0,
         cashOutflows: 0,
         uncategorizedCashOutflows: 0,
+        currentBudgeted: 0,
+        currentCategoryBalance: 0,
+        currentOverspent: 0,
+        positiveCategoryCarry: 0,
       }),
     ).toThrow('references another month');
     expect(() =>
@@ -85,6 +93,10 @@ describe('captured stock monthly-budget calculation projection', () => {
         immediateIncome: Number.MAX_SAFE_INTEGER,
         cashOutflows: 1,
         uncategorizedCashOutflows: 0,
+        currentBudgeted: 0,
+        currentCategoryBalance: 0,
+        currentOverspent: 0,
+        positiveCategoryCarry: 0,
       }),
     ).toThrow('must be a safe integer');
   });

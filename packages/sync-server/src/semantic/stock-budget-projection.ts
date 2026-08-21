@@ -117,6 +117,11 @@ const payloadRules: Readonly<
       subCategoryId: 'entities_subcategory_id',
     },
   ),
+  be_money_movements: rule([], {
+    toMonthlyCategoryBudgetId: 'to_entities_monthly_subcategory_budget_id',
+    fromMonthlyCategoryBudgetId: 'from_entities_monthly_subcategory_budget_id',
+    movementGroupId: 'entities_money_movement_group_id',
+  }),
   be_onboarding_events: rule(['budgetVersionId']),
   be_payees: rule(['budgetVersionId', 'deviceKnowledge'], {
     accountId: 'entities_account_id',

@@ -33,9 +33,9 @@ inventory:
   `entities_money_movement_group_id`, `source`, `note`,
   `performed_by_user_id`, `move_started_at`, and `move_accepted_at`.
 
-This is stock-client behavior recovered from deployed code. The future
-project-owned canonical command should preserve the aggregate and stable
-identities while keeping Web field names at the protocol adapter boundary.
+This is stock-client behavior recovered from deployed code. The project-owned
+canonical command preserves the aggregate and stable identities while keeping
+Web field names at the protocol adapter boundary.
 
 ## Captured server and readback facts
 
@@ -53,16 +53,36 @@ The target lifecycle and status-edge evidence also proves the subsequent cash
 spending, refund, and credit-spending calculation states. It does not retain a
 complete redacted request/response entity envelope for the initial assignment.
 
-## Remaining admission gate
+ASSIGNMENT-001 additionally captures a direct assignment from zero to 1000
+milliunits. The request contains exactly one monthly-category row and one
+ungrouped `manual_assign` movement. The acknowledgement:
 
-Before implementing assignment, capture one narrow stock lifecycle containing:
+- advances device knowledge by 2 and server knowledge by 2;
+- preserves the two source identities;
+- supplies the movement acceptance timestamp;
+- returns current/next monthly and monthly-category calculations; and
+- renders assigned 1000, activity 0, and available 1000.
 
-1. the exact changed-entity request for a single manual assignment;
-2. the exact acknowledgement entities and knowledge fields;
-3. an unchanged replay/poll; and
-4. the resulting monthly-category and money-movement rows.
+An exact browser-level `Network.replayXHR` of the same request preserves the
+canonical rows but advances server knowledge by 1. It retains device knowledge
+2 and the original movement acceptance timestamp. The captured client request
+identifier is therefore not treated as a generic server idempotency key. The
+adapter admits exactly the observed two-knowledge-behind replay boundary and
+fails closed outside it.
 
-Until that envelope is restored, the compatibility server fails closed for
-assignment mutations. Target definition support remains valid and separate;
-funded/spent/overspent projection remains gated on this assignment aggregate
-and categorized transaction admission.
+## Implemented boundary
+
+The implementation now consists of:
+
+1. a strict schema-44 assignment/replay parser;
+2. a typed assignment aggregate and immutable canonical money movement;
+3. an atomic PostgreSQL monthly-budget update plus movement insert;
+4. current/next category, monthly-budget, and Ready-to-Assign projections for
+   the captured state; and
+5. backfill projection of accepted money movements.
+
+Multi-category movement groups, negative assignment changes, moving money
+between categories, future-month assignment, and arbitrary replay patterns
+remain unsupported until separately captured. Target definition support
+remains separate; additional funded/spent/overspent states still depend on
+their categorized transaction evidence.

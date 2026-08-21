@@ -182,9 +182,10 @@ describe('stock budget gateway', () => {
       first_month: '2026-08-01',
       last_month: '2026-08-01',
       be_money_movements: [],
-      be_monthly_budgets: [],
+      be_monthly_budgets: expect.any(Array),
       be_transactions: [],
     });
+    expect(response.body.changed_entities.be_monthly_budgets).toHaveLength(2);
     expect(Object.keys(response.body.changed_entities)).toHaveLength(13);
   });
 

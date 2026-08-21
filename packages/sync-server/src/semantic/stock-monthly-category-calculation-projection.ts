@@ -38,7 +38,7 @@ export function projectCapturedMonthlyCategoryRows(
     );
   }
 
-  return input.baseRows.map(row => {
+  const outflowRows = input.baseRows.map(row => {
     const source = sourceById.get(
       String(row.entities_monthly_subcategory_budget_id),
     );
@@ -93,6 +93,63 @@ export function projectCapturedMonthlyCategoryRows(
     }
     throw new Error('Immediate Income calculation references another month');
   });
+
+  const rowIndexById = new Map(
+    outflowRows.map((row, index) => [
+      String(row.entities_monthly_subcategory_budget_id),
+      index,
+    ]),
+  );
+  const assignedRows = [...outflowRows];
+  const sourcesByCategory = new Map<string, BudgetEntity[]>();
+  for (const source of input.sourceRows) {
+    const categoryId = requireString(source.payload.subCategoryId);
+    const rows = sourcesByCategory.get(categoryId) ?? [];
+    rows.push(source);
+    sourcesByCategory.set(categoryId, rows);
+  }
+  for (const sources of sourcesByCategory.values()) {
+    const currentSource = sources.find(
+      source => source.payload.monthlyBudgetId === input.currentMonthlyBudgetId,
+    );
+    const nextSource = sources.find(
+      source => source.payload.monthlyBudgetId === input.nextMonthlyBudgetId,
+    );
+    if (!currentSource || !nextSource) {
+      throw new Error('Assignment projection requires current and next rows');
+    }
+    const currentBudgeted = requireNonnegativeInteger(
+      currentSource.payload.budgeted,
+    );
+    const nextBudgeted = requireNonnegativeInteger(nextSource.payload.budgeted);
+    if (nextBudgeted !== 0) {
+      throw new Error('Future-month assignment is not admitted');
+    }
+    if (currentBudgeted === 0) {
+      continue;
+    }
+    const currentIndex = rowIndexById.get(currentSource.entityId);
+    const nextIndex = rowIndexById.get(nextSource.entityId);
+    if (currentIndex === undefined || nextIndex === undefined) {
+      throw new Error('Assignment calculation row is unavailable');
+    }
+    const current = assignedRows[currentIndex];
+    const currentBalance = current.balance + currentBudgeted;
+    requireSafeInteger(currentBalance);
+    assignedRows[currentIndex] = { ...current, balance: currentBalance };
+    const next = assignedRows[nextIndex];
+    assignedRows[nextIndex] = {
+      ...next,
+      balance: next.balance + Math.max(0, currentBalance),
+      budgeted_previous_month: currentBudgeted,
+      spent_previous_month: current.cash_outflows,
+      balance_previous_month: currentBalance,
+      budgeted_average: currentBudgeted,
+      spent_average: current.cash_outflows,
+      payment_average: 0,
+    };
+  }
+  return assignedRows;
 }
 
 function currentCashOutflowRow(
@@ -133,4 +190,11 @@ function requireString(value: unknown): string {
     throw new Error('Captured monthly-category identity is unavailable');
   }
   return value;
+}
+
+function requireNonnegativeInteger(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw new Error('Captured assignment amount must be nonnegative');
+  }
+  return Number(value);
 }
