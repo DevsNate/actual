@@ -28,3 +28,21 @@ unknown-account, wrong-payee, malformed, scheduled, and split mutations fail
 closed. The server does not invent missing reciprocal identities.
 
 Credit-card payments remain a separate specialization.
+
+## Local stock-Web payment acceptance
+
+The unchanged deployed stock Web runtime was exercised against the local
+schema-44 boundary with a disposable Checking account and CreditCard account.
+It created a payment as the captured reciprocal pair plus the credit account's
+`last_payment_payee_id`, edited only the amount while retaining the prior
+`cash_amount` values in the request, and deleted both legs as terminal
+tombstones. Each admitted mutation returned HTTP 200. The stock register and
+sidebar balances updated immediately, and PostgreSQL retained both transaction
+identities as tombstones with cleared payee and reciprocal relationships after
+deletion.
+
+One exploratory request changed amount and memo together. The preserved stock
+client generated that request, but CCP-001 does not contain the corresponding
+stock-server acknowledgement and readback, so the local boundary correctly
+left that combined mutation unsupported. No broader edit rule was inferred
+from the client request alone.
