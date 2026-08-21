@@ -650,7 +650,10 @@ Copy this block for a new architectural delta:
   knowledge, and exact replay receipts commit atomically. Live-reference payee
   deletion fails closed.
 - **Boundary:** The uncategorized PAYEE-001 shape and exact categorized
-  ORDINARY-001 create/amount-and-memo-edit/delete lifecycle are admitted.
+  ORDINARY-001 create/amount-and-memo-edit/delete lifecycle are admitted. The
+  preserved stock Web amount-only edit envelope is supported provisionally and
+  is not promoted to fully admitted stock-server behavior without its stock
+  acknowledgement fixture.
   Standalone creation, merge, other edit shapes, splits, transfers, payments,
   schedules, imports, and matching remain gated.
 - **Verification:** Focused positive and adversarial parser tests, strict

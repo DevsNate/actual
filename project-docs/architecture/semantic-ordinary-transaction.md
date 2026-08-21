@@ -30,6 +30,10 @@ explicit evidence-backed server effect, not a generic amount rule.
   three and server knowledge by two;
 - the captured amount-and-memo edit advances both device and server knowledge
   by two;
+- the preserved stock Web runtime emits an amount-only edit with a device
+  knowledge advance of one. The compatibility response reuses the captured
+  ordinary-edit normalization and server advance of two; this narrower shape
+  remains provisional until its stock-server acknowledgement is captured;
 - transaction deletion advances device knowledge by one and server knowledge
   by two;
 - payee rename and unused-payee deletion each advance both by one; and
@@ -41,9 +45,11 @@ explicit evidence-backed server effect, not a generic amount rule.
 - Creation requires exactly one new ordinary payee and one unsplit,
   unscheduled, non-transfer transaction using a known live account. A category
   must be live and must match the new payee's captured autofill category.
-- Editing is limited to ORDINARY-001's exact amount-and-memo change. The
-  request-side cash amount must equal the prior normalized amount; the response
-  normalizes it to the new amount.
+- Editing is limited to ORDINARY-001's exact amount-and-memo change and the
+  preserved stock Web runtime's amount-only variant. The request-side cash
+  amount must equal the prior normalized amount; the response normalizes it to
+  the new amount. Amount-only support is explicitly provisional at the
+  stock-server boundary.
 - Transaction deletion requires the complete current transaction row plus its
   tombstone bit.
 - Payee rename may change only the name.

@@ -243,9 +243,12 @@ function parseTransactionEdit(
   const current = liveEntity(snapshot, 'be_transactions', row.id);
   if (!current || !isCanonicalOrdinaryEntity(current)) return null;
   const expected = projectStockRequestEntity(current);
-  const changed = changedKeys(expected, row);
+  const changed = changedKeys(expected, row).sort();
   if (
-    !isDeepStrictEqual(changed.sort(), ['amount', 'memo']) ||
+    !(
+      isDeepStrictEqual(changed, ['amount']) ||
+      isDeepStrictEqual(changed, ['amount', 'memo'])
+    ) ||
     row.cash_amount !== expected.amount ||
     !Number.isSafeInteger(row.amount) ||
     row.amount === 0 ||
@@ -279,7 +282,7 @@ function parseTransactionEdit(
       ...calculationDelta(snapshot, augmented),
       be_transactions: [projectStockRequestEntity(edited)],
     },
-    expectedDeviceAdvance: 2,
+    expectedDeviceAdvance: changed.length,
     serverKnowledgeAdvance: 2,
   };
 }

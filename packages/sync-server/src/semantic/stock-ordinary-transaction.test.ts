@@ -404,6 +404,43 @@ describe('stock ordinary transaction and payee boundary', () => {
     expect(edited?.changedEntities.be_transactions).toEqual([
       expect.objectContaining({ amount: -5670, cash_amount: -5670 }),
     ]);
+
+    const amountOnlyEdit = parseStockOrdinaryMutation(
+      {
+        be_transaction_groups: [
+          {
+            id: 'transaction-1',
+            be_transaction: {
+              ...projectStockRequestEntity(categorizedTransaction),
+              amount: -6780,
+              cash_amount: -4560,
+            },
+            be_subtransactions: null,
+          },
+        ],
+      },
+      categorizedSnapshot,
+    );
+    expect(amountOnlyEdit).toMatchObject({
+      mutationDomain: 'transaction',
+      mutation: {
+        kind: 'edit',
+        expected: { amount: -4560, memo: 'Phase Four Categorized' },
+        transaction: { amount: -6780, memo: 'Phase Four Categorized' },
+      },
+      expectedDeviceAdvance: 1,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(amountOnlyEdit?.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({ amount: -6780, cash_amount: -6780 }),
+    ]);
+    expect(amountOnlyEdit?.changedEntities.be_account_calculations).toEqual([
+      expect.objectContaining({
+        entities_account_id: 'account-1',
+        cleared_balance: 93_220,
+      }),
+    ]);
+
     expect(
       parseStockOrdinaryMutation(
         {
