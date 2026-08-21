@@ -1,7 +1,8 @@
 /**
  * Project-owned projection for the exact monthly-category cash states proven
- * by the controlled stock captures. Target and credit-card states are outside
- * this boundary and remain separate admission phases.
+ * by the controlled stock captures. Credit-card payment categories use the
+ * separately captured payment carry fields. Target states remain a separate
+ * admission phase.
  */
 
 import type { BudgetEntity } from '@actual-app/semantic-core';
@@ -17,6 +18,7 @@ type CapturedMonthlyCategoryInput = Readonly<{
   immediateIncomeCategoryId: string;
   uncategorizedCashOutflows: number;
   categorizedCashOutflows: ReadonlyMap<string, number>;
+  paymentCashOutflows: ReadonlyMap<string, number>;
   immediateIncome: number;
 }>;
 
@@ -27,6 +29,14 @@ export function projectCapturedMonthlyCategoryRows(
   requireSafeInteger(input.immediateIncome);
   for (const amount of input.categorizedCashOutflows.values()) {
     requireSafeInteger(amount);
+  }
+  for (const [categoryId, amount] of input.paymentCashOutflows) {
+    requireSafeInteger(amount);
+    if (input.categorizedCashOutflows.has(categoryId)) {
+      throw new Error(
+        'A monthly category cannot be both spending and payment cash flow',
+      );
+    }
   }
 
   const sourceById = new Map(
@@ -64,6 +74,16 @@ export function projectCapturedMonthlyCategoryRows(
       }
       if (monthlyBudgetId === input.nextMonthlyBudgetId) {
         return nextCashOutflowRow(row, categoryOutflow);
+      }
+    }
+
+    const paymentOutflow = input.paymentCashOutflows.get(categoryId) ?? 0;
+    if (paymentOutflow !== 0) {
+      if (monthlyBudgetId === input.currentMonthlyBudgetId) {
+        return currentCashOutflowRow(row, paymentOutflow);
+      }
+      if (monthlyBudgetId === input.nextMonthlyBudgetId) {
+        return nextPaymentCashOutflowRow(row, paymentOutflow);
       }
     }
 
@@ -176,6 +196,20 @@ function nextCashOutflowRow(
     budgeted_average: 0,
     spent_average: amount,
     payment_average: 0,
+  };
+}
+
+function nextPaymentCashOutflowRow(
+  row: StockMonthlySubcategoryBudgetCalculation,
+  amount: number,
+): StockMonthlySubcategoryBudgetCalculation {
+  return {
+    ...row,
+    payment_previous_month: amount,
+    balance_previous_month: amount,
+    budgeted_average: 0,
+    spent_average: 0,
+    payment_average: amount,
   };
 }
 

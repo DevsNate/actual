@@ -66,6 +66,46 @@ describe('captured stock monthly-budget calculation projection', () => {
     ]);
   });
 
+  test('projects the captured payment current and next-month budget rows', () => {
+    const result = projectCapturedMonthlyBudgetRows({
+      baseRows: [base('month-current'), base('month-next')],
+      currentMonthlyBudgetId: 'month-current',
+      nextMonthlyBudgetId: 'month-next',
+      immediateIncome: 1000000,
+      cashOutflows: -98700,
+      uncategorizedCashOutflows: 0,
+      currentBudgeted: 69840,
+      currentCategoryBalance: -28860,
+      currentOverspent: -30860,
+      positiveCategoryCarry: 2000,
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        entities_monthly_budget_id: 'month-current',
+        immediate_income: 1000000,
+        budgeted: 69840,
+        cash_outflows: -98700,
+        credit_outflows: 0,
+        balance: -28860,
+        over_spent: -30860,
+        available_to_budget: 930160,
+        uncategorized_cash_outflows: 0,
+        uncategorized_balance: 0,
+      }),
+      expect.objectContaining({
+        entities_monthly_budget_id: 'month-next',
+        immediate_income: 0,
+        cash_outflows: 0,
+        balance: 2000,
+        over_spent: 0,
+        available_to_budget: 899300,
+        uncategorized_cash_outflows: 0,
+        uncategorized_balance: 0,
+      }),
+    ]);
+  });
+
   test('fails closed for extra months or unsafe arithmetic', () => {
     expect(() =>
       projectCapturedMonthlyBudgetRows({

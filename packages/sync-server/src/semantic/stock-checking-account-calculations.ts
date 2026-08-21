@@ -191,6 +191,7 @@ export function projectStockCheckingAccountCalculations(
     immediateIncomeCategoryId: immediateIncomeCategory.entityId,
     uncategorizedCashOutflows: uncategorizedAmount,
     categorizedCashOutflows: splitOutflows,
+    paymentCashOutflows: new Map(),
     immediateIncome: incomeAmount,
   });
   const sourceByCalculationId = new Map(

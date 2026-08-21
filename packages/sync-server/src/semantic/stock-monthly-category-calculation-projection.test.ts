@@ -73,6 +73,7 @@ describe('captured stock monthly-category calculation projection', () => {
       immediateIncomeCategoryId: 'category-income',
       uncategorizedCashOutflows: -10000,
       categorizedCashOutflows: new Map([['category-split-line', -5000]]),
+      paymentCashOutflows: new Map(),
       immediateIncome: 123450,
     });
 
@@ -116,6 +117,46 @@ describe('captured stock monthly-category calculation projection', () => {
     );
   });
 
+  test('projects the captured credit-card payment category carry rows', () => {
+    const sourceRows = [
+      source('payment-current', 'month-current', 'category-payment'),
+      source('payment-next', 'month-next', 'category-payment'),
+    ];
+    const result = projectCapturedMonthlyCategoryRows({
+      baseRows: sourceRows.map(row => base(row.entityId)),
+      sourceRows,
+      currentMonthlyBudgetId: 'month-current',
+      nextMonthlyBudgetId: 'month-next',
+      noneCategoryId: 'category-none',
+      immediateIncomeCategoryId: 'category-income',
+      uncategorizedCashOutflows: 0,
+      categorizedCashOutflows: new Map(),
+      paymentCashOutflows: new Map([['category-payment', -20860]]),
+      immediateIncome: 0,
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        cash_outflows: -20860,
+        positive_cash_outflows: 0,
+        credit_outflows: 0,
+        balance: -20860,
+        unbudgeted_cash_outflows: -20860,
+        payment_previous_month: 0,
+        goal_overall_outflows: -20860,
+      }),
+      expect.objectContaining({
+        cash_outflows: 0,
+        balance: 0,
+        payment_previous_month: -20860,
+        balance_previous_month: -20860,
+        budgeted_average: 0,
+        spent_average: 0,
+        payment_average: -20860,
+      }),
+    ]);
+  });
+
   test('fails closed for unsafe amounts or incomplete source identities', () => {
     const row = source('none-current', 'month-current', 'category-none');
     expect(() =>
@@ -128,6 +169,7 @@ describe('captured stock monthly-category calculation projection', () => {
         immediateIncomeCategoryId: 'category-income',
         uncategorizedCashOutflows: Number.MAX_SAFE_INTEGER + 1,
         categorizedCashOutflows: new Map(),
+        paymentCashOutflows: new Map(),
         immediateIncome: 0,
       }),
     ).toThrow('must be a safe integer');
@@ -141,6 +183,7 @@ describe('captured stock monthly-category calculation projection', () => {
         immediateIncomeCategoryId: 'category-income',
         uncategorizedCashOutflows: 0,
         categorizedCashOutflows: new Map(),
+        paymentCashOutflows: new Map(),
         immediateIncome: 0,
       }),
     ).toThrow('source row is unavailable');
