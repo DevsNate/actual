@@ -13,6 +13,7 @@ import type {
   CommitCanonicalOrdinaryPayeeMutation,
   CommitCanonicalOrdinaryTransactionMutation,
   CommitCanonicalPristineAccountDeletion,
+  CommitCanonicalScheduledTransactionMutation,
   CommitCanonicalSplitTransactionMutation,
   CommitCanonicalTransferMutation,
   CommitUnlinkedAccountCreation,
@@ -24,8 +25,10 @@ import type {
 import type { Pool, PoolClient } from 'pg';
 
 import { writeCanonicalCategoryAssignment } from './assignment-store';
+import { writeCanonicalBudgetBootstrap } from './budget-bootstrap-store';
 import { writeCanonicalCreditCardPaymentMutation } from './credit-card-payment-store';
 import { SemanticStoreError } from './errors';
+import { writeCanonicalScheduledTransactionMutation } from './scheduled-transaction-store';
 import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
 import { writeCanonicalTargetReplacement } from './target-store';
 import { writeCanonicalTransferMutation } from './transfer-store';
@@ -224,6 +227,7 @@ export class PostgresSemanticStore {
       await insertChangeSet(client, budgetChangeSet, budgetKnowledge);
       await insertEntityChanges(client, budgetChangeSet);
       await upsertBudgetEntities(client, budgetChangeSet, budgetKnowledge);
+      await writeCanonicalBudgetBootstrap(client, command.budgetId);
 
       await client.query(
         `UPDATE semantic_budgets
@@ -516,6 +520,17 @@ export class PostgresSemanticStore {
     return this.transact(client =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalCreditCardPaymentMutation(client, command),
+      ),
+    );
+  }
+
+  async commitScheduledTransactionMutation(
+    command: CommitCanonicalScheduledTransactionMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalScheduledTransactionMutation(client, command),
       ),
     );
   }

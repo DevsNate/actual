@@ -71,6 +71,18 @@ function projectEntityPayload(
   payload: Readonly<Record<string, unknown>>,
 ) {
   const projected = projectPayload(entityKind, payload);
+  if (entityKind === 'be_scheduled_transactions') {
+    const upcoming = projected.upcoming_instances;
+    if (
+      !Array.isArray(upcoming) ||
+      upcoming.length !== 1 ||
+      typeof upcoming[0] !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}$/u.test(upcoming[0])
+    ) {
+      throw new Error('Stock schedule projection requires one upcoming date');
+    }
+    return { ...projected, upcoming_instances: `{${upcoming[0]}}` };
+  }
   if (entityKind !== 'be_budget') {
     return projected;
   }
@@ -129,6 +141,11 @@ const payloadRules: Readonly<
     autoFillSubCategoryId: 'auto_fill_subcategory_id',
   }),
   be_settings: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_scheduled_transactions: rule(['budgetVersionId'], {
+    accountId: 'entities_account_id',
+    payeeId: 'entities_payee_id',
+    subCategoryId: 'entities_subcategory_id',
+  }),
   be_subcategories: rule(
     ['budgetVersionId', 'deviceKnowledge', 'pinnedGoalIndex', 'pinnedIndex'],
     {

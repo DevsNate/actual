@@ -14,12 +14,18 @@ type CapturedMonthlyCategoryInput = Readonly<{
   sourceRows: readonly BudgetEntity[];
   currentMonthlyBudgetId: string;
   nextMonthlyBudgetId: string;
+  currentMonth?: string;
+  nextMonth?: string;
   noneCategoryId: string;
   immediateIncomeCategoryId: string;
   uncategorizedCashOutflows: number;
   categorizedCashOutflows: ReadonlyMap<string, number>;
   paymentCashOutflows: ReadonlyMap<string, number>;
   immediateIncome: number;
+  scheduledTransactions?: ReadonlyMap<
+    string,
+    readonly Readonly<{ amount: number; firstDate: string }>[]
+  >;
 }>;
 
 export function projectCapturedMonthlyCategoryRows(
@@ -169,7 +175,62 @@ export function projectCapturedMonthlyCategoryRows(
       payment_average: 0,
     };
   }
-  return assignedRows;
+  if (!input.scheduledTransactions) return assignedRows;
+  if (!input.currentMonth || !input.nextMonth) {
+    throw new Error('Scheduled calculation months are unavailable');
+  }
+  const scheduledTransactions = input.scheduledTransactions;
+  const currentMonth = input.currentMonth;
+  const nextMonth = input.nextMonth;
+  return assignedRows.map(row => {
+    const source = sourceById.get(
+      String(row.entities_monthly_subcategory_budget_id),
+    );
+    if (!source) {
+      throw new Error('Scheduled calculation source row is unavailable');
+    }
+    const categoryId = requireString(source.payload.subCategoryId);
+    const monthlyBudgetId = requireString(source.payload.monthlyBudgetId);
+    const month =
+      monthlyBudgetId === input.currentMonthlyBudgetId
+        ? currentMonth
+        : monthlyBudgetId === input.nextMonthlyBudgetId
+          ? nextMonth
+          : null;
+    if (!month) throw new Error('Scheduled calculation month is unavailable');
+    const schedules = scheduledTransactions.get(categoryId) ?? [];
+    const active = schedules.filter(schedule =>
+      occursInMonth(schedule.firstDate, month),
+    );
+    const upcoming = active.reduce((sum, schedule) => sum + schedule.amount, 0);
+    requireSafeInteger(upcoming);
+    return {
+      ...row,
+      upcoming_transactions: upcoming,
+      upcoming_transactions_count: active.length,
+      upcoming_transactions_first_date:
+        active
+          .map(schedule => occurrenceDate(schedule.firstDate, month))
+          .sort()[0] ?? null,
+    };
+  });
+}
+
+function occursInMonth(firstDate: string, month: string): boolean {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/u.test(firstDate) ||
+    !/^\d{4}-\d{2}-01$/u.test(month)
+  ) {
+    throw new Error('Scheduled calculation date is unavailable');
+  }
+  return month.slice(0, 7) >= firstDate.slice(0, 7);
+}
+
+function occurrenceDate(firstDate: string, month: string): string {
+  const day = Number(firstDate.slice(8, 10));
+  const [year, monthNumber] = month.split('-').map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return `${month.slice(0, 8)}${String(Math.min(day, lastDay)).padStart(2, '0')}`;
 }
 
 function currentCashOutflowRow(

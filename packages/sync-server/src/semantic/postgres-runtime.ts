@@ -7,11 +7,13 @@ import {
 import { semanticAccountLifecycleMigration } from '@actual-app/semantic-postgres/account-lifecycle-migration';
 import { semanticBudgetIdentitySchemaMigration } from '@actual-app/semantic-postgres/budget-identity-schema-migration';
 import { semanticCanonicalAccountDomainMigration } from '@actual-app/semantic-postgres/canonical-account-domain-migration';
+import { semanticCanonicalBudgetBootstrapMigration } from '@actual-app/semantic-postgres/canonical-budget-bootstrap-migration';
 import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-postgres/canonical-budget-entity-migration';
 import { semanticCanonicalCategoryDomainMigration } from '@actual-app/semantic-postgres/canonical-category-domain-migration';
-import { semanticCanonicalCreditCardPaymentMigration } from '@actual-app/semantic-postgres/canonical-credit-card-payment-migration';
 import { semanticCanonicalCreditCardAccountMigration } from '@actual-app/semantic-postgres/canonical-credit-card-account-migration';
+import { semanticCanonicalCreditCardPaymentMigration } from '@actual-app/semantic-postgres/canonical-credit-card-payment-migration';
 import { semanticCanonicalOrdinaryTransactionMigration } from '@actual-app/semantic-postgres/canonical-ordinary-transaction-migration';
+import { semanticCanonicalScheduledTransactionMigration } from '@actual-app/semantic-postgres/canonical-scheduled-transaction-migration';
 import { semanticCanonicalSplitTransactionMigration } from '@actual-app/semantic-postgres/canonical-split-transaction-migration';
 import { semanticCanonicalTargetDefinitionMigration } from '@actual-app/semantic-postgres/canonical-target-definition-migration';
 import { semanticCanonicalTransferMigration } from '@actual-app/semantic-postgres/canonical-transfer-migration';
@@ -54,6 +56,8 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCanonicalTargetDefinitionMigration,
       semanticCanonicalCreditCardPaymentMigration,
       semanticCanonicalCreditCardAccountMigration,
+      semanticCanonicalScheduledTransactionMigration,
+      semanticCanonicalBudgetBootstrapMigration,
     ]);
   } catch (error) {
     await pool.end();

@@ -1393,6 +1393,271 @@ integrationTest('PostgresSemanticStore integration', () => {
     });
   });
 
+  test('atomically commits, materializes, deletes, and replays a scheduled transaction', async () => {
+    const budgetId = 'schedule-budget';
+    const deviceId = 'schedule-device';
+    await store.seedBudget({
+      budgetId,
+      budgetVersionId: 'schedule-version',
+      membershipId: 'schedule-membership',
+      principalId: 'schedule-principal',
+      name: 'Schedule budget',
+      permissions: 7,
+    });
+    const accountGroup = buildUnlinkedCheckingAccount({
+      budgetId,
+      accountId: 'schedule-account',
+      transferPayeeId: 'schedule-payee',
+      startingBalanceId: 'schedule-starting-balance',
+      startingBalancePayeeId: 'schedule-starting-balance-payee',
+      immediateIncomeCategoryId: 'schedule-immediate-income',
+      name: 'Checking',
+      openingBalance: 100000,
+      openingDate: '2026-08-16',
+      sortOrder: 0,
+    });
+    await store.commitUnlinkedAccountCreation({
+      accountGroup,
+      delivery: {
+        changeSetId: 'schedule-account-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 0,
+        expectedServerKnowledge: 0,
+        serverKnowledgeAdvance: 2,
+        schemaVersion: 44,
+        idempotencyKey: 'schedule-account-request',
+        payloadDigest: '1'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_accounts',
+            entityId: 'schedule-account',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_payees',
+            entityId: 'schedule-payee',
+            isTombstone: false,
+            payload: {},
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'schedule-starting-balance',
+            isTombstone: false,
+            payload: {},
+          },
+        ],
+        response: { created: true },
+      },
+    });
+    await pool.query(
+      `INSERT INTO semantic_category_groups
+         (budget_id, category_group_id, name, sortable_index, is_hidden)
+       VALUES ($1, 'schedule-group', 'Schedule group', 0, false)`,
+      [budgetId],
+    );
+    await pool.query(
+      `INSERT INTO semantic_categories
+         (budget_id, category_id, category_group_id, name, sortable_index,
+          category_type, is_hidden)
+       VALUES ($1, 'schedule-category', 'schedule-group',
+               'Schedule category', 0, 'DFT', false)`,
+      [budgetId],
+    );
+
+    const parent = {
+      id: 'schedule-parent',
+      budgetId,
+      accountId: 'schedule-account',
+      payeeId: 'schedule-payee',
+      categoryId: 'schedule-category',
+      date: '2026-08-17',
+      frequency: 'Monthly' as const,
+      amount: -10000,
+      memo: 'Schedule Test',
+      upcomingInstances: ['2026-08-17'] as const,
+    };
+    const create = {
+      mutation: {
+        kind: 'create' as const,
+        parent,
+        payeeAutofill: {
+          payeeId: 'schedule-payee',
+          expectedCategoryId: null,
+          categoryId: 'schedule-category',
+        },
+      },
+      delivery: {
+        changeSetId: 'schedule-create-change',
+        budgetId,
+        originDeviceId: deviceId,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        expectedServerKnowledge: 2,
+        serverKnowledgeAdvance: 2 as const,
+        schemaVersion: 44,
+        idempotencyKey: 'schedule-create-request',
+        payloadDigest: '2'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_payees',
+            entityId: 'schedule-payee',
+            isTombstone: false,
+            payload: { autoFillSubCategoryId: 'schedule-category' },
+          },
+          {
+            entityKind: 'be_scheduled_transactions',
+            entityId: 'schedule-parent',
+            isTombstone: false,
+            payload: { date: '2026-08-17' },
+          },
+        ],
+        response: { accepted: true },
+      },
+    };
+    await expect(
+      store.commitScheduledTransactionMutation(create),
+    ).resolves.toMatchObject({ replayed: false, serverKnowledge: 4 });
+    await expect(
+      store.commitScheduledTransactionMutation(create),
+    ).resolves.toMatchObject({ replayed: true, serverKnowledge: 4 });
+
+    const editedParent = {
+      ...parent,
+      amount: -15000,
+      memo: 'Schedule Test 2',
+    };
+    await store.commitScheduledTransactionMutation({
+      mutation: { kind: 'update', parent: editedParent },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'schedule-update-change',
+        startingDeviceKnowledge: 2,
+        endingDeviceKnowledge: 4,
+        expectedServerKnowledge: 4,
+        idempotencyKey: 'schedule-update-request',
+        payloadDigest: '3'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_scheduled_transactions',
+            entityId: 'schedule-parent',
+            isTombstone: false,
+            payload: { amount: -15000 },
+          },
+        ],
+      },
+    });
+    const materializedParent = {
+      ...editedParent,
+      date: '2026-09-16',
+      upcomingInstances: ['2026-09-16'] as const,
+    };
+    await store.commitScheduledTransactionMutation({
+      mutation: {
+        kind: 'materialize',
+        parent: materializedParent,
+        occurrence: {
+          id: 'schedule-parent_2026-08-16',
+          budgetId,
+          scheduledTransactionId: 'schedule-parent',
+          accountId: 'schedule-account',
+          payeeId: 'schedule-payee',
+          categoryId: 'schedule-category',
+          date: '2026-08-16',
+          dateEnteredFromSchedule: '2026-08-16',
+          amount: -15000,
+          memo: 'Schedule Test 2',
+          cleared: 'Uncleared',
+          accepted: false,
+          source: 'Scheduler',
+        },
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'schedule-materialize-change',
+        startingDeviceKnowledge: 4,
+        endingDeviceKnowledge: 9,
+        expectedServerKnowledge: 6,
+        idempotencyKey: 'schedule-materialize-request',
+        payloadDigest: '4'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_scheduled_transactions',
+            entityId: 'schedule-parent',
+            isTombstone: false,
+            payload: { date: '2026-09-16' },
+          },
+          {
+            entityKind: 'be_transactions',
+            entityId: 'schedule-parent_2026-08-16',
+            isTombstone: false,
+            payload: { source: 'Scheduler' },
+          },
+        ],
+      },
+    });
+    await store.commitScheduledTransactionMutation({
+      mutation: {
+        kind: 'delete',
+        budgetId,
+        scheduledTransactionId: 'schedule-parent',
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'schedule-delete-change',
+        startingDeviceKnowledge: 9,
+        endingDeviceKnowledge: 10,
+        expectedServerKnowledge: 8,
+        idempotencyKey: 'schedule-delete-request',
+        payloadDigest: '5'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_scheduled_transactions',
+            entityId: 'schedule-parent',
+            isTombstone: true,
+            payload: { date: '2026-09-16' },
+          },
+        ],
+      },
+    });
+
+    const terminal = await pool.query(
+      `SELECT s.amount_milliunits::text AS amount, s.memo,
+              s.is_tombstone AS schedule_tombstone,
+              t.amount_milliunits::text AS occurrence_amount,
+              t.scheduled_transaction_id,
+              t.is_tombstone AS occurrence_tombstone,
+              b.server_knowledge::text AS server_knowledge,
+              d.server_knowledge_of_device::text AS device_knowledge,
+              (SELECT count(*) FROM semantic_budget_device_receipts
+               WHERE budget_id = $1
+                 AND idempotency_key = 'schedule-create-request')::text AS create_receipts
+       FROM semantic_scheduled_transactions s
+       JOIN semantic_transactions t
+         ON t.budget_id = s.budget_id
+        AND t.scheduled_transaction_id = s.scheduled_transaction_id
+       JOIN semantic_budgets b ON b.budget_id = s.budget_id
+       JOIN semantic_budget_devices d ON d.budget_id = s.budget_id
+       WHERE s.budget_id = $1 AND s.scheduled_transaction_id = 'schedule-parent'
+         AND t.transaction_id = 'schedule-parent_2026-08-16'
+         AND d.device_id = $2`,
+      [budgetId, deviceId],
+    );
+    expect(terminal.rows[0]).toEqual({
+      amount: '-15000',
+      memo: 'Schedule Test 2',
+      schedule_tombstone: true,
+      occurrence_amount: '-15000',
+      scheduled_transaction_id: 'schedule-parent',
+      occurrence_tombstone: false,
+      server_knowledge: '10',
+      device_knowledge: '10',
+      create_receipts: '1',
+    });
+  });
+
   test('persists a reciprocal transfer with replay, pair edit, and deletion', async () => {
     const budgetId = 'transfer-budget';
     const deviceId = 'transfer-device';
@@ -1808,6 +2073,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       catalog_device_knowledge: string;
       receipt_starting_knowledge: string;
       receipt_ending_knowledge: string;
+      category_groups: string;
+      categories: string;
+      monthly_category_budgets: string;
     }>(
       `SELECT
          (SELECT count(*) FROM semantic_budgets WHERE budget_id = $1) AS plans,
@@ -1823,7 +2091,13 @@ integrationTest('PostgresSemanticStore integration', () => {
          (SELECT starting_device_knowledge FROM semantic_catalog_command_receipts
           WHERE principal_id = $2 AND device_id = $4) AS receipt_starting_knowledge,
          (SELECT ending_device_knowledge FROM semantic_catalog_command_receipts
-          WHERE principal_id = $2 AND device_id = $4) AS receipt_ending_knowledge`,
+          WHERE principal_id = $2 AND device_id = $4) AS receipt_ending_knowledge,
+         (SELECT count(*) FROM semantic_category_groups
+          WHERE budget_id = $1) AS category_groups,
+         (SELECT count(*) FROM semantic_categories
+          WHERE budget_id = $1) AS categories,
+         (SELECT count(*) FROM semantic_monthly_category_budgets
+          WHERE budget_id = $1) AS monthly_category_budgets`,
       [
         operation.budgetId,
         operation.principalId,
@@ -1843,6 +2117,9 @@ integrationTest('PostgresSemanticStore integration', () => {
       catalog_device_knowledge: '7',
       receipt_starting_knowledge: '7',
       receipt_ending_knowledge: '7',
+      category_groups: '6',
+      categories: '12',
+      monthly_category_budgets: '24',
     });
 
     const byVersion = await budgetReader.readBudgetByVersion(

@@ -74,7 +74,12 @@ export function projectStockAdmittedAccountCalculations(
       transaction.payload.payeeId !== balanceAdjustmentPayee.entityId &&
       transaction.payload.subCategoryId !== splitCategory.entityId &&
       transaction.payload.transferAccountId === null &&
-      transaction.payload.transferTransactionId === null,
+      transaction.payload.transferTransactionId === null &&
+      transaction.payload.scheduledTransactionId === null,
+  );
+  const scheduledOccurrences = liveTransactions.filter(
+    transaction =>
+      typeof transaction.payload.scheduledTransactionId === 'string',
   );
   const transferTransactions = liveTransactions.filter(
     transaction =>
@@ -103,10 +108,13 @@ export function projectStockAdmittedAccountCalculations(
           entity.entityKind !== 'be_accounts' &&
           entity.entityKind !== 'be_transactions' &&
           entity.entityKind !== 'be_subtransactions' &&
+          entity.entityKind !== 'be_scheduled_transactions' &&
+          entity.entityKind !== 'be_scheduled_subtransactions' &&
           entity.entityKind !== 'be_money_movements' &&
           !(
             entity.entityKind === 'be_payees' &&
-            accountIds.has(String(entity.payload.accountId))
+            typeof entity.payload.accountId === 'string' &&
+            accountIds.has(entity.payload.accountId)
           ),
       )
       .map(entity =>
@@ -122,7 +130,9 @@ export function projectStockAdmittedAccountCalculations(
         entity.payload.bootstrapRole !== 'opened-budget-prior-month',
     )
     .sort((left, right) =>
-      String(left.payload.month).localeCompare(String(right.payload.month)),
+      requireIsoDate(left.payload.month).localeCompare(
+        requireIsoDate(right.payload.month),
+      ),
     );
   if (monthlyBudgets.length !== 2) {
     throw new Error('Checking-account calculations require two budget months');
@@ -179,6 +189,19 @@ export function projectStockAdmittedAccountCalculations(
         requireInteger(line.payload.amount),
     );
   }
+  for (const transaction of scheduledOccurrences) {
+    const amount = scheduledOccurrenceAmount(
+      transaction,
+      snapshot.entities,
+      accounts,
+      currentMonth,
+    );
+    const categoryId = requireString(transaction.payload.subCategoryId);
+    categorizedCashOutflows.set(
+      categoryId,
+      (categorizedCashOutflows.get(categoryId) ?? 0) + amount,
+    );
+  }
   const categorizedAmount = [...categorizedCashOutflows.values()].reduce(
     (sum, amount) => sum + amount,
     0,
@@ -211,12 +234,15 @@ export function projectStockAdmittedAccountCalculations(
     ),
     currentMonthlyBudgetId: monthlyBudgets[0].entityId,
     nextMonthlyBudgetId: monthlyBudgets[1].entityId,
+    currentMonth,
+    nextMonth,
     noneCategoryId: noneCategory.entityId,
     immediateIncomeCategoryId: immediateIncomeCategory.entityId,
     uncategorizedCashOutflows: uncategorizedAmount,
     categorizedCashOutflows,
     paymentCashOutflows,
     immediateIncome: incomeAmount,
+    scheduledTransactions: capturedScheduledTransactions(snapshot.entities),
   });
   const sourceByCalculationId = new Map(
     snapshot.entities
@@ -487,7 +513,8 @@ function ordinaryTransactionAmount(
     transaction.payload.creditAmount !== 0 ||
     transaction.payload.creditAmountAdjusted !== 0 ||
     transaction.payload.subcategoryCreditAmountPreceding !== 0 ||
-    !['Cleared', 'Uncleared'].includes(String(transaction.payload.cleared)) ||
+    (transaction.payload.cleared !== 'Cleared' &&
+      transaction.payload.cleared !== 'Uncleared') ||
     transaction.payload.accepted !== true ||
     transaction.payload.transferAccountId !== null ||
     transaction.payload.transferTransactionId !== null ||
@@ -501,6 +528,84 @@ function ordinaryTransactionAmount(
   return Number(transaction.payload.amount);
 }
 
+function scheduledOccurrenceAmount(
+  transaction: BudgetEntity,
+  entities: readonly BudgetEntity[],
+  accounts: readonly BudgetEntity[],
+  currentMonth: string,
+): number {
+  const parentId = requireString(transaction.payload.scheduledTransactionId);
+  const transactionDate = requireIsoDate(transaction.payload.date);
+  const parent = entities.find(
+    entity =>
+      entity.entityKind === 'be_scheduled_transactions' &&
+      entity.entityId === parentId,
+  );
+  if (
+    !parent ||
+    !accounts.some(
+      account => account.entityId === transaction.payload.accountId,
+    ) ||
+    transaction.entityId !== `${parentId}_${transactionDate}` ||
+    transaction.payload.accountId !== parent.payload.accountId ||
+    transaction.payload.payeeId !== parent.payload.payeeId ||
+    transaction.payload.subCategoryId !== parent.payload.subCategoryId ||
+    transaction.payload.dateEnteredFromSchedule !== transaction.payload.date ||
+    transaction.payload.amount !== transaction.payload.cashAmount ||
+    transaction.payload.creditAmount !== 0 ||
+    transaction.payload.creditAmountAdjusted !== 0 ||
+    transaction.payload.subcategoryCreditAmountPreceding !== 0 ||
+    transaction.payload.memo !== parent.payload.memo ||
+    transaction.payload.cleared !== 'Uncleared' ||
+    transaction.payload.accepted !== false ||
+    transaction.payload.source !== 'Scheduler' ||
+    transaction.payload.transferAccountId !== null ||
+    transaction.payload.transferTransactionId !== null ||
+    transaction.payload.transferSubtransactionId !== null ||
+    transactionDate.slice(0, 7) !== currentMonth.slice(0, 7) ||
+    !Number.isSafeInteger(transaction.payload.amount)
+  ) {
+    throw new Error('Unsupported scheduled occurrence calculation state');
+  }
+  return Number(transaction.payload.amount);
+}
+
+function capturedScheduledTransactions(
+  entities: readonly BudgetEntity[],
+): ReadonlyMap<
+  string,
+  readonly Readonly<{ amount: number; firstDate: string }>[]
+> {
+  const result = new Map<
+    string,
+    Readonly<{ amount: number; firstDate: string }>[]
+  >();
+  for (const parent of entities.filter(
+    entity =>
+      entity.entityKind === 'be_scheduled_transactions' && !entity.isTombstone,
+  )) {
+    const upcoming = parent.payload.upcomingInstances;
+    if (
+      parent.payload.frequency !== 'Monthly' ||
+      !Array.isArray(upcoming) ||
+      upcoming.length !== 1 ||
+      parent.payload.flag !== null ||
+      parent.payload.transferAccountId !== null ||
+      parent.payload.debtTransactionType !== null
+    ) {
+      throw new Error('Unsupported scheduled parent calculation state');
+    }
+    const categoryId = requireString(parent.payload.subCategoryId);
+    const rows = result.get(categoryId) ?? [];
+    rows.push({
+      amount: requireInteger(parent.payload.amount),
+      firstDate: requireIsoDate(upcoming[0]),
+    });
+    result.set(categoryId, rows);
+  }
+  return result;
+}
+
 function validateTransferCalculationState(
   transfers: readonly BudgetEntity[],
   accounts: readonly BudgetEntity[],
@@ -510,7 +615,9 @@ function validateTransferCalculationState(
     throw new Error('Transfers require complete reciprocal pairs');
   }
   for (const leg of transfers) {
-    const reciprocal = byId.get(String(leg.payload.transferTransactionId));
+    const reciprocal = byId.get(
+      requireString(leg.payload.transferTransactionId),
+    );
     if (
       !reciprocal ||
       reciprocal === leg ||

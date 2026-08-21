@@ -1,7 +1,7 @@
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
-import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import { projectStockAdmittedAccountCalculations } from './stock-admitted-account-calculations';
+import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 
 function createSnapshot() {
   let sequence = 0;
@@ -546,6 +546,102 @@ describe('stock admitted account calculations', () => {
         spent_average: 703680,
       }),
     ]);
+  });
+
+  test('projects the captured monthly parent and scheduler occurrence separately', () => {
+    const snapshot = createSnapshot();
+    const startingPayee = snapshot.entities.find(
+      entity => entity.payload.internalName === 'StartingBalancePayee',
+    )!;
+    const immediateIncome = snapshot.entities.find(
+      entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
+    )!;
+    const category = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        entity.payload.internalName === null &&
+        (entity.payload.accountId ?? null) === null,
+    )!;
+    snapshot.entities.push(
+      account('checking', 'Cash'),
+      transferPayee('checking'),
+      {
+        entityKind: 'be_payees',
+        entityId: 'schedule-payee',
+        isTombstone: false,
+        payload: { accountId: null, enabled: true, name: 'Schedule Payee' },
+      },
+      transaction('checking-start', 'checking', 100_000, {
+        payeeId: startingPayee.entityId,
+        subCategoryId: immediateIncome.entityId,
+        cleared: 'Cleared',
+      }),
+      {
+        entityKind: 'be_scheduled_transactions',
+        entityId: 'schedule-1',
+        isTombstone: false,
+        payload: {
+          accountId: 'checking',
+          payeeId: 'schedule-payee',
+          subCategoryId: category.entityId,
+          date: '2026-08-17',
+          frequency: 'Monthly',
+          amount: -15_000,
+          memo: 'Schedule Test 2',
+          flag: null,
+          transferAccountId: null,
+          upcomingInstances: ['2026-08-17'],
+          debtTransactionType: null,
+        },
+      },
+    );
+
+    const parentOnly = projectStockAdmittedAccountCalculations(snapshot);
+    const rows = parentOnly.be_monthly_subcategory_budget_calculations.filter(
+      row =>
+        String(row.entities_monthly_subcategory_budget_id).endsWith(
+          category.entityId,
+        ),
+    );
+    expect(rows).toEqual([
+      expect.objectContaining({
+        upcoming_transactions: -15_000,
+        upcoming_transactions_count: 1,
+        upcoming_transactions_first_date: '2026-08-17',
+      }),
+      expect.objectContaining({
+        upcoming_transactions: -15_000,
+        upcoming_transactions_count: 1,
+        upcoming_transactions_first_date: '2026-09-17',
+      }),
+    ]);
+
+    snapshot.entities.push(
+      transaction('schedule-1_2026-08-16', 'checking', -15_000, {
+        payeeId: 'schedule-payee',
+        subCategoryId: category.entityId,
+        scheduledTransactionId: 'schedule-1',
+        date: '2026-08-16',
+        dateEnteredFromSchedule: '2026-08-16',
+        memo: 'Schedule Test 2',
+        accepted: false,
+        source: 'Scheduler',
+      }),
+    );
+    const withOccurrence = projectStockAdmittedAccountCalculations(snapshot);
+    expect(
+      withOccurrence.be_monthly_subcategory_budget_calculations.find(row =>
+        String(row.entities_monthly_subcategory_budget_id).endsWith(
+          category.entityId,
+        ),
+      ),
+    ).toEqual(expect.objectContaining({ cash_outflows: -15_000 }));
+    expect(withOccurrence.be_account_calculations[0]).toEqual(
+      expect.objectContaining({
+        uncleared_balance: -15_000,
+        transaction_count: 2,
+      }),
+    );
   });
 });
 

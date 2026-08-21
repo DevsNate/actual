@@ -14,6 +14,7 @@ export { semanticCanonicalTargetDefinitionMigration } from './canonical-target-d
 export { semanticCanonicalMoneyMovementMigration } from './canonical-money-movement-migration';
 export { semanticCanonicalCreditCardPaymentMigration } from './canonical-credit-card-payment-migration';
 export { semanticCanonicalCreditCardAccountMigration } from './canonical-credit-card-account-migration';
+export { semanticCanonicalScheduledTransactionMigration } from './canonical-scheduled-transaction-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

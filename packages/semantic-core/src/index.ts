@@ -6,6 +6,7 @@ export * from './budget-lifecycle';
 export * from './category';
 export * from './catalog';
 export * from './credit-card-payment';
+export * from './scheduled-transaction';
 export * from './split-transaction';
 export * from './transaction';
 export * from './transfer';
