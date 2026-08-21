@@ -15,7 +15,7 @@ const principal: AuthenticatedPrincipal = {
 describe('stock account gateway', () => {
   test('accepts the captured Token-authenticated direct-import request and returns the exact acknowledgement', async () => {
     const service: AccountCreationService = {
-      createUnlinkedCheckingAccount: vi.fn().mockResolvedValue({
+      createUnlinkedAccount: vi.fn().mockResolvedValue({
         replayed: false,
         serverKnowledge: 4,
         endingDeviceKnowledge: 0,
@@ -42,12 +42,13 @@ describe('stock account gateway', () => {
         balance_millicents: 345670,
         budget_id: 'version-1',
       });
-    expect(service.createUnlinkedCheckingAccount).toHaveBeenCalledWith({
+    expect(service.createUnlinkedAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
       budgetId: 'canonical-budget-1',
       originDeviceId: 'stock-web-direct-import',
       idempotencyKey: 'stock-account-create:request-1',
       name: 'Account Capture 3',
+      accountType: 'checking',
       openingBalance: 345670,
       openingDate: '2026-08-17',
     });
@@ -55,7 +56,7 @@ describe('stock account gateway', () => {
 
   test('fails closed for missing auth, unsupported versions, and malformed account shapes', async () => {
     const service: AccountCreationService = {
-      createUnlinkedCheckingAccount: vi.fn(),
+      createUnlinkedAccount: vi.fn(),
     };
     const app = createApp(service);
     await request(app)
@@ -73,9 +74,9 @@ describe('stock account gateway', () => {
       .post('/api/direct_import/budgets/plan-1/accounts')
       .set('authorization', 'Token token=actual-session')
       .set('x-ynab-api-version', '2026-01-01')
-      .send({ ...capturedBody(), type: 'CreditCard' })
+      .send({ ...capturedBody(), type: 'Liability' })
       .expect(400, { error: { id: 'invalid_account_request' } });
-    expect(service.createUnlinkedCheckingAccount).not.toHaveBeenCalled();
+    expect(service.createUnlinkedAccount).not.toHaveBeenCalled();
   });
 });
 
@@ -106,6 +107,51 @@ function createApp(service: AccountCreationService): express.Express {
   );
   return app;
 }
+
+test('accepts the captured CreditCard creation shape through the same canonical account boundary', async () => {
+  const service: AccountCreationService = {
+    createUnlinkedAccount: vi.fn().mockResolvedValue({
+      replayed: false,
+      serverKnowledge: 72,
+      endingDeviceKnowledge: 0,
+      response: {
+        accountId: 'credit-account-1',
+        name: 'CC Capture 3',
+        type: 'credit-card',
+        openingBalance: -432100,
+        budgetId: 'canonical-budget-1',
+      },
+    }),
+  };
+  const app = createApp(service);
+
+  await request(app)
+    .post('/api/direct_import/budgets/version-1/accounts')
+    .set('authorization', 'Token token=actual-session')
+    .set('x-ynab-api-version', '2026-01-01')
+    .send({
+      ...capturedBody(),
+      name: 'CC Capture 3',
+      type: 'CreditCard',
+      balance: -432100,
+      starting_balance_date: '2026-08-21',
+      debt_interest_rates: '{"2026-08-01":0}',
+      debt_minimum_payments: '{"2026-08-01":0}',
+    })
+    .expect(201, {
+      id: 'credit-account-1',
+      account_name: 'CC Capture 3',
+      account_type: 'CreditCard',
+      balance_millicents: -432100,
+      budget_id: 'version-1',
+    });
+  expect(service.createUnlinkedAccount).toHaveBeenCalledWith(
+    expect.objectContaining({
+      accountType: 'credit-card',
+      openingBalance: -432100,
+    }),
+  );
+});
 
 function capturedBody() {
   return {

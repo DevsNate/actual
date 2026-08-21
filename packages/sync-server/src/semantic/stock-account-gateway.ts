@@ -11,7 +11,7 @@ import express from 'express';
 import type { AccountCreationService } from './account-creation-service';
 import { AccountCreationError } from './account-creation-service';
 import {
-  parseStockCheckingAccountBody,
+  parseStockUnlinkedAccountBody,
   projectStockCreatedAccount,
 } from './stock-account-create-operation';
 import { authenticateStockTokenRequest } from './stock-auth';
@@ -46,9 +46,8 @@ export function createStockAccountGateway(
         return;
       }
 
-      const stockBudgetVersionId =
-        request.params.budgetVersionId?.trim() ?? '';
-      const body = parseStockCheckingAccountBody(request.body);
+      const stockBudgetVersionId = request.params.budgetVersionId?.trim() ?? '';
+      const body = parseStockUnlinkedAccountBody(request.body);
       if (!stockBudgetVersionId || !body) {
         response.status(400).send({ error: { id: 'invalid_account_request' } });
         return;
@@ -67,22 +66,17 @@ export function createStockAccountGateway(
           ? dependencies.allocateRequestId()
           : randomUUID();
         const result =
-          await dependencies.accountCreationService.createUnlinkedCheckingAccount(
-            {
-              principalId: principal.id,
-              budgetId: budget.budgetId,
-              originDeviceId: 'stock-web-direct-import',
-              idempotencyKey: `stock-account-create:${requestId}`,
-              ...body,
-            },
-          );
+          await dependencies.accountCreationService.createUnlinkedAccount({
+            principalId: principal.id,
+            budgetId: budget.budgetId,
+            originDeviceId: 'stock-web-direct-import',
+            idempotencyKey: `stock-account-create:${requestId}`,
+            ...body,
+          });
         response
           .status(201)
           .send(
-            projectStockCreatedAccount(
-              result.response,
-              stockBudgetVersionId,
-            ),
+            projectStockCreatedAccount(result.response, stockBudgetVersionId),
           );
       } catch (error) {
         if (error instanceof AccountCreationError) {

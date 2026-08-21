@@ -21,7 +21,9 @@
     "./canonical-split-transaction-migration": "./src/canonical-split-transaction-migration.ts",
     "./canonical-transfer-migration": "./src/canonical-transfer-migration.ts",
     "./canonical-target-definition-migration": "./src/canonical-target-definition-migration.ts",
-    "./canonical-money-movement-migration": "./src/canonical-money-movement-migration.ts"
+    "./canonical-money-movement-migration": "./src/canonical-money-movement-migration.ts",
+    "./canonical-credit-card-payment-migration": "./src/canonical-credit-card-payment-migration.ts",
+    "./canonical-credit-card-account-migration": "./src/canonical-credit-card-account-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

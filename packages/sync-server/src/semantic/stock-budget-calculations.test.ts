@@ -1,7 +1,7 @@
 import { buildStockBudgetBootstrap } from '@actual-app/semantic-core/ynab-budget-bootstrap';
 
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
-import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
+import { projectStockAdmittedAccountCalculations } from './stock-admitted-account-calculations';
 
 function createSnapshot() {
   let sequence = 0;
@@ -163,7 +163,148 @@ describe('stock fresh-budget calculations', () => {
   });
 });
 
-describe('stock checking-account calculations', () => {
+describe('stock admitted account calculations', () => {
+  test('projects the captured credit-card payment account, category, and RTA rows', () => {
+    const snapshot = createSnapshot();
+    const startingPayee = snapshot.entities.find(
+      entity => entity.payload.internalName === 'StartingBalancePayee',
+    )!;
+    const immediateIncome = snapshot.entities.find(
+      entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
+    )!;
+    const ordinaryCategory = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        entity.payload.internalName === null &&
+        (entity.payload.accountId ?? null) === null,
+    )!;
+    const masterCategory = snapshot.entities.find(
+      entity => entity.entityKind === 'be_master_categories',
+    )!;
+    const monthlyBudgets = snapshot.entities.filter(
+      entity =>
+        entity.entityKind === 'be_monthly_budgets' &&
+        entity.payload.bootstrapRole !== 'opened-budget-prior-month',
+    );
+    const paymentCategoryId = 'category-payment';
+    snapshot.entities.push(
+      account('checking', 'Cash'),
+      account('credit', 'CreditCard'),
+      transferPayee('checking'),
+      transferPayee('credit'),
+      transaction('checking-start', 'checking', 1_000_000, {
+        payeeId: startingPayee.entityId,
+        subCategoryId: immediateIncome.entityId,
+        cashAmount: 1_000_000,
+        creditAmount: 0,
+        cleared: 'Cleared',
+      }),
+      transaction('credit-start', 'credit', -258_000, {
+        payeeId: startingPayee.entityId,
+        subCategoryId: immediateIncome.entityId,
+        cashAmount: 0,
+        creditAmount: -258_000,
+        cleared: 'Cleared',
+      }),
+      transaction('uncategorized', 'checking', -10_000, {
+        cleared: 'Cleared',
+      }),
+      transaction('categorized', 'checking', -67_000, {
+        subCategoryId: ordinaryCategory.entityId,
+        cleared: 'Cleared',
+      }),
+      transaction('categorized-small', 'checking', -840, {
+        subCategoryId: ordinaryCategory.entityId,
+        cleared: 'Cleared',
+      }),
+      transferLeg('payment-old-out', 'checking', 'credit', -8_520),
+      transferLeg('payment-old-in', 'credit', 'checking', 8_520),
+      transferLeg('payment-new-out', 'checking', 'credit', -12_340),
+      transferLeg('payment-new-in', 'credit', 'checking', 12_340),
+      {
+        entityKind: 'be_subcategories',
+        entityId: paymentCategoryId,
+        isTombstone: false,
+        payload: {
+          name: 'Credit',
+          type: 'DBT',
+          accountId: 'credit',
+          masterCategoryId: masterCategory.entityId,
+          internalName: null,
+        },
+      },
+      ...monthlyBudgets.map(month => ({
+        entityKind: 'be_monthly_subcategory_budgets',
+        entityId: `mcb/${String(month.payload.month).slice(0, 7)}/${paymentCategoryId}`,
+        isTombstone: false,
+        payload: {
+          monthlyBudgetId: month.entityId,
+          subCategoryId: paymentCategoryId,
+          budgeted: 0,
+        },
+      })),
+    );
+    const currentOrdinaryBudget = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_monthly_subcategory_budgets' &&
+        entity.payload.monthlyBudgetId === monthlyBudgets[0].entityId &&
+        entity.payload.subCategoryId === ordinaryCategory.entityId,
+    )!;
+    currentOrdinaryBudget.payload = {
+      ...currentOrdinaryBudget.payload,
+      budgeted: 69_840,
+    };
+
+    const result = projectStockAdmittedAccountCalculations(snapshot);
+    expect(result.be_account_calculations).toEqual([
+      expect.objectContaining({
+        entities_account_id: 'checking',
+        cleared_balance: 901_300,
+        uncleared_balance: 0,
+        transaction_count: 6,
+      }),
+      expect.objectContaining({
+        entities_account_id: 'credit',
+        cleared_balance: -258_000,
+        uncleared_balance: 20_860,
+        transaction_count: 3,
+      }),
+    ]);
+    expect(result.be_monthly_budget_calculations).toEqual([
+      expect.objectContaining({
+        immediate_income: 1_000_000,
+        budgeted: 69_840,
+        cash_outflows: -98_700,
+        balance: -28_860,
+        over_spent: -30_860,
+        available_to_budget: 930_160,
+      }),
+      expect.objectContaining({
+        balance: 2_000,
+        available_to_budget: 899_300,
+      }),
+    ]);
+    const paymentRows =
+      result.be_monthly_subcategory_budget_calculations.filter(row =>
+        String(row.entities_monthly_subcategory_budget_id).endsWith(
+          paymentCategoryId,
+        ),
+      );
+    expect(paymentRows).toEqual([
+      expect.objectContaining({
+        cash_outflows: -20_860,
+        balance: -20_860,
+        unbudgeted_cash_outflows: -20_860,
+      }),
+      expect.objectContaining({
+        payment_previous_month: -20_860,
+        balance_previous_month: -20_860,
+        spent_average: 0,
+        payment_average: -20_860,
+      }),
+    ]);
+  });
+
   test('projects the admitted starting-balance and rolling-balance rows', () => {
     const snapshot = createSnapshot();
     const startingPayee = snapshot.entities.find(
@@ -221,7 +362,7 @@ describe('stock checking-account calculations', () => {
       },
     );
 
-    const result = projectStockCheckingAccountCalculations(snapshot);
+    const result = projectStockAdmittedAccountCalculations(snapshot);
     expect(result.be_account_calculations).toEqual([
       expect.objectContaining({
         id: 'ac/account-1',
@@ -367,7 +508,7 @@ describe('stock checking-account calculations', () => {
       );
     }
 
-    const multiple = projectStockCheckingAccountCalculations(snapshot);
+    const multiple = projectStockAdmittedAccountCalculations(snapshot);
     expect(multiple.be_account_calculations).toHaveLength(3);
     expect(multiple.be_monthly_account_calculations).toHaveLength(6);
     expect(
@@ -407,3 +548,85 @@ describe('stock checking-account calculations', () => {
     ]);
   });
 });
+
+function account(id: string, type: 'Cash' | 'CreditCard') {
+  return {
+    entityKind: 'be_accounts',
+    entityId: id,
+    isTombstone: false,
+    payload: {
+      accountName: id,
+      accountType: type,
+      onBudget: true,
+      isClosed: false,
+    },
+  };
+}
+
+function transferPayee(accountId: string) {
+  return {
+    entityKind: 'be_payees',
+    entityId: `payee-${accountId}`,
+    isTombstone: false,
+    payload: {
+      accountId,
+      name: `Transfer : ${accountId}`,
+      enabled: true,
+      autoFillSubCategoryEnabled: true,
+      autoFillAmount: 0,
+      autoFillAmountEnabled: false,
+      autoFillMemoEnabled: false,
+      renameOnImportEnabled: true,
+    },
+  };
+}
+
+function transaction(
+  id: string,
+  accountId: string,
+  amount: number,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    entityKind: 'be_transactions',
+    entityId: id,
+    isTombstone: false,
+    payload: {
+      accountId,
+      payeeId: 'ordinary-payee',
+      subCategoryId: null,
+      scheduledTransactionId: null,
+      date: '2026-08-21',
+      amount,
+      cashAmount: amount,
+      creditAmount: 0,
+      creditAmountAdjusted: 0,
+      subcategoryCreditAmountPreceding: 0,
+      memo: null,
+      cleared: 'Uncleared',
+      accepted: true,
+      transferAccountId: null,
+      transferTransactionId: null,
+      transferSubtransactionId: null,
+      ...overrides,
+    },
+  };
+}
+
+function transferLeg(
+  id: string,
+  accountId: string,
+  otherAccountId: string,
+  amount: number,
+) {
+  const otherId = id.endsWith('-out')
+    ? id.replace(/-out$/u, '-in')
+    : id.replace(/-in$/u, '-out');
+  return transaction(id, accountId, amount, {
+    payeeId: `payee-${otherAccountId}`,
+    cashAmount: amount,
+    transferAccountId: otherAccountId,
+    transferTransactionId: otherId,
+    cleared: accountId === 'checking' ? 'Cleared' : 'Uncleared',
+  });
+}

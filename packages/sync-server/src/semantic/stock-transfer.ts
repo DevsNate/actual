@@ -57,6 +57,7 @@ export type StockTransferMutation = {
 export function parseStockTransferMutation(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
+  options: Readonly<{ creditCardPayment?: boolean }> = {},
 ): StockTransferMutation | null {
   if (
     !isDeepStrictEqual(Object.keys(changedEntities), ['be_transaction_groups'])
@@ -82,17 +83,23 @@ export function parseStockTransferMutation(
     entity(snapshot, 'be_transactions', string(row.id)),
   ) as [BudgetEntity | undefined, BudgetEntity | undefined];
   if (current.every(item => item === undefined)) {
-    return parseCreate(pair, snapshot);
+    return parseCreate(pair, snapshot, options.creditCardPayment === true);
   }
   if (current.some(item => !item)) return null;
-  return parseExisting(pair, [current[0]!, current[1]!], snapshot);
+  return parseExisting(
+    pair,
+    [current[0]!, current[1]!],
+    snapshot,
+    options.creditCardPayment === true,
+  );
 }
 
 function parseCreate(
   rows: Pair<Record<string, unknown>>,
   snapshot: BudgetSnapshot,
+  creditCardPayment: boolean,
 ): StockTransferMutation | null {
-  if (!validPair(rows, snapshot, false)) return null;
+  if (!validPair(rows, snapshot, false, creditCardPayment)) return null;
   const entities: Pair<BudgetEntity> = [
     transferEntity(snapshot, rows[0]),
     transferEntity(snapshot, rows[1]),
@@ -118,8 +125,18 @@ function parseExisting(
   rows: Pair<Record<string, unknown>>,
   current: Pair<BudgetEntity>,
   snapshot: BudgetSnapshot,
+  creditCardPayment: boolean,
 ): StockTransferMutation | null {
   if (!current.every(isLiveTransferEntity) || !currentPair(current)) {
+    return null;
+  }
+  if (
+    !validAccountShape(
+      current.map(item => item.payload.accountId),
+      snapshot,
+      creditCardPayment,
+    )
+  ) {
     return null;
   }
   if (rows.every(row => row.is_tombstone === true)) {
@@ -144,7 +161,7 @@ function parseExisting(
     };
   }
 
-  if (!validPair(rows, snapshot, true)) return null;
+  if (!validPair(rows, snapshot, true, creditCardPayment)) return null;
   const entities: Pair<BudgetEntity> = [
     transferEntity(snapshot, rows[0]),
     transferEntity(snapshot, rows[1]),
@@ -185,9 +202,16 @@ function validPair(
   rows: Pair<Record<string, unknown>>,
   snapshot: BudgetSnapshot,
   existing: boolean,
+  creditCardPayment: boolean,
 ): boolean {
   const [left, right] = rows;
+  const accountShape = validAccountShape(
+    rows.map(row => row.entities_account_id),
+    snapshot,
+    creditCardPayment,
+  );
   return (
+    accountShape &&
     rows.every(row => validLeg(row)) &&
     left.id !== right.id &&
     left.entities_account_id !== right.entities_account_id &&
@@ -207,6 +231,22 @@ function validPair(
     (existing ||
       rows.every(row => !entity(snapshot, 'be_transactions', string(row.id))))
   );
+}
+
+function validAccountShape(
+  accountIds: readonly unknown[],
+  snapshot: BudgetSnapshot,
+  creditCardPayment: boolean,
+): boolean {
+  const accountTypes = accountIds.map(
+    id => live(snapshot, 'be_accounts', id)?.payload.accountType,
+  );
+  return creditCardPayment
+    ? accountTypes.filter(type => type === 'CreditCard').length === 1 &&
+        accountTypes.every(type =>
+          ['Cash', 'Checking', 'CreditCard'].includes(String(type)),
+        )
+    : accountTypes.every(type => type === 'Cash' || type === 'Checking');
 }
 
 function validLeg(row: Record<string, unknown>): boolean {

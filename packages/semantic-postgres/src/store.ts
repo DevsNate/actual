@@ -9,6 +9,7 @@ import type {
   CommitCanonicalAccountReopen,
   CommitCanonicalCategoryAssignment,
   CommitCanonicalCategoryMutation,
+  CommitCanonicalCreditCardPaymentMutation,
   CommitCanonicalOrdinaryPayeeMutation,
   CommitCanonicalOrdinaryTransactionMutation,
   CommitCanonicalPristineAccountDeletion,
@@ -23,6 +24,7 @@ import type {
 import type { Pool, PoolClient } from 'pg';
 
 import { writeCanonicalCategoryAssignment } from './assignment-store';
+import { writeCanonicalCreditCardPaymentMutation } from './credit-card-payment-store';
 import { SemanticStoreError } from './errors';
 import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
 import { writeCanonicalTargetReplacement } from './target-store';
@@ -507,6 +509,17 @@ export class PostgresSemanticStore {
     );
   }
 
+  async commitCreditCardPaymentMutation(
+    command: CommitCanonicalCreditCardPaymentMutation,
+  ): Promise<CommitChangeSetResult> {
+    validateChangeSet(command.delivery);
+    return this.transact(client =>
+      commitChangeSetInTransaction(client, command.delivery, () =>
+        writeCanonicalCreditCardPaymentMutation(client, command),
+      ),
+    );
+  }
+
   async acknowledgeDevice(
     input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
@@ -689,7 +702,13 @@ async function insertCanonicalAccountGroup(
   client: PoolClient,
   command: CommitUnlinkedAccountCreation,
 ): Promise<void> {
-  const { account, transferPayee, startingBalance } = command.accountGroup;
+  const {
+    account,
+    transferPayee,
+    startingBalance,
+    paymentCategory,
+    monthlyPaymentCategories,
+  } = command.accountGroup;
   await client.query(
     `INSERT INTO semantic_accounts
        (budget_id, account_id, name, account_type, on_budget, is_closed,
@@ -706,6 +725,38 @@ async function insertCanonicalAccountGroup(
       account.sortOrder,
     ],
   );
+  if (paymentCategory && monthlyPaymentCategories) {
+    await client.query(
+      `INSERT INTO semantic_category_groups
+         (budget_id, category_group_id, name, sortable_index, is_hidden)
+       VALUES ($1, $2, 'Credit Card Payments', 10000, false)
+       ON CONFLICT (budget_id, category_group_id) DO NOTHING`,
+      [paymentCategory.budgetId, paymentCategory.groupId],
+    );
+    await client.query(
+      `INSERT INTO semantic_categories
+         (budget_id, category_id, category_group_id, account_id, name,
+          sortable_index, category_type, note, is_hidden)
+       VALUES ($1, $2, $3, $4, $5, $6, 'DBT', NULL, false)`,
+      [
+        paymentCategory.budgetId,
+        paymentCategory.id,
+        paymentCategory.groupId,
+        paymentCategory.accountId,
+        paymentCategory.name,
+        paymentCategory.sortOrder,
+      ],
+    );
+    for (const month of monthlyPaymentCategories) {
+      await client.query(
+        `INSERT INTO semantic_monthly_category_budgets
+           (budget_id, monthly_category_budget_id, category_id, month,
+            budgeted_milliunits, overspending_handling)
+         VALUES ($1, $2, $3, $4, 0, 'AffectsBuffer')`,
+        [month.budgetId, month.id, month.categoryId, month.month],
+      );
+    }
+  }
   await client.query(
     `INSERT INTO semantic_payees
        (budget_id, payee_id, account_id, name, is_enabled)
@@ -1687,7 +1738,13 @@ function validateSeedBudget(input: SeedBudgetInput): void {
 function validateCanonicalAccountCreation(
   command: CommitUnlinkedAccountCreation,
 ): void {
-  const { account, transferPayee, startingBalance } = command.accountGroup;
+  const {
+    account,
+    transferPayee,
+    startingBalance,
+    paymentCategory,
+    monthlyPaymentCategories,
+  } = command.accountGroup;
   const budgetId = command.delivery.budgetId;
   const validIdentity = (value: string) => Boolean(value.trim());
   if (
@@ -1704,7 +1761,7 @@ function validateCanonicalAccountCreation(
     !validIdentity(startingBalance.categoryId) ||
     !account.name.trim() ||
     !transferPayee.name.trim() ||
-    account.type !== 'checking' ||
+    !['checking', 'credit-card'].includes(account.type) ||
     account.isOnBudget !== true ||
     account.isClosed !== false ||
     !Number.isSafeInteger(account.sortOrder) ||
@@ -1714,6 +1771,30 @@ function validateCanonicalAccountCreation(
     throw new SemanticStoreError(
       'INVALID_OPERATION',
       'Account creation failed canonical storage validation',
+    );
+  }
+  const isCredit = account.type === 'credit-card';
+  if (
+    isCredit !== Boolean(paymentCategory) ||
+    isCredit !== Boolean(monthlyPaymentCategories) ||
+    (paymentCategory &&
+      (paymentCategory.budgetId !== budgetId ||
+        paymentCategory.accountId !== account.id ||
+        paymentCategory.type !== 'DBT' ||
+        !paymentCategory.id.trim() ||
+        !paymentCategory.groupId.trim() ||
+        !paymentCategory.name.trim())) ||
+    (monthlyPaymentCategories &&
+      monthlyPaymentCategories.some(
+        month =>
+          month.budgetId !== budgetId ||
+          month.categoryId !== paymentCategory?.id ||
+          !/^\d{4}-\d{2}-01$/u.test(month.month),
+      ))
+  ) {
+    throw new SemanticStoreError(
+      'INVALID_OPERATION',
+      'Credit-card account creation failed canonical payment-category validation',
     );
   }
 }

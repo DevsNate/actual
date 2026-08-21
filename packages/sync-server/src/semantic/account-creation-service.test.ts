@@ -64,6 +64,7 @@ const input = {
   originDeviceId: 'web-device-1',
   idempotencyKey: 'account-create-1',
   name: 'Account Capture 1',
+  accountType: 'checking' as const,
   openingBalance: 123450,
   openingDate: '2026-08-17',
 };
@@ -71,7 +72,7 @@ const input = {
 describe('account creation service', () => {
   test('commits the admitted account, transfer payee, and starting balance atomically', async () => {
     const { service, getCommand, getAccountGroup } = fixture();
-    const result = await service.createUnlinkedCheckingAccount(input);
+    const result = await service.createUnlinkedAccount(input);
     const command = getCommand();
 
     expect(result.response).toMatchObject({
@@ -143,7 +144,7 @@ describe('account creation service', () => {
       payload: { sortableIndex: 0 },
     });
     await expect(
-      first.service.createUnlinkedCheckingAccount(input),
+      first.service.createUnlinkedAccount(input),
     ).resolves.toMatchObject({
       response: { name: 'Account Capture 1' },
     });
@@ -161,16 +162,84 @@ describe('account creation service', () => {
       )!,
     );
     await expect(
-      second.service.createUnlinkedCheckingAccount(input),
+      second.service.createUnlinkedAccount(input),
     ).rejects.toMatchObject({
       code: 'starting-balance-payee-unavailable',
     });
   });
 
+  test('builds the captured CreditCard aggregate with its DBT payment category', async () => {
+    const { service, snapshot, getCommand, getAccountGroup } = fixture();
+    const immediateIncomeId = snapshot.entities.find(
+      entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
+    )!.entityId;
+    snapshot.entities.push(
+      {
+        entityKind: 'be_transactions',
+        entityId: '00000000-0000-4000-8000-000000000001',
+        isTombstone: false,
+        payload: {
+          date: '2026-08-21',
+          subCategoryId: immediateIncomeId,
+          creditAmountAdjusted: -258000,
+          subcategoryCreditAmountPreceding: 0,
+        },
+      },
+      {
+        entityKind: 'be_transactions',
+        entityId: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+        isTombstone: false,
+        payload: {
+          date: '2026-08-21',
+          subCategoryId: immediateIncomeId,
+          creditAmountAdjusted: -321000,
+          subcategoryCreditAmountPreceding: -258000,
+        },
+      },
+    );
+    const result = await service.createUnlinkedAccount({
+      ...input,
+      accountType: 'credit-card',
+      name: 'CC Capture 3',
+      openingBalance: -432100,
+      openingDate: '2026-08-21',
+    });
+
+    expect(result.response).toMatchObject({
+      type: 'credit-card',
+      openingBalance: -432100,
+    });
+    expect(getCommand()?.changes).toHaveLength(7);
+    expect(getAccountGroup()).toMatchObject({
+      account: { type: 'credit-card', name: 'CC Capture 3' },
+      startingBalance: { amount: -432100 },
+      paymentCategory: { type: 'DBT', name: 'CC Capture 3' },
+      monthlyPaymentCategories: [
+        { month: '2026-08-01' },
+        { month: '2026-09-01' },
+      ],
+    });
+    const startingBalance = getCommand()?.changes.find(
+      entity => entity.entityKind === 'be_transactions',
+    );
+    expect(startingBalance?.payload).toMatchObject({
+      amount: -432100,
+      cashAmount: 0,
+      creditAmount: -432100,
+      creditAmountAdjusted: -432100,
+      subcategoryCreditAmountPreceding: -258000,
+    });
+    expect(
+      getCommand()?.changes.find(
+        entity => entity.entityId === 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+      )?.payload.subcategoryCreditAmountPreceding,
+    ).toBe(-690100);
+  });
+
   test('rejects calendar dates that JavaScript would otherwise normalize', async () => {
     const { service } = fixture();
     await expect(
-      service.createUnlinkedCheckingAccount({
+      service.createUnlinkedAccount({
         ...input,
         openingDate: '2026-02-31',
       }),

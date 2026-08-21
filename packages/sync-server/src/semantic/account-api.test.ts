@@ -15,7 +15,7 @@ const principal: AuthenticatedPrincipal = {
 describe('semantic account API', () => {
   test('accepts only the admitted unlinked Checking endpoint shape', async () => {
     const accountCreationService: AccountCreationService = {
-      createUnlinkedCheckingAccount: vi.fn().mockResolvedValue({
+      createUnlinkedAccount: vi.fn().mockResolvedValue({
         replayed: false,
         serverKnowledge: 3,
         endingDeviceKnowledge: 0,
@@ -54,13 +54,12 @@ describe('semantic account API', () => {
           replayed: false,
         },
       });
-    expect(
-      accountCreationService.createUnlinkedCheckingAccount,
-    ).toHaveBeenCalledWith({
+    expect(accountCreationService.createUnlinkedAccount).toHaveBeenCalledWith({
       principalId: 'principal-1',
       budgetId: 'plan-1',
       originDeviceId: 'web-device-1',
       idempotencyKey: 'account-request-1',
+      accountType: 'checking',
       name: 'Account Capture 1',
       openingBalance: 123450,
       openingDate: '2026-08-17',
@@ -69,7 +68,7 @@ describe('semantic account API', () => {
 
   test('rejects linked, non-Checking, or malformed defaults', async () => {
     const accountCreationService: AccountCreationService = {
-      createUnlinkedCheckingAccount: vi.fn(),
+      createUnlinkedAccount: vi.fn(),
     };
     const app = createApp(accountCreationService);
     await request(app)
@@ -87,9 +86,7 @@ describe('semantic account API', () => {
         status: 'error',
         reason: 'invalid-account-creation-request',
       });
-    expect(
-      accountCreationService.createUnlinkedCheckingAccount,
-    ).not.toHaveBeenCalled();
+    expect(accountCreationService.createUnlinkedAccount).not.toHaveBeenCalled();
   });
 });
 

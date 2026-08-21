@@ -40,15 +40,14 @@ export function createSemanticAccountHandlers(
 
     try {
       const result =
-        await dependencies.accountCreationService.createUnlinkedCheckingAccount(
-          {
-            principalId: principal.id,
-            budgetId,
-            originDeviceId,
-            idempotencyKey,
-            ...body,
-          },
-        );
+        await dependencies.accountCreationService.createUnlinkedAccount({
+          principalId: principal.id,
+          budgetId,
+          originDeviceId,
+          idempotencyKey,
+          accountType: 'checking',
+          ...body,
+        });
       response.status(result.replayed ? 200 : 201).send({
         status: 'ok',
         data: {

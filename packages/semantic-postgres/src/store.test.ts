@@ -626,6 +626,42 @@ describe('semantic foundation migration', () => {
     expect(migration).not.toContain('be_money_movements');
   });
 
+  test('stores the captured credit-card payment account relationship canonically', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0014_canonical_credit_card_payment.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('ADD COLUMN last_payment_payee_id TEXT');
+    expect(migration).toContain(
+      'REFERENCES semantic_payees(budget_id, payee_id)',
+    );
+    expect(migration).not.toContain('be_accounts');
+    expect(migration).not.toContain('be_payees');
+  });
+
+  test('stores the captured account-bound DBT payment category canonically', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0015_canonical_credit_card_account.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain("category_type IN ('DFT', 'DBT')");
+    expect(migration).toContain('ADD COLUMN account_id TEXT');
+    expect(migration).toContain('semantic_categories_payment_account_fk');
+    expect(migration).not.toContain('be_subcategories');
+  });
+
   test('stores split parents and ordered lines as one canonical aggregate', async () => {
     const migration = await readFile(
       fileURLToPath(

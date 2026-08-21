@@ -1,19 +1,20 @@
-export type StockCheckingAccountBody = {
+export type StockUnlinkedAccountBody = {
   name: string;
+  accountType: 'checking' | 'credit-card';
   openingBalance: number;
   openingDate: string;
 };
 
-export function parseStockCheckingAccountBody(
+export function parseStockUnlinkedAccountBody(
   value: unknown,
-): StockCheckingAccountBody | null {
+): StockUnlinkedAccountBody | null {
   if (!isRecord(value)) {
     return null;
   }
   if (
     typeof value.name !== 'string' ||
     !value.name.trim() ||
-    value.type !== 'Checking' ||
+    !['Checking', 'CreditCard'].includes(String(value.type)) ||
     !Number.isSafeInteger(value.balance) ||
     typeof value.starting_balance_date !== 'string' ||
     value.debt_interest_rates !==
@@ -32,6 +33,7 @@ export function parseStockCheckingAccountBody(
   }
   return {
     name: value.name.trim(),
+    accountType: value.type === 'CreditCard' ? 'credit-card' : 'checking',
     openingBalance: Number(value.balance),
     openingDate: value.starting_balance_date,
   };
@@ -41,7 +43,7 @@ export function projectStockCreatedAccount(
   value: Readonly<{
     accountId: string;
     name: string;
-    type: 'checking';
+    type: 'checking' | 'credit-card';
     openingBalance: number;
   }>,
   stockBudgetId: string,
@@ -49,7 +51,7 @@ export function projectStockCreatedAccount(
   return {
     id: value.accountId,
     account_name: value.name,
-    account_type: 'Checking',
+    account_type: value.type === 'credit-card' ? 'CreditCard' : 'Checking',
     balance_millicents: value.openingBalance,
     budget_id: stockBudgetId,
   };

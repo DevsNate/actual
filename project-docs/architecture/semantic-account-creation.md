@@ -1,12 +1,14 @@
 # Semantic account creation
 
-This record translates the admitted `ACCOUNT-002` through `ACCOUNT-005`
-Checking-account captures into canonical application commands. It does not
-generalize account types, linked accounts, or arbitrary transaction writes.
+This record translates admitted `ACCOUNT-002` through `ACCOUNT-006` account
+captures into canonical application commands. It covers unlinked Checking and
+CreditCard creation plus the captured Checking lifecycle. It does not
+generalize linked accounts, other account types, or arbitrary transaction
+writes.
 
 ## Canonical account boundary
 
-Checking-account creation now crosses one typed domain boundary. The
+Unlinked-account creation now crosses one typed domain boundary. The
 stock-direct-import and retained semantic HTTP adapters parse their own wire
 formats, translate them into the canonical unlinked-account intent, and project
 their own responses. `account-creation-service.ts` owns orchestration only;
@@ -34,11 +36,20 @@ rather than generic compatibility-row commits. Additional account types,
 linked accounts, and arbitrary transaction mutation remain outside this slice.
 No compatibility exception bypasses the boundary.
 
+`ACCOUNT-006` extends that same aggregate rather than adding a parallel credit
+model. Migration 0015 admits `DBT` categories with an exact account binding.
+CreditCard creation atomically adds the account, transfer payee, negative
+credit Starting Balance, DBT payment category, and its current/next monthly
+rows. Checking creation continues to produce only its original three rows.
+
 ## Evidence boundary
 
 The governing fixture is
 `analysis/evidence/stock-captures/account-002/`, indexed by
 `analysis/evidence/BEHAVIOR_KNOWLEDGE_BASE.md`.
+
+The CreditCard extension is governed by `ACCOUNT-006` at
+`analysis/evidence/stock-captures/credit-account-create-2026-08-21/`.
 
 The stock web invocation uses a dedicated account endpoint. Its request and
 acknowledgement are admitted, and a clean stock budget bootstrap proves the
@@ -69,6 +80,11 @@ Because creation changes both source rows and server-derived calculations, its
 canonical command advances server knowledge by two. This follows the same
 captured rule as split/category/target mutations; it is distinct from the
 source-only account rename, which advances once.
+
+The captured CreditCard request uses the same endpoint with
+`type=CreditCard`, a nonpositive opening balance, and the captured debt-default
+fields. Its acknowledgement is followed by a `+2` schema-44 revision that
+returns the complete generated account/payment aggregate and calculations.
 
 ## Rename command
 
@@ -124,9 +140,8 @@ unsafe mismatches, and unsupported account types fail closed.
 
 ## Calculation projection
 
-Account source rows and calculation rows remain separate modules. For every
-admitted Checking account the calculation projector validates the exact
-three-entity relationship and emits:
+Account source rows and calculation rows remain separate modules. The admitted
+projector validates captured Cash/Checking and CreditCard aggregates and emits:
 
 - one account calculation with cleared balance and one transaction;
 - current-month cleared and rolling balance;
@@ -140,8 +155,9 @@ safe-integer sum of all captured Starting Balances. The evidence fixture is
 `123450 + 234560 + 345670 = 703680`.
 
 Malformed identities, extra transactions without a matching account,
-tombstones, non-Checking types, transfer fields, or divergent system
-relationships fail closed.
+tombstones, unsupported account types, transfer fields, or divergent system
+relationships fail closed. Credit opening balances affect credit and rolling
+account balances but do not enter Immediate Income.
 
 ## Transport boundary
 
@@ -173,3 +189,6 @@ knowledge acknowledgement, renamed bootstrap readback, strict pristine delete,
 terminal calculation rows, and the remaining-account Ready-to-Assign total.
 It additionally proves typed close/reopen persistence, one retained manual
 adjustment, lifecycle replay without duplication, and strict lifecycle parsing.
+The CreditCard gate additionally verifies the exact direct-import request and
+HTTP 201 projection, DBT/category linkage, negative credit Starting Balance,
+current/next monthly rows, and captured account/payment calculations.

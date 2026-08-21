@@ -8,14 +8,18 @@ import type {
   BudgetSnapshot,
   UnlinkedAccountCreationWriter,
 } from '@actual-app/semantic-core';
-import { buildUnlinkedCheckingAccount } from '@actual-app/semantic-core';
+import {
+  buildUnlinkedCheckingAccount,
+  buildUnlinkedCreditCardAccount,
+} from '@actual-app/semantic-core';
 
-export type CreateCheckingAccountInput = {
+export type CreateUnlinkedAccountInput = {
   principalId: string;
   budgetId: string;
   originDeviceId: string;
   idempotencyKey: string;
   name: string;
+  accountType: 'checking' | 'credit-card';
   openingBalance: number;
   openingDate: string;
 };
@@ -24,7 +28,7 @@ export type CreatedUnlinkedAccount = {
   accountId: string;
   budgetId: string;
   name: string;
-  type: 'checking';
+  type: 'checking' | 'credit-card';
   openingBalance: number;
 };
 
@@ -33,8 +37,8 @@ export type AccountCreationResult = Omit<BudgetChangeSetResult, 'response'> & {
 };
 
 export type AccountCreationService = {
-  createUnlinkedCheckingAccount(
-    input: CreateCheckingAccountInput,
+  createUnlinkedAccount(
+    input: CreateUnlinkedAccountInput,
   ): Promise<AccountCreationResult>;
 };
 
@@ -59,6 +63,11 @@ export type AccountCreationContext = {
   sortOrder: number;
   startingBalancePayeeId: string;
   immediateIncomeCategoryId: string;
+  debtPaymentCategoryGroupId: string;
+  paymentCategorySortOrder: number;
+  currentMonth: string;
+  nextMonth: string;
+  existingTransactions: readonly BudgetEntity[];
 };
 
 export type AccountEntityAdapter = {
@@ -70,6 +79,7 @@ export type AccountEntityAdapter = {
     group: CanonicalUnlinkedAccountGroup,
     budgetVersionId: string,
     creationCommandKey: string,
+    context?: AccountCreationContext,
   ): readonly BudgetEntity[];
 };
 
@@ -77,7 +87,7 @@ export function createAccountCreationService(
   dependencies: Dependencies,
 ): AccountCreationService {
   return {
-    async createUnlinkedCheckingAccount(input) {
+    async createUnlinkedAccount(input) {
       validateInput(input);
       const snapshot = await dependencies.budgetReader.readBudget(
         input.principalId,
@@ -106,7 +116,7 @@ export function createAccountCreationService(
         input.idempotencyKey,
         'starting-balance',
       );
-      const group = buildUnlinkedCheckingAccount({
+      const common = {
         budgetId: input.budgetId,
         accountId,
         transferPayeeId,
@@ -117,12 +127,27 @@ export function createAccountCreationService(
         openingBalance: input.openingBalance,
         openingDate: input.openingDate,
         sortOrder: context.sortOrder,
-      });
+      };
+      const group =
+        input.accountType === 'credit-card'
+          ? buildUnlinkedCreditCardAccount({
+              ...common,
+              paymentCategoryId: deterministicUuid(
+                input.budgetId,
+                input.idempotencyKey,
+                'payment-category',
+              ),
+              debtPaymentCategoryGroupId: context.debtPaymentCategoryGroupId,
+              paymentCategorySortOrder: context.paymentCategorySortOrder,
+              currentMonth: context.currentMonth,
+              nextMonth: context.nextMonth,
+            })
+          : buildUnlinkedCheckingAccount(common);
       const response: CreatedUnlinkedAccount = {
         accountId,
         budgetId: input.budgetId,
         name: input.name.trim(),
-        type: 'checking',
+        type: input.accountType,
         openingBalance: input.openingBalance,
       };
       const result =
@@ -143,6 +168,7 @@ export function createAccountCreationService(
               group,
               context.budgetVersionId,
               input.idempotencyKey,
+              context,
             ),
             response,
           },
@@ -152,15 +178,18 @@ export function createAccountCreationService(
   };
 }
 
-function validateInput(input: CreateCheckingAccountInput): void {
+function validateInput(input: CreateUnlinkedAccountInput): void {
   if (
     !input.principalId ||
     !input.budgetId ||
     !input.originDeviceId ||
     !input.idempotencyKey ||
     !input.name.trim() ||
+    !['checking', 'credit-card'].includes(input.accountType) ||
     !Number.isSafeInteger(input.openingBalance) ||
-    input.openingBalance < 0 ||
+    (input.accountType === 'checking'
+      ? input.openingBalance < 0
+      : input.openingBalance > 0) ||
     !isIsoCalendarDate(input.openingDate)
   ) {
     throw new AccountCreationError('invalid-account-creation-request');
@@ -188,14 +217,15 @@ function deterministicUuid(...parts: string[]): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function digest(input: CreateCheckingAccountInput): string {
+function digest(input: CreateUnlinkedAccountInput): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
-        commandKind: 'create-checking-account',
+        commandKind: 'create-unlinked-account',
         principalId: input.principalId,
         budgetId: input.budgetId,
         name: input.name.trim(),
+        accountType: input.accountType,
         openingBalance: input.openingBalance,
         openingDate: input.openingDate,
       }),
@@ -210,7 +240,7 @@ function parseCreatedAccount(
     typeof value.accountId !== 'string' ||
     typeof value.budgetId !== 'string' ||
     typeof value.name !== 'string' ||
-    value.type !== 'checking' ||
+    !['checking', 'credit-card'].includes(String(value.type)) ||
     !Number.isSafeInteger(value.openingBalance)
   ) {
     throw new AccountCreationError('invalid-account-creation-receipt');
@@ -219,7 +249,7 @@ function parseCreatedAccount(
     accountId: value.accountId,
     budgetId: value.budgetId,
     name: value.name,
-    type: value.type,
+    type: value.type as 'checking' | 'credit-card',
     openingBalance: Number(value.openingBalance),
   };
 }

@@ -4,7 +4,7 @@ export type CanonicalUnlinkedAccount = {
   id: string;
   budgetId: string;
   name: string;
-  type: 'checking';
+  type: 'checking' | 'credit-card';
   isOnBudget: true;
   isClosed: false;
   isFavorite: false;
@@ -35,6 +35,30 @@ export type CanonicalUnlinkedAccountGroup = {
   account: CanonicalUnlinkedAccount;
   transferPayee: CanonicalAccountTransferPayee;
   startingBalance: CanonicalStartingBalance;
+  paymentCategory?: CanonicalCreditCardPaymentCategory;
+  monthlyPaymentCategories?: readonly [
+    CanonicalMonthlyCreditCardPaymentCategory,
+    CanonicalMonthlyCreditCardPaymentCategory,
+  ];
+};
+
+export type CanonicalCreditCardPaymentCategory = {
+  id: string;
+  budgetId: string;
+  accountId: string;
+  groupId: string;
+  name: string;
+  sortOrder: number;
+  type: 'DBT';
+};
+
+export type CanonicalMonthlyCreditCardPaymentCategory = {
+  id: string;
+  budgetId: string;
+  categoryId: string;
+  month: string;
+  budgeted: 0;
+  overspendingHandling: 'AffectsBuffer';
 };
 
 /**
@@ -131,6 +155,15 @@ export type BuildUnlinkedCheckingAccountInput = {
   sortOrder: number;
 };
 
+export type BuildUnlinkedCreditCardAccountInput =
+  BuildUnlinkedCheckingAccountInput & {
+    paymentCategoryId: string;
+    debtPaymentCategoryGroupId: string;
+    paymentCategorySortOrder: number;
+    currentMonth: string;
+    nextMonth: string;
+  };
+
 export function buildUnlinkedCheckingAccount(
   input: BuildUnlinkedCheckingAccountInput,
 ): CanonicalUnlinkedAccountGroup {
@@ -163,5 +196,37 @@ export function buildUnlinkedCheckingAccount(
       isCleared: true,
       isApproved: true,
     },
+  };
+}
+
+export function buildUnlinkedCreditCardAccount(
+  input: BuildUnlinkedCreditCardAccountInput,
+): CanonicalUnlinkedAccountGroup {
+  const checkingShape = buildUnlinkedCheckingAccount(input);
+  return {
+    ...checkingShape,
+    account: { ...checkingShape.account, type: 'credit-card' },
+    paymentCategory: {
+      id: input.paymentCategoryId,
+      budgetId: input.budgetId,
+      accountId: input.accountId,
+      groupId: input.debtPaymentCategoryGroupId,
+      name: input.name,
+      sortOrder: input.paymentCategorySortOrder,
+      type: 'DBT',
+    },
+    monthlyPaymentCategories: [input.currentMonth, input.nextMonth].map(
+      month => ({
+        id: `mcb/${month.slice(0, 7)}/${input.paymentCategoryId}`,
+        budgetId: input.budgetId,
+        categoryId: input.paymentCategoryId,
+        month,
+        budgeted: 0 as const,
+        overspendingHandling: 'AffectsBuffer' as const,
+      }),
+    ) as [
+      CanonicalMonthlyCreditCardPaymentCategory,
+      CanonicalMonthlyCreditCardPaymentCategory,
+    ],
   };
 }

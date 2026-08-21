@@ -10,6 +10,7 @@ import type {
   BudgetVersionReader,
   CategoryAssignmentWriter,
   CategoryMutationWriter,
+  CreditCardPaymentMutationWriter,
   OrdinaryTransactionMutationWriter,
   SplitTransactionMutationWriter,
   TransferMutationWriter,
@@ -29,6 +30,7 @@ import {
   parseStockCategoryAssignmentReplay,
 } from './stock-category-assignment';
 import { parseStockCategoryMutation } from './stock-category-lifecycle';
+import { parseStockCreditCardPaymentMutation } from './stock-credit-card-payment';
 import {
   isRecord,
   nonnegativeInteger,
@@ -54,6 +56,7 @@ export type StockBudgetChangeWriter = BudgetChangeWriter &
   Partial<
     SplitTransactionMutationWriter &
       TransferMutationWriter &
+      CreditCardPaymentMutationWriter &
       CategoryAssignmentWriter
   >;
 
@@ -255,7 +258,7 @@ export async function handleStockBudgetSync(
     ordinaryMutation
       ? null
       : parseStockSplitMutation(syncRequest.changedEntities, snapshot);
-  const transferMutation =
+  const creditCardPaymentMutation =
     openedBudgetChanges ||
     accountRename ||
     accountDelete ||
@@ -265,6 +268,22 @@ export async function handleStockBudgetSync(
     categoryMutation ||
     ordinaryMutation ||
     splitMutation
+      ? null
+      : parseStockCreditCardPaymentMutation(
+          syncRequest.changedEntities,
+          snapshot,
+        );
+  const transferMutation =
+    openedBudgetChanges ||
+    accountRename ||
+    accountDelete ||
+    accountLifecycle ||
+    targetMutation ||
+    categoryAssignment ||
+    categoryMutation ||
+    ordinaryMutation ||
+    splitMutation ||
+    creditCardPaymentMutation
       ? null
       : parseStockTransferMutation(syncRequest.changedEntities, snapshot);
   const changes =
@@ -277,19 +296,23 @@ export async function handleStockBudgetSync(
     categoryMutation?.changes ??
     ordinaryMutation?.changes ??
     splitMutation?.changes ??
+    creditCardPaymentMutation?.changes ??
     transferMutation?.changes;
   if (!changes) {
     return operationError(501, 'unsupported_budget_delta');
   }
   if (
-    syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge !==
-    (targetMutation?.expectedDeviceAdvance ??
-      categoryAssignment?.expectedDeviceAdvance ??
-      categoryMutation?.expectedDeviceAdvance ??
-      ordinaryMutation?.expectedDeviceAdvance ??
-      splitMutation?.expectedDeviceAdvance ??
-      transferMutation?.expectedDeviceAdvance ??
-      changes.length)
+    !matchesExpectedDeviceAdvance(
+      syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge,
+      targetMutation?.expectedDeviceAdvance ??
+        categoryAssignment?.expectedDeviceAdvance ??
+        categoryMutation?.expectedDeviceAdvance ??
+        ordinaryMutation?.expectedDeviceAdvance ??
+        splitMutation?.expectedDeviceAdvance ??
+        creditCardPaymentMutation?.expectedDeviceAdvance ??
+        transferMutation?.expectedDeviceAdvance ??
+        changes.length,
+    )
   ) {
     return operationError(400, 'invalid_budget_knowledge_range');
   }
@@ -300,6 +323,7 @@ export async function handleStockBudgetSync(
     categoryMutation?.serverKnowledgeAdvance ??
     ordinaryMutation?.serverKnowledgeAdvance ??
     splitMutation?.serverKnowledgeAdvance ??
+    creditCardPaymentMutation?.serverKnowledgeAdvance ??
     transferMutation?.serverKnowledgeAdvance ??
     (accountDelete || accountLifecycle ? 2 : 1);
   const nextServerKnowledge =
@@ -314,6 +338,7 @@ export async function handleStockBudgetSync(
       categoryMutation?.changedEntities ??
       ordinaryMutation?.changedEntities ??
       splitMutation?.changedEntities ??
+      creditCardPaymentMutation?.changedEntities ??
       transferMutation?.changedEntities ??
       buildStockBudgetEmptyDelta(snapshot),
   );
@@ -336,6 +361,8 @@ export async function handleStockBudgetSync(
   if (
     (splitMutation &&
       !dependencies.changeWriter.commitSplitTransactionMutation) ||
+    (creditCardPaymentMutation &&
+      !dependencies.changeWriter.commitCreditCardPaymentMutation) ||
     (transferMutation && !dependencies.changeWriter.commitTransferMutation) ||
     (categoryAssignment && !dependencies.changeWriter.commitCategoryAssignment)
   ) {
@@ -362,52 +389,72 @@ export async function handleStockBudgetSync(
               mutation: splitMutation.mutation,
               delivery,
             })
-          : transferMutation && dependencies.changeWriter.commitTransferMutation
-            ? await dependencies.changeWriter.commitTransferMutation({
-                mutation: transferMutation.mutation,
+          : creditCardPaymentMutation &&
+              dependencies.changeWriter.commitCreditCardPaymentMutation
+            ? await dependencies.changeWriter.commitCreditCardPaymentMutation({
+                mutation: creditCardPaymentMutation.mutation,
                 delivery,
               })
-            : ordinaryMutation?.mutationDomain === 'transaction'
-              ? await dependencies.changeWriter.commitOrdinaryTransactionMutation(
-                  {
-                    mutation: ordinaryMutation.mutation,
-                    delivery,
-                  },
-                )
-              : ordinaryMutation?.mutationDomain === 'payee'
-                ? await dependencies.changeWriter.commitOrdinaryPayeeMutation({
-                    mutation: ordinaryMutation.mutation,
-                    delivery,
-                  })
-                : accountRename
-                  ? await dependencies.changeWriter.commitAccountRename({
-                      rename: accountRename.rename,
+            : transferMutation &&
+                dependencies.changeWriter.commitTransferMutation
+              ? await dependencies.changeWriter.commitTransferMutation({
+                  mutation: transferMutation.mutation,
+                  delivery,
+                })
+              : ordinaryMutation?.mutationDomain === 'transaction'
+                ? await dependencies.changeWriter.commitOrdinaryTransactionMutation(
+                    {
+                      mutation: ordinaryMutation.mutation,
                       delivery,
-                    })
-                  : accountDelete
-                    ? await dependencies.changeWriter.commitPristineAccountDeletion(
-                        {
-                          deletion: accountDelete.deletion,
-                          delivery,
-                        },
-                      )
-                    : accountLifecycle?.kind === 'close'
-                      ? await dependencies.changeWriter.commitAccountClose({
-                          budgetId: snapshot.budgetId,
-                          accountId: accountLifecycle.accountId,
-                          adjustment: accountLifecycle.adjustment,
-                          delivery,
-                        })
-                      : accountLifecycle?.kind === 'reopen'
-                        ? await dependencies.changeWriter.commitAccountReopen({
+                    },
+                  )
+                : ordinaryMutation?.mutationDomain === 'payee'
+                  ? await dependencies.changeWriter.commitOrdinaryPayeeMutation(
+                      {
+                        mutation: ordinaryMutation.mutation,
+                        delivery,
+                      },
+                    )
+                  : accountRename
+                    ? await dependencies.changeWriter.commitAccountRename({
+                        rename: accountRename.rename,
+                        delivery,
+                      })
+                    : accountDelete
+                      ? await dependencies.changeWriter.commitPristineAccountDeletion(
+                          {
+                            deletion: accountDelete.deletion,
+                            delivery,
+                          },
+                        )
+                      : accountLifecycle?.kind === 'close'
+                        ? await dependencies.changeWriter.commitAccountClose({
                             budgetId: snapshot.budgetId,
                             accountId: accountLifecycle.accountId,
+                            adjustment: accountLifecycle.adjustment,
                             delivery,
                           })
-                        : await dependencies.changeWriter.commitChangeSet(
-                            delivery,
-                          );
+                        : accountLifecycle?.kind === 'reopen'
+                          ? await dependencies.changeWriter.commitAccountReopen(
+                              {
+                                budgetId: snapshot.budgetId,
+                                accountId: accountLifecycle.accountId,
+                                delivery,
+                              },
+                            )
+                          : await dependencies.changeWriter.commitChangeSet(
+                              delivery,
+                            );
   return { status: 200, body: committed.response };
+}
+
+function matchesExpectedDeviceAdvance(
+  actual: number,
+  expected: number | readonly number[],
+): boolean {
+  return Array.isArray(expected)
+    ? expected.includes(actual)
+    : actual === expected;
 }
 
 type BudgetSyncRequest = {

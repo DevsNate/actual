@@ -9,6 +9,8 @@ import { semanticBudgetIdentitySchemaMigration } from '@actual-app/semantic-post
 import { semanticCanonicalAccountDomainMigration } from '@actual-app/semantic-postgres/canonical-account-domain-migration';
 import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-postgres/canonical-budget-entity-migration';
 import { semanticCanonicalCategoryDomainMigration } from '@actual-app/semantic-postgres/canonical-category-domain-migration';
+import { semanticCanonicalCreditCardPaymentMigration } from '@actual-app/semantic-postgres/canonical-credit-card-payment-migration';
+import { semanticCanonicalCreditCardAccountMigration } from '@actual-app/semantic-postgres/canonical-credit-card-account-migration';
 import { semanticCanonicalOrdinaryTransactionMigration } from '@actual-app/semantic-postgres/canonical-ordinary-transaction-migration';
 import { semanticCanonicalSplitTransactionMigration } from '@actual-app/semantic-postgres/canonical-split-transaction-migration';
 import { semanticCanonicalTargetDefinitionMigration } from '@actual-app/semantic-postgres/canonical-target-definition-migration';
@@ -50,6 +52,8 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCanonicalSplitTransactionMigration,
       semanticCanonicalTransferMigration,
       semanticCanonicalTargetDefinitionMigration,
+      semanticCanonicalCreditCardPaymentMigration,
+      semanticCanonicalCreditCardAccountMigration,
     ]);
   } catch (error) {
     await pool.end();

@@ -6,7 +6,7 @@ import type { StockBudgetCalculationEntities } from './stock-calculation-entitie
 import { projectCapturedMonthlyBudgetRows } from './stock-monthly-budget-calculation-projection';
 import { projectCapturedMonthlyCategoryRows } from './stock-monthly-category-calculation-projection';
 
-export function projectStockCheckingAccountCalculations(
+export function projectStockAdmittedAccountCalculations(
   snapshot: BudgetSnapshot,
 ): StockBudgetCalculationEntities {
   const accounts = snapshot.entities.filter(
@@ -40,7 +40,7 @@ export function projectStockCheckingAccountCalculations(
     'be_payees',
   );
   const groups = accounts.map(account =>
-    checkingAccountGroup(
+    admittedAccountOpeningGroup(
       snapshot.entities,
       account,
       startingBalancePayee,
@@ -137,7 +137,10 @@ export function projectStockCheckingAccountCalculations(
     throw new Error('Starting balance must belong to the current budget month');
   }
   const incomeAmount =
-    groups.reduce((sum, group) => sum + group.amount, 0) +
+    groups.reduce(
+      (sum, group) => sum + (group.isCreditAccount ? 0 : group.amount),
+      0,
+    ) +
     balanceAdjustments.reduce(
       (sum, transaction) =>
         sum +
@@ -149,25 +152,46 @@ export function projectStockCheckingAccountCalculations(
         ),
       0,
     );
-  const uncategorizedAmount = ordinaryTransactions.reduce(
-    (sum, transaction) =>
-      sum + ordinaryTransactionAmount(transaction, accounts, currentMonth),
-    0,
-  );
-  const splitOutflows = new Map<string, number>();
+  const categorizedCashOutflows = new Map<string, number>();
+  let uncategorizedAmount = 0;
+  for (const transaction of ordinaryTransactions) {
+    const amount = ordinaryTransactionAmount(
+      transaction,
+      accounts,
+      currentMonth,
+    );
+    const categoryId = transaction.payload.subCategoryId;
+    if (categoryId === null) {
+      uncategorizedAmount += amount;
+    } else {
+      const id = requireString(categoryId);
+      categorizedCashOutflows.set(
+        id,
+        (categorizedCashOutflows.get(id) ?? 0) + amount,
+      );
+    }
+  }
   for (const line of liveSplitLines) {
     const categoryId = requireString(line.payload.subCategoryId);
-    splitOutflows.set(
+    categorizedCashOutflows.set(
       categoryId,
-      (splitOutflows.get(categoryId) ?? 0) +
+      (categorizedCashOutflows.get(categoryId) ?? 0) +
         requireInteger(line.payload.amount),
     );
   }
-  const splitAmount = [...splitOutflows.values()].reduce(
+  const categorizedAmount = [...categorizedCashOutflows.values()].reduce(
     (sum, amount) => sum + amount,
     0,
   );
-  const totalCashOutflows = uncategorizedAmount + splitAmount;
+  const paymentCashOutflows = capturedPaymentCashOutflows(
+    transferTransactions,
+    accounts,
+    snapshot.entities,
+  );
+  const totalCashOutflows =
+    uncategorizedAmount +
+    categorizedAmount +
+    [...paymentCashOutflows.values()].reduce((sum, amount) => sum + amount, 0);
   if (
     !Number.isSafeInteger(incomeAmount) ||
     !Number.isSafeInteger(uncategorizedAmount)
@@ -190,8 +214,8 @@ export function projectStockCheckingAccountCalculations(
     noneCategoryId: noneCategory.entityId,
     immediateIncomeCategoryId: immediateIncomeCategory.entityId,
     uncategorizedCashOutflows: uncategorizedAmount,
-    categorizedCashOutflows: splitOutflows,
-    paymentCashOutflows: new Map(),
+    categorizedCashOutflows,
+    paymentCashOutflows,
     immediateIncome: incomeAmount,
   });
   const sourceByCalculationId = new Map(
@@ -302,7 +326,7 @@ function validateSplitCalculationState(
   }
 }
 
-function checkingAccountGroup(
+function admittedAccountOpeningGroup(
   entities: readonly BudgetEntity[],
   account: BudgetEntity,
   startingBalancePayee: BudgetEntity,
@@ -312,6 +336,7 @@ function checkingAccountGroup(
   amount: number;
   transactionDate: string;
   startingBalance: BudgetEntity;
+  isCreditAccount: boolean;
 } {
   const transaction = exactlyOne(
     entities.filter(
@@ -332,8 +357,11 @@ function checkingAccountGroup(
     'be_payees',
   );
   const accountName = requireString(account.payload.accountName);
+  const accountType = account.payload.accountType;
+  const isCreditAccount = accountType === 'CreditCard';
+  const isCashAccount = accountType === 'Checking' || accountType === 'Cash';
   if (
-    account.payload.accountType !== 'Checking' ||
+    (!isCashAccount && !isCreditAccount) ||
     account.payload.onBudget !== true ||
     typeof account.payload.isClosed !== 'boolean' ||
     transferPayee.isTombstone ||
@@ -347,8 +375,12 @@ function checkingAccountGroup(
     transaction.isTombstone ||
     transaction.payload.payeeId !== startingBalancePayee.entityId ||
     transaction.payload.subCategoryId !== immediateIncomeCategory.entityId ||
-    transaction.payload.amount !== transaction.payload.cashAmount ||
-    transaction.payload.creditAmount !== 0 ||
+    (isCashAccount &&
+      (transaction.payload.amount !== transaction.payload.cashAmount ||
+        transaction.payload.creditAmount !== 0)) ||
+    (isCreditAccount &&
+      (transaction.payload.amount !== transaction.payload.creditAmount ||
+        transaction.payload.cashAmount !== 0)) ||
     transaction.payload.cleared !== 'Cleared' ||
     transaction.payload.accepted !== true ||
     transaction.payload.memo !== null ||
@@ -356,14 +388,58 @@ function checkingAccountGroup(
     transaction.payload.transferTransactionId !== null ||
     transaction.payload.transferSubtransactionId !== null
   ) {
-    throw new Error('Unsupported checking-account calculation state');
+    throw new Error('Unsupported admitted account calculation state');
   }
   return {
     account,
-    amount: requireNonnegativeInteger(transaction.payload.amount),
+    amount: isCreditAccount
+      ? requireInteger(transaction.payload.amount)
+      : requireNonnegativeInteger(transaction.payload.amount),
     transactionDate: requireIsoDate(transaction.payload.date),
     startingBalance: transaction,
+    isCreditAccount,
   };
+}
+
+function capturedPaymentCashOutflows(
+  transfers: readonly BudgetEntity[],
+  accounts: readonly BudgetEntity[],
+  entities: readonly BudgetEntity[],
+): ReadonlyMap<string, number> {
+  const creditAccountIds = new Set(
+    accounts
+      .filter(account => account.payload.accountType === 'CreditCard')
+      .map(account => account.entityId),
+  );
+  if (creditAccountIds.size === 0) return new Map();
+
+  const paymentCategoryByAccount = new Map<string, string>();
+  for (const accountId of creditAccountIds) {
+    const categories = entities.filter(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        !entity.isTombstone &&
+        entity.payload.type === 'DBT' &&
+        entity.payload.accountId === accountId,
+    );
+    if (categories.length !== 1) {
+      throw new Error('Expected exactly one credit-card payment category');
+    }
+    paymentCategoryByAccount.set(accountId, categories[0].entityId);
+  }
+
+  const result = new Map<string, number>();
+  for (const leg of transfers) {
+    const accountId = requireString(leg.payload.accountId);
+    if (!creditAccountIds.has(accountId)) continue;
+    const amount = requireInteger(leg.payload.amount);
+    if (amount <= 0) {
+      throw new Error('Captured credit-card payment leg must be positive');
+    }
+    const categoryId = paymentCategoryByAccount.get(accountId)!;
+    result.set(categoryId, (result.get(categoryId) ?? 0) - amount);
+  }
+  return result;
 }
 
 function manualAdjustmentAmount(
@@ -406,13 +482,12 @@ function ordinaryTransactionAmount(
     !accounts.some(
       account => account.entityId === transaction.payload.accountId,
     ) ||
-    transaction.payload.subCategoryId !== null ||
     transaction.payload.scheduledTransactionId !== null ||
     transaction.payload.amount !== transaction.payload.cashAmount ||
     transaction.payload.creditAmount !== 0 ||
     transaction.payload.creditAmountAdjusted !== 0 ||
     transaction.payload.subcategoryCreditAmountPreceding !== 0 ||
-    transaction.payload.cleared !== 'Uncleared' ||
+    !['Cleared', 'Uncleared'].includes(String(transaction.payload.cleared)) ||
     transaction.payload.accepted !== true ||
     transaction.payload.transferAccountId !== null ||
     transaction.payload.transferTransactionId !== null ||

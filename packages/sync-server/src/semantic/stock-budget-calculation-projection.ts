@@ -2,7 +2,7 @@ import type { BudgetSnapshot } from '@actual-app/semantic-core';
 
 import { projectStockFreshBudgetCalculations } from './stock-budget-calculations';
 import type { StockBudgetCalculationEntities } from './stock-calculation-entities';
-import { projectStockCheckingAccountCalculations } from './stock-checking-account-calculations';
+import { projectStockAdmittedAccountCalculations } from './stock-admitted-account-calculations';
 
 export function projectStockBudgetCalculations(
   snapshot: BudgetSnapshot,
@@ -13,5 +13,5 @@ export function projectStockBudgetCalculations(
   if (accounts.length === 0) {
     return projectStockFreshBudgetCalculations(snapshot);
   }
-  return projectStockCheckingAccountCalculations(snapshot);
+  return projectStockAdmittedAccountCalculations(snapshot);
 }
