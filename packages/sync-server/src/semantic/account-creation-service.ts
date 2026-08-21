@@ -74,6 +74,7 @@ export type AccountEntityAdapter = {
   resolveCreationContext(
     snapshot: BudgetSnapshot,
     idempotencyKey: string,
+    openingDate: string,
   ): AccountCreationContext;
   toBudgetEntities(
     group: CanonicalUnlinkedAccountGroup,
@@ -99,6 +100,7 @@ export function createAccountCreationService(
       const context = dependencies.entityAdapter.resolveCreationContext(
         snapshot,
         input.idempotencyKey,
+        input.openingDate,
       );
 
       const accountId = deterministicUuid(

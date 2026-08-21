@@ -8,7 +8,7 @@ import { AccountCreationError } from './account-creation-service';
 import type { AccountEntityAdapter } from './account-creation-service';
 
 export const stockAccountBudgetEntityAdapter: AccountEntityAdapter = {
-  resolveCreationContext(snapshot, idempotencyKey) {
+  resolveCreationContext(snapshot, idempotencyKey, openingDate) {
     const accounts = snapshot.entities.filter(
       entity => entity.entityKind === 'be_accounts' && !entity.isTombstone,
     );
@@ -42,14 +42,20 @@ export const stockAccountBudgetEntityAdapter: AccountEntityAdapter = {
         entity.payload.internalName === 'MasterCategory/__DebtPayment__',
       'debt-payment-category-group-unavailable',
     );
-    const months = snapshot.entities
-      .filter(
-        entity =>
-          entity.entityKind === 'be_monthly_budgets' && !entity.isTombstone,
-      )
-      .map(entity => requireMonth(entity.payload.month))
-      .sort();
-    if (months.length !== 2) {
+    const monthlyBudgets = snapshot.entities.filter(
+      entity =>
+        entity.entityKind === 'be_monthly_budgets' && !entity.isTombstone,
+    );
+    const currentMonth = monthStart(openingDate);
+    const nextMonth = addMonth(currentMonth);
+    if (
+      monthlyBudgets.filter(
+        entity => requireMonth(entity.payload.month) === currentMonth,
+      ).length !== 1 ||
+      monthlyBudgets.filter(
+        entity => requireMonth(entity.payload.month) === nextMonth,
+      ).length !== 1
+    ) {
       throw new AccountCreationError('account-creation-months-unavailable');
     }
     const paymentCategories = snapshot.entities.filter(
@@ -66,8 +72,8 @@ export const stockAccountBudgetEntityAdapter: AccountEntityAdapter = {
       immediateIncomeCategoryId: immediateIncomeCategory.entityId,
       debtPaymentCategoryGroupId: debtPaymentGroup.entityId,
       paymentCategorySortOrder: nextSortOrder(paymentCategories),
-      currentMonth: months[0],
-      nextMonth: months[1],
+      currentMonth,
+      nextMonth,
       existingTransactions: snapshot.entities.filter(
         entity =>
           entity.entityKind === 'be_transactions' && !entity.isTombstone,
@@ -301,7 +307,7 @@ function monthlyPaymentCategoryEntity(
     isTombstone: false,
     payload: {
       budgetVersionId,
-      monthlyBudgetId: `mb/${month.month.slice(0, 7)}/${group.account.budgetId}`,
+      monthlyBudgetId: `mb/${month.month.slice(0, 7)}/${budgetVersionId}`,
       subCategoryId: month.categoryId,
       month: month.month,
       budgeted: 0,
@@ -344,6 +350,20 @@ function requireMonth(value: unknown): string {
     throw new AccountCreationError('account-creation-months-unavailable');
   }
   return value;
+}
+
+function monthStart(value: string): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    throw new AccountCreationError('account-creation-months-unavailable');
+  }
+  return `${value.slice(0, 7)}-01`;
+}
+
+function addMonth(value: string): string {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  date.setUTCMonth(date.getUTCMonth() + 1);
+  return date.toISOString().slice(0, 10);
 }
 
 function exactlyOne(

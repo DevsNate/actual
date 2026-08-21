@@ -192,3 +192,11 @@ adjustment, lifecycle replay without duplication, and strict lifecycle parsing.
 The CreditCard gate additionally verifies the exact direct-import request and
 HTTP 201 projection, DBT/category linkage, negative credit Starting Balance,
 current/next monthly rows, and captured account/payment calculations.
+The clean deployed-Web acceptance run created `Local Credit Gate Final` in a
+fresh disposable budget, displayed its `-$76.54` register and Starting Balance,
+and rendered the generated payment category under Credit Card Payments without
+a reload. PostgreSQL readback verified the account-bound transfer payee, DBT
+category, transaction, and both monthly rows at one server knowledge advance.
+The monthly-row projection selects the opening month and following month while
+allowing unrelated prior budget months, and its `monthlyBudgetId` uses the
+stock `budget_version_id` rather than the canonical `budget_id`.

@@ -175,6 +175,12 @@ describe('account creation service', () => {
     )!.entityId;
     snapshot.entities.push(
       {
+        entityKind: 'be_monthly_budgets',
+        entityId: 'prior-month',
+        isTombstone: false,
+        payload: { month: '2026-07-01' },
+      },
+      {
         entityKind: 'be_transactions',
         entityId: '00000000-0000-4000-8000-000000000001',
         isTombstone: false,
@@ -234,6 +240,16 @@ describe('account creation service', () => {
         entity => entity.entityId === 'ffffffff-ffff-4fff-8fff-ffffffffffff',
       )?.payload.subcategoryCreditAmountPreceding,
     ).toBe(-690100);
+    expect(
+      getCommand()
+        ?.changes.filter(
+          entity => entity.entityKind === 'be_monthly_subcategory_budgets',
+        )
+        .map(entity => entity.payload.monthlyBudgetId),
+    ).toEqual([
+      `mb/2026-08/${snapshot.budgetVersionId}`,
+      `mb/2026-09/${snapshot.budgetVersionId}`,
+    ]);
   });
 
   test('rejects calendar dates that JavaScript would otherwise normalize', async () => {
