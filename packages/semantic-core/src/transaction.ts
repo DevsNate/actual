@@ -33,6 +33,10 @@ export type CanonicalOrdinaryTransaction = {
 
 export type CanonicalOrdinaryTransactionMutation =
   | {
+      kind: 'create';
+      transaction: CanonicalOrdinaryTransaction;
+    }
+  | {
       kind: 'create-with-payee';
       payee: CanonicalOrdinaryPayee;
       transaction: CanonicalOrdinaryTransaction;

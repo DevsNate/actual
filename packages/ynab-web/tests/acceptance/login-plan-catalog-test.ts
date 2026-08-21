@@ -32,7 +32,7 @@ module("Acceptance | retained login and plan catalog", function (hooks) {
             memberships: [
               {
                 id: "membership-1",
-                planId: "plan-1",
+                budgetId: "budget-1",
                 budgetVersionId: "version-1",
                 principalId: "principal-1",
                 name: "Plan One",

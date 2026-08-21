@@ -19,7 +19,7 @@ export default class PlansTemplate extends Component<PlansSignature> {
         {{#each @model.memberships as |membership|}}
           {{#unless membership.isTombstone}}
             <li>
-              <LinkTo @route="plan" @model={{membership.planId}}>
+              <LinkTo @route="plan" @model={{membership.budgetId}}>
                 {{membership.name}}
               </LinkTo>
             </li>

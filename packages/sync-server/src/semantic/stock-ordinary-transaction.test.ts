@@ -108,6 +108,51 @@ function transactionRow(tombstone = false, cashAmount = 0) {
 }
 
 describe('stock ordinary transaction and payee boundary', () => {
+  test('admits the captured payee-less ordinary transaction group', () => {
+    const snapshot = fixture();
+    const parsed = parseStockOrdinaryMutation(
+      {
+        be_transaction_groups: [
+          {
+            id: 'transaction-1',
+            be_transaction: {
+              ...transactionRow(),
+              entities_payee_id: null,
+              memo: 'Stock Runtime Ordinary',
+              amount: -1230,
+            },
+            be_subtransactions: null,
+          },
+        ],
+      },
+      snapshot,
+    );
+
+    expect(parsed).toMatchObject({
+      mutationDomain: 'transaction',
+      mutation: {
+        kind: 'create',
+        transaction: {
+          id: 'transaction-1',
+          accountId: 'account-1',
+          payeeId: null,
+          amount: -1230,
+          memo: 'Stock Runtime Ordinary',
+        },
+      },
+      expectedDeviceAdvance: 1,
+      serverKnowledgeAdvance: 1,
+    });
+    expect(parsed?.changes).toHaveLength(1);
+    expect(parsed?.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({
+        id: 'transaction-1',
+        entities_payee_id: null,
+        cash_amount: -1230,
+      }),
+    ]);
+  });
+
   test('admits captured transaction-coupled payee creation and normalizes cash amount', () => {
     const snapshot = fixture();
     const parsed = parseStockOrdinaryMutation(

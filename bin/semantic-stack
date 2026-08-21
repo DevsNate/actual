@@ -21,6 +21,9 @@ case "${1:-up}" in
   up)
     compose up --detach --build semantic-server
     ;;
+  up-actual-ui)
+    ACTUAL_STOCK_WEB_ENABLED=false compose up --detach --build semantic-server
+    ;;
   down)
     compose down --remove-orphans
     ;;
@@ -40,7 +43,7 @@ case "${1:-up}" in
     compose ps
     ;;
   *)
-    echo "Usage: bin/semantic-stack {up|down|reset|test|logs|status}" >&2
+    echo "Usage: bin/semantic-stack {up|up-actual-ui|down|reset|test|logs|status}" >&2
     exit 2
     ;;
 esac

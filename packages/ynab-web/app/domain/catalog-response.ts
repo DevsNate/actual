@@ -1,6 +1,6 @@
 import type {
+  BudgetMembership,
   CatalogSnapshot,
-  PlanMembership,
 } from "@actual-app/semantic-core";
 
 export function parseCatalogResponse(value: unknown): CatalogSnapshot {
@@ -29,11 +29,11 @@ export function parseCatalogResponse(value: unknown): CatalogSnapshot {
   };
 }
 
-function parseMembership(value: unknown): PlanMembership {
-  const membership = requireRecord(value, "plan membership");
+function parseMembership(value: unknown): BudgetMembership {
+  const membership = requireRecord(value, "budget membership");
   const requiredStrings = [
     "id",
-    "planId",
+    "budgetId",
     "budgetVersionId",
     "principalId",
     "name",
@@ -41,11 +41,11 @@ function parseMembership(value: unknown): PlanMembership {
   ] as const;
   for (const key of requiredStrings) {
     if (typeof membership[key] !== "string") {
-      throw new Error(`Plan membership ${key} is malformed`);
+      throw new Error(`Budget membership ${key} is malformed`);
     }
   }
   const id = membership.id;
-  const planId = membership.planId;
+  const budgetId = membership.budgetId;
   const budgetVersionId = membership.budgetVersionId;
   const principalId = membership.principalId;
   const name = membership.name;
@@ -55,12 +55,12 @@ function parseMembership(value: unknown): PlanMembership {
     typeof membership.isTombstone !== "boolean" ||
     !(membership.source === null || typeof membership.source === "string")
   ) {
-    throw new Error("Plan membership fields are malformed");
+    throw new Error("Budget membership fields are malformed");
   }
 
   return {
     id: requireString(id, "id"),
-    planId: requireString(planId, "planId"),
+    budgetId: requireString(budgetId, "budgetId"),
     budgetVersionId: requireString(budgetVersionId, "budgetVersionId"),
     principalId: requireString(principalId, "principalId"),
     name: requireString(name, "name"),
@@ -73,7 +73,7 @@ function parseMembership(value: unknown): PlanMembership {
 
 function requireString(value: unknown, label: string): string {
   if (typeof value !== "string") {
-    throw new Error(`Plan membership ${label} is malformed`);
+    throw new Error(`Budget membership ${label} is malformed`);
   }
   return value;
 }

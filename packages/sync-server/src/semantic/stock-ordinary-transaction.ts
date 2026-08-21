@@ -84,10 +84,57 @@ export function parseStockOrdinaryMutation(
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
   return (
+    parseCreateWithoutPayee(changedEntities, snapshot) ??
     parseCreateWithPayee(changedEntities, snapshot) ??
     parseTransactionDelete(changedEntities, snapshot) ??
     parsePayeeMutation(changedEntities, snapshot)
   );
+}
+
+function parseCreateWithoutPayee(
+  changedEntities: Record<string, unknown>,
+  snapshot: BudgetSnapshot,
+): StockOrdinaryMutation | null {
+  if (!hasExactKeys(changedEntities, ['be_transaction_groups'])) return null;
+  const group = exactlyOneRecord(changedEntities.be_transaction_groups);
+  const transactionRow =
+    group && isRecord(group.be_transaction) ? group.be_transaction : null;
+  if (
+    !group ||
+    !transactionRow ||
+    group.id !== transactionRow.id ||
+    group.be_subtransactions !== null ||
+    !isNewOrdinaryTransaction(transactionRow, null) ||
+    snapshot.entities.some(entity => entity.entityId === transactionRow.id) ||
+    !liveEntity(
+      snapshot,
+      'be_accounts',
+      String(transactionRow.entities_account_id),
+    )
+  ) {
+    return null;
+  }
+
+  const transaction = transactionEntity(snapshot, transactionRow);
+  const augmented = {
+    ...snapshot,
+    entities: [...snapshot.entities, transaction],
+  };
+  return {
+    mutationDomain: 'transaction',
+    mutation: {
+      kind: 'create',
+      transaction: canonicalTransaction(snapshot.budgetId, transaction),
+    },
+    changes: [transaction],
+    changedEntities: {
+      ...buildStockBudgetEmptyDelta(snapshot),
+      ...calculationDelta(snapshot, augmented),
+      be_transactions: [projectStockEntity(transaction)],
+    },
+    expectedDeviceAdvance: 1,
+    serverKnowledgeAdvance: 1,
+  };
 }
 
 function parseCreateWithPayee(
@@ -394,7 +441,7 @@ function isNewOrdinaryPayee(row: Readonly<Record<string, unknown>>): boolean {
 
 function isNewOrdinaryTransaction(
   row: Readonly<Record<string, unknown>>,
-  payeeId: string,
+  payeeId: string | null,
 ): boolean {
   return (
     hasExactKeys(row, TRANSACTION_KEYS) &&
@@ -528,7 +575,8 @@ function requireDateOrNull(value: unknown): string | null {
 function requireCleared(
   value: unknown,
 ): 'Uncleared' | 'Cleared' | 'Reconciled' {
-  if (value === 'Uncleared' || value === 'Cleared' || value === 'Reconciled')
-    {return value;}
+  if (value === 'Uncleared' || value === 'Cleared' || value === 'Reconciled') {
+    return value;
+  }
   throw new Error('Expected cleared state');
 }

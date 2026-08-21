@@ -971,6 +971,43 @@ integrationTest('PostgresSemanticStore integration', () => {
         ],
       },
     });
+    await store.commitOrdinaryTransactionMutation({
+      mutation: {
+        kind: 'create',
+        transaction: {
+          id: 'ordinary-no-payee-transaction',
+          budgetId,
+          accountId: 'ordinary-account',
+          payeeId: null,
+          categoryId: null,
+          date: '2026-08-16',
+          amount: -1230,
+          memo: 'Stock Runtime Ordinary',
+          cleared: 'Uncleared',
+          accepted: true,
+          checkNumber: null,
+          flag: null,
+        },
+      },
+      delivery: {
+        ...create.delivery,
+        changeSetId: 'ordinary-no-payee-create-change',
+        startingDeviceKnowledge: 5,
+        endingDeviceKnowledge: 6,
+        expectedServerKnowledge: 8,
+        serverKnowledgeAdvance: 1,
+        idempotencyKey: 'ordinary-no-payee-create-request',
+        payloadDigest: '7'.repeat(64),
+        changes: [
+          {
+            entityKind: 'be_transactions',
+            entityId: 'ordinary-no-payee-transaction',
+            isTombstone: false,
+            payload: { amount: -1230 },
+          },
+        ],
+      },
+    });
 
     const terminal = await pool.query(
       `SELECT p.name, p.is_tombstone AS payee_tombstone,
@@ -980,7 +1017,11 @@ integrationTest('PostgresSemanticStore integration', () => {
               b.server_knowledge::text AS server_knowledge,
               d.server_knowledge_of_device::text AS device_knowledge,
               (SELECT count(*) FROM semantic_budget_device_receipts
-               WHERE budget_id = $1 AND idempotency_key = 'ordinary-create-request')::text AS create_receipts
+               WHERE budget_id = $1 AND idempotency_key = 'ordinary-create-request')::text AS create_receipts,
+              (SELECT amount_milliunits::text FROM semantic_transactions
+               WHERE budget_id = $1 AND transaction_id = 'ordinary-no-payee-transaction') AS no_payee_amount,
+              (SELECT payee_id FROM semantic_transactions
+               WHERE budget_id = $1 AND transaction_id = 'ordinary-no-payee-transaction') AS no_payee_id
        FROM semantic_payees p
        JOIN semantic_transactions t
          ON t.budget_id = p.budget_id AND t.payee_id = p.payee_id
@@ -998,9 +1039,11 @@ integrationTest('PostgresSemanticStore integration', () => {
       memo: 'Payee Test 1',
       cleared_state: 'Uncleared',
       transaction_tombstone: true,
-      server_knowledge: '8',
-      device_knowledge: '5',
+      server_knowledge: '9',
+      device_knowledge: '6',
       create_receipts: '1',
+      no_payee_amount: '-1230',
+      no_payee_id: null,
     });
   });
 

@@ -32,7 +32,7 @@ services:
       ACTUAL_DATA_DIR: /data
       ACTUAL_SEMANTIC_ENABLED: 'true'
       ACTUAL_SEMANTIC_DATABASE_URL: postgresql://actual:${SEMANTIC_POSTGRES_PASSWORD:-actual-local-dev}@semantic-db:5432/actual_semantic
-      ACTUAL_STOCK_WEB_ENABLED: ${ACTUAL_STOCK_WEB_ENABLED:-false}
+      ACTUAL_STOCK_WEB_ENABLED: ${ACTUAL_STOCK_WEB_ENABLED:-true}
       ACTUAL_STOCK_WEB_ROOT: /stock-web-runtime
     healthcheck:
       test:

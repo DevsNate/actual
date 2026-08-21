@@ -56,6 +56,11 @@ renders fresh session/CSRF meta values, clears the captured Castle JWT, and
 replaces only the captured server origin. Vendor asset bytes remain unchanged
 and Git-ignored.
 
+The semantic development stack enables this preserved client by default. Run
+`bin/semantic-stack up` and open `http://localhost:5006/stock-web/login`.
+`bin/semantic-stack up-actual-ui` is the explicit diagnostic escape hatch for
+serving the inherited Actual client instead; it is not the product Web path.
+
 Run the disposable end-to-end browser gate against a stock-enabled server:
 
 ```sh
@@ -75,6 +80,23 @@ new plan to open and bootstrap successfully:
 STOCK_WEB_SMOKE_CREATE_PLAN=true node web-stock-runtime/smoke-server-runtime.mjs
 ```
 
+Exercise unlinked Checking creation through the unmodified stock dialog and
+require exact canonical account, transfer-payee, and Starting Balance readback:
+
+```sh
+STOCK_WEB_SMOKE_CREATE_ACCOUNT=true node web-stock-runtime/smoke-server-runtime.mjs
+```
+
+To run a gate against an already bootstrapped local stack instead of a
+disposable server, supply its URL and test password; bootstrap is then skipped:
+
+```sh
+STOCK_WEB_SMOKE_URL=http://127.0.0.1:5006 \
+STOCK_WEB_SMOKE_PASSWORD=123 \
+STOCK_WEB_SMOKE_CREATE_ACCOUNT=true \
+  node web-stock-runtime/smoke-server-runtime.mjs
+```
+
 The gate creates only synthetic disposable state, blocks external browser
 traffic, opens the preserved picker and one canonical plan, and requires the
 captured initial-user, catalog, family, budget, and current-user contracts to
@@ -84,3 +106,18 @@ sync, and verifies that startup does not fabricate or select a plan.
 Create-plan mode starts from that same empty picker, submits the captured
 `POST /api/budgets` envelope, requires the stock `{ id }` acknowledgement,
 and then verifies navigation plus budget bootstrap without browser errors.
+Create-account mode opens the canonical synthetic budget, submits the stock
+direct-import account request, verifies the account register route, and reads
+the resulting entity group back through the canonical budget boundary.
+
+Exercise a payee-less ordinary outflow through the stock register and require
+its delayed sync cycle plus canonical transaction readback:
+
+```sh
+STOCK_WEB_SMOKE_CREATE_TRANSACTION=true \
+  node web-stock-runtime/smoke-server-runtime.mjs
+```
+
+Transaction mode includes account creation and waits up to 65 seconds for the
+stock client's normal sync cadence. Override that window only when diagnosing
+timing with `STOCK_WEB_SMOKE_SYNC_WAIT_MS`.

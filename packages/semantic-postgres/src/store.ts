@@ -17,6 +17,7 @@ import type {
   CreateBudgetCommand,
   CreateBudgetResult,
   PrincipalId,
+  CanonicalOrdinaryTransaction,
 } from '@actual-app/semantic-core';
 import type { Pool, PoolClient } from 'pg';
 
@@ -913,28 +914,18 @@ async function writeCanonicalOrdinaryTransactionMutation(
         payee.internalName,
       ],
     );
-    await client.query(
-      `INSERT INTO semantic_transactions
-         (budget_id, transaction_id, account_id, payee_id, category_id,
-          transaction_date, amount_milliunits, is_cleared, is_approved,
-          transaction_kind, memo, cleared_state, check_number, flag)
-       VALUES ($1, $2, $3, $4, $5, $6, $7,
-               ($8 <> 'Uncleared'), $9, 'ordinary', $10, $8, $11, $12)`,
-      [
-        transaction.budgetId,
-        transaction.id,
-        transaction.accountId,
-        transaction.payeeId,
-        transaction.categoryId,
-        transaction.date,
-        transaction.amount,
-        transaction.cleared,
-        transaction.accepted,
-        transaction.memo,
-        transaction.checkNumber,
-        transaction.flag,
-      ],
-    );
+    await insertCanonicalOrdinaryTransaction(client, transaction);
+    return;
+  }
+
+  if (mutation.kind === 'create') {
+    if (mutation.transaction.payeeId !== null) {
+      throw new SemanticStoreError(
+        'INVALID_OPERATION',
+        'Ordinary transaction-only creation requires a null payee',
+      );
+    }
+    await insertCanonicalOrdinaryTransaction(client, mutation.transaction);
     return;
   }
 
@@ -951,6 +942,34 @@ async function writeCanonicalOrdinaryTransactionMutation(
       'Ordinary transaction deletion did not match one live transaction',
     );
   }
+}
+
+async function insertCanonicalOrdinaryTransaction(
+  client: PoolClient,
+  transaction: CanonicalOrdinaryTransaction,
+): Promise<void> {
+  await client.query(
+    `INSERT INTO semantic_transactions
+       (budget_id, transaction_id, account_id, payee_id, category_id,
+        transaction_date, amount_milliunits, is_cleared, is_approved,
+        transaction_kind, memo, cleared_state, check_number, flag)
+     VALUES ($1, $2, $3, $4, $5, $6, $7,
+             ($8 <> 'Uncleared'), $9, 'ordinary', $10, $8, $11, $12)`,
+    [
+      transaction.budgetId,
+      transaction.id,
+      transaction.accountId,
+      transaction.payeeId,
+      transaction.categoryId,
+      transaction.date,
+      transaction.amount,
+      transaction.cleared,
+      transaction.accepted,
+      transaction.memo,
+      transaction.checkNumber,
+      transaction.flag,
+    ],
+  );
 }
 
 async function writeCanonicalOrdinaryPayeeMutation(

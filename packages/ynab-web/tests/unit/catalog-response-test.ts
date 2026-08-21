@@ -11,7 +11,7 @@ module("Unit | catalog response", function () {
         memberships: [
           {
             id: "membership-1",
-            planId: "plan-1",
+            budgetId: "budget-1",
             budgetVersionId: "version-1",
             principalId: "principal-1",
             name: "Plan One",
@@ -25,6 +25,7 @@ module("Unit | catalog response", function () {
     });
 
     assert.strictEqual(result.knowledge.currentServerKnowledge, 2);
+    assert.strictEqual(result.memberships[0]?.budgetId, "budget-1");
     assert.strictEqual(result.memberships[0]?.name, "Plan One");
   });
 
