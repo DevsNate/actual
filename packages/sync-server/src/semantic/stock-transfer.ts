@@ -176,6 +176,8 @@ function parseExisting(
   const isAmountUpdate = sameExcept(current, entities, [
     'amount',
     'cashAmount',
+    'creditAmount',
+    'creditAmountAdjusted',
   ]);
   const isMemoUpdate = sameExcept(current, entities, ['memo']);
   if (changed.length !== 2 || (!isAmountUpdate && !isMemoUpdate)) {
@@ -297,7 +299,11 @@ function transferEntity(
   snapshot: BudgetSnapshot,
   row: Record<string, unknown>,
 ): BudgetEntity {
-  const amounts = normalizeCapturedReciprocalTransferAmounts(row.amount);
+  const account = live(snapshot, 'be_accounts', row.entities_account_id);
+  const amounts = normalizeCapturedReciprocalTransferAmounts(
+    row.amount,
+    account?.payload.accountType,
+  );
   return {
     entityKind: 'be_transactions',
     entityId: string(row.id),

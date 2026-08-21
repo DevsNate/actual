@@ -20,26 +20,35 @@ describe('captured stock transaction normalization boundary', () => {
     });
   });
 
-  test('normalizes both admitted reciprocal transfer signs to signed cash', () => {
-    expect(normalizeCapturedReciprocalTransferAmounts(-12340)).toEqual({
+  test('normalizes captured reciprocal legs by account type', () => {
+    expect(
+      normalizeCapturedReciprocalTransferAmounts(-12340, 'Checking'),
+    ).toEqual({
       amount: -12340,
       cashAmount: -12340,
       creditAmount: 0,
       creditAmountAdjusted: 0,
       subcategoryCreditAmountPreceding: 0,
     });
-    expect(normalizeCapturedReciprocalTransferAmounts(12340)).toEqual({
+    expect(
+      normalizeCapturedReciprocalTransferAmounts(12340, 'CreditCard'),
+    ).toEqual({
       amount: 12340,
-      cashAmount: 12340,
-      creditAmount: 0,
-      creditAmountAdjusted: 0,
+      cashAmount: 0,
+      creditAmount: 12340,
+      creditAmountAdjusted: 12340,
       subcategoryCreditAmountPreceding: 0,
     });
   });
 
   test('fails closed outside the admitted integer amount shapes', () => {
     expect(() => normalizeCapturedCheckingTransactionAmounts(0)).toThrow();
-    expect(() => normalizeCapturedReciprocalTransferAmounts(1.5)).toThrow();
+    expect(() =>
+      normalizeCapturedReciprocalTransferAmounts(1.5, 'Checking'),
+    ).toThrow();
+    expect(() =>
+      normalizeCapturedReciprocalTransferAmounts(1000, 'Loan'),
+    ).toThrow('Captured transfer account type is unsupported');
     expect(() =>
       normalizeCapturedCheckingSubtransactionAmounts('1000'),
     ).toThrow();

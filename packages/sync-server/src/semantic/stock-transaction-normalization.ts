@@ -8,8 +8,8 @@
 type CapturedTransactionAmounts = {
   amount: number;
   cashAmount: number;
-  creditAmount: 0;
-  creditAmountAdjusted: 0;
+  creditAmount: number;
+  creditAmountAdjusted: number;
   subcategoryCreditAmountPreceding: 0;
 };
 
@@ -45,8 +45,21 @@ export function normalizeCapturedCheckingSubtransactionAmounts(
 
 export function normalizeCapturedReciprocalTransferAmounts(
   amount: unknown,
+  accountType: unknown,
 ): CapturedTransactionAmounts {
   const signedAmount = requireNonzeroSafeInteger(amount);
+  if (accountType === 'CreditCard') {
+    return {
+      amount: signedAmount,
+      cashAmount: 0,
+      creditAmount: signedAmount,
+      creditAmountAdjusted: signedAmount,
+      subcategoryCreditAmountPreceding: 0,
+    };
+  }
+  if (accountType !== 'Cash' && accountType !== 'Checking') {
+    throw new Error('Captured transfer account type is unsupported');
+  }
   return {
     amount: signedAmount,
     cashAmount: signedAmount,

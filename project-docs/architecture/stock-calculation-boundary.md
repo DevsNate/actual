@@ -85,11 +85,21 @@ The current projectors admit only:
 2. the limited checking-account states covered by the focused account,
    ordinary-transaction, split, transfer, and account-lifecycle tests;
 3. the captured TARGET-001 definition lifecycle and definition calculations;
+4. the captured ASSIGNMENT-001 positive manual assignment and exact replay;
    and
-4. the captured ASSIGNMENT-001 positive manual assignment and exact replay.
+5. the controlled credit-card payment create, amount-edit, delete, and
+   unchanged-replay calculation lifecycle.
 
-Other combinations fail closed. Target status and credit-card payments must not
-be added as narrow parser exceptions around the current limited projector.
+The payment capture proves account-type amount attribution: the checking leg
+uses signed `cash_amount`, while the CreditCard leg uses signed
+`credit_amount` and `credit_amount_adjusted` with zero cash. It also proves the
+two account rows, current/next monthly-account rows, payment-category carry,
+monthly-budget/Ready-to-Assign rows, two server-knowledge advances per
+mutation, and a zero-advance unchanged replay. Combined amount-plus-memo edits
+and other payment states remain unsupported.
+
+Other combinations fail closed. Target status must not be added as a narrow
+parser exception around the current limited projector.
 
 ## Admission sequence
 
@@ -117,3 +127,5 @@ The generated evidence outside this repository is under
 - `CALCULATION_BOUNDARY_AUDIT.md`.
 
 The controlled stock packages are under `../evidence/stock-captures/`.
+The full controlled payment calculation lifecycle is outside Git under
+`/Users/nate/Documents/YNAB Project/web-capture/ccp-calculation-recapture-2026-08-21/`.

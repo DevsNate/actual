@@ -165,95 +165,7 @@ describe('stock fresh-budget calculations', () => {
 
 describe('stock admitted account calculations', () => {
   test('projects the captured credit-card payment account, category, and RTA rows', () => {
-    const snapshot = createSnapshot();
-    const startingPayee = snapshot.entities.find(
-      entity => entity.payload.internalName === 'StartingBalancePayee',
-    )!;
-    const immediateIncome = snapshot.entities.find(
-      entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
-    )!;
-    const ordinaryCategory = snapshot.entities.find(
-      entity =>
-        entity.entityKind === 'be_subcategories' &&
-        entity.payload.internalName === null &&
-        (entity.payload.accountId ?? null) === null,
-    )!;
-    const masterCategory = snapshot.entities.find(
-      entity => entity.entityKind === 'be_master_categories',
-    )!;
-    const monthlyBudgets = snapshot.entities.filter(
-      entity =>
-        entity.entityKind === 'be_monthly_budgets' &&
-        entity.payload.bootstrapRole !== 'opened-budget-prior-month',
-    );
-    const paymentCategoryId = 'category-payment';
-    snapshot.entities.push(
-      account('checking', 'Cash'),
-      account('credit', 'CreditCard'),
-      transferPayee('checking'),
-      transferPayee('credit'),
-      transaction('checking-start', 'checking', 1_000_000, {
-        payeeId: startingPayee.entityId,
-        subCategoryId: immediateIncome.entityId,
-        cashAmount: 1_000_000,
-        creditAmount: 0,
-        cleared: 'Cleared',
-      }),
-      transaction('credit-start', 'credit', -258_000, {
-        payeeId: startingPayee.entityId,
-        subCategoryId: immediateIncome.entityId,
-        cashAmount: 0,
-        creditAmount: -258_000,
-        cleared: 'Cleared',
-      }),
-      transaction('uncategorized', 'checking', -10_000, {
-        cleared: 'Cleared',
-      }),
-      transaction('categorized', 'checking', -67_000, {
-        subCategoryId: ordinaryCategory.entityId,
-        cleared: 'Cleared',
-      }),
-      transaction('categorized-small', 'checking', -840, {
-        subCategoryId: ordinaryCategory.entityId,
-        cleared: 'Cleared',
-      }),
-      transferLeg('payment-old-out', 'checking', 'credit', -8_520),
-      transferLeg('payment-old-in', 'credit', 'checking', 8_520),
-      transferLeg('payment-new-out', 'checking', 'credit', -12_340),
-      transferLeg('payment-new-in', 'credit', 'checking', 12_340),
-      {
-        entityKind: 'be_subcategories',
-        entityId: paymentCategoryId,
-        isTombstone: false,
-        payload: {
-          name: 'Credit',
-          type: 'DBT',
-          accountId: 'credit',
-          masterCategoryId: masterCategory.entityId,
-          internalName: null,
-        },
-      },
-      ...monthlyBudgets.map(month => ({
-        entityKind: 'be_monthly_subcategory_budgets',
-        entityId: `mcb/${String(month.payload.month).slice(0, 7)}/${paymentCategoryId}`,
-        isTombstone: false,
-        payload: {
-          monthlyBudgetId: month.entityId,
-          subCategoryId: paymentCategoryId,
-          budgeted: 0,
-        },
-      })),
-    );
-    const currentOrdinaryBudget = snapshot.entities.find(
-      entity =>
-        entity.entityKind === 'be_monthly_subcategory_budgets' &&
-        entity.payload.monthlyBudgetId === monthlyBudgets[0].entityId &&
-        entity.payload.subCategoryId === ordinaryCategory.entityId,
-    )!;
-    currentOrdinaryBudget.payload = {
-      ...currentOrdinaryBudget.payload,
-      budgeted: 69_840,
-    };
+    const { snapshot, paymentCategoryId } = paymentCalculationFixture(12_340);
 
     const result = projectStockAdmittedAccountCalculations(snapshot);
     expect(result.be_account_calculations).toEqual([
@@ -303,6 +215,39 @@ describe('stock admitted account calculations', () => {
         payment_average: -20_860,
       }),
     ]);
+  });
+
+  test('projects the captured payment edit, deletion, and unchanged replay', () => {
+    const edited = paymentCalculationFixture(23_450);
+    const editedRows = projectStockAdmittedAccountCalculations(edited.snapshot);
+    expect(
+      paymentCalculationSummary(editedRows, edited.paymentCategoryId),
+    ).toEqual({
+      checkingCleared: 890_190,
+      creditUncleared: 31_970,
+      currentAvailableToBudget: 930_160,
+      nextAvailableToBudget: 888_190,
+      currentCashOutflows: -109_810,
+      currentPaymentBalance: -31_970,
+      nextPaymentPrevious: -31_970,
+    });
+
+    const deleted = paymentCalculationFixture(null);
+    const terminal = projectStockAdmittedAccountCalculations(deleted.snapshot);
+    expect(
+      paymentCalculationSummary(terminal, deleted.paymentCategoryId),
+    ).toEqual({
+      checkingCleared: 913_640,
+      creditUncleared: 8_520,
+      currentAvailableToBudget: 930_160,
+      nextAvailableToBudget: 911_640,
+      currentCashOutflows: -86_360,
+      currentPaymentBalance: -8_520,
+      nextPaymentPrevious: -8_520,
+    });
+    expect(projectStockAdmittedAccountCalculations(deleted.snapshot)).toEqual(
+      terminal,
+    );
   });
 
   test('projects the admitted starting-balance and rolling-balance rows', () => {
@@ -645,6 +590,141 @@ describe('stock admitted account calculations', () => {
   });
 });
 
+function paymentCalculationFixture(newPaymentAmount: number | null) {
+  const snapshot = createSnapshot();
+  const startingPayee = snapshot.entities.find(
+    entity => entity.payload.internalName === 'StartingBalancePayee',
+  )!;
+  const immediateIncome = snapshot.entities.find(
+    entity => entity.payload.internalName === 'Category/__ImmediateIncome__',
+  )!;
+  const ordinaryCategory = snapshot.entities.find(
+    entity =>
+      entity.entityKind === 'be_subcategories' &&
+      entity.payload.internalName === null &&
+      (entity.payload.accountId ?? null) === null,
+  )!;
+  const masterCategory = snapshot.entities.find(
+    entity => entity.entityKind === 'be_master_categories',
+  )!;
+  const monthlyBudgets = snapshot.entities.filter(
+    entity =>
+      entity.entityKind === 'be_monthly_budgets' &&
+      entity.payload.bootstrapRole !== 'opened-budget-prior-month',
+  );
+  const paymentCategoryId = 'category-payment';
+  const newPayment =
+    newPaymentAmount === null
+      ? []
+      : [
+          transferLeg(
+            'payment-new-out',
+            'checking',
+            'credit',
+            -newPaymentAmount,
+          ),
+          transferLeg('payment-new-in', 'credit', 'checking', newPaymentAmount),
+        ];
+  snapshot.entities.push(
+    account('checking', 'Cash'),
+    account('credit', 'CreditCard'),
+    transferPayee('checking'),
+    transferPayee('credit'),
+    transaction('checking-start', 'checking', 1_000_000, {
+      payeeId: startingPayee.entityId,
+      subCategoryId: immediateIncome.entityId,
+      cashAmount: 1_000_000,
+      creditAmount: 0,
+      cleared: 'Cleared',
+    }),
+    transaction('credit-start', 'credit', -258_000, {
+      payeeId: startingPayee.entityId,
+      subCategoryId: immediateIncome.entityId,
+      cashAmount: 0,
+      creditAmount: -258_000,
+      creditAmountAdjusted: -258_000,
+      cleared: 'Cleared',
+    }),
+    transaction('uncategorized', 'checking', -10_000, {
+      cleared: 'Cleared',
+    }),
+    transaction('categorized', 'checking', -67_000, {
+      subCategoryId: ordinaryCategory.entityId,
+      cleared: 'Cleared',
+    }),
+    transaction('categorized-small', 'checking', -840, {
+      subCategoryId: ordinaryCategory.entityId,
+      cleared: 'Cleared',
+    }),
+    transferLeg('payment-old-out', 'checking', 'credit', -8_520),
+    transferLeg('payment-old-in', 'credit', 'checking', 8_520),
+    ...newPayment,
+    {
+      entityKind: 'be_subcategories',
+      entityId: paymentCategoryId,
+      isTombstone: false,
+      payload: {
+        name: 'Credit',
+        type: 'DBT',
+        accountId: 'credit',
+        masterCategoryId: masterCategory.entityId,
+        internalName: null,
+      },
+    },
+    ...monthlyBudgets.map(month => ({
+      entityKind: 'be_monthly_subcategory_budgets',
+      entityId: `mcb/${String(month.payload.month).slice(0, 7)}/${paymentCategoryId}`,
+      isTombstone: false,
+      payload: {
+        monthlyBudgetId: month.entityId,
+        subCategoryId: paymentCategoryId,
+        budgeted: 0,
+      },
+    })),
+  );
+  const currentOrdinaryBudget = snapshot.entities.find(
+    entity =>
+      entity.entityKind === 'be_monthly_subcategory_budgets' &&
+      entity.payload.monthlyBudgetId === monthlyBudgets[0].entityId &&
+      entity.payload.subCategoryId === ordinaryCategory.entityId,
+  )!;
+  currentOrdinaryBudget.payload = {
+    ...currentOrdinaryBudget.payload,
+    budgeted: 69_840,
+  };
+  return { snapshot, paymentCategoryId };
+}
+
+function paymentCalculationSummary(
+  result: ReturnType<typeof projectStockAdmittedAccountCalculations>,
+  paymentCategoryId: string,
+) {
+  const accountRow = (id: string) =>
+    result.be_account_calculations.find(row => row.entities_account_id === id)!;
+  const budgets = [...result.be_monthly_budget_calculations].sort(
+    (left, right) =>
+      String(left.entities_monthly_budget_id).localeCompare(
+        String(right.entities_monthly_budget_id),
+      ),
+  );
+  const payments = result.be_monthly_subcategory_budget_calculations
+    .filter(row =>
+      String(row.entities_monthly_subcategory_budget_id).endsWith(
+        paymentCategoryId,
+      ),
+    )
+    .sort((left, right) => String(left.id).localeCompare(String(right.id)));
+  return {
+    checkingCleared: accountRow('checking').cleared_balance,
+    creditUncleared: accountRow('credit').uncleared_balance,
+    currentAvailableToBudget: budgets[0].available_to_budget,
+    nextAvailableToBudget: budgets[1].available_to_budget,
+    currentCashOutflows: budgets[0].cash_outflows,
+    currentPaymentBalance: payments[0].balance,
+    nextPaymentPrevious: payments[1].payment_previous_month,
+  };
+}
+
 function account(id: string, type: 'Cash' | 'CreditCard') {
   return {
     entityKind: 'be_accounts',
@@ -720,7 +800,9 @@ function transferLeg(
     : id.replace(/-in$/u, '-out');
   return transaction(id, accountId, amount, {
     payeeId: `payee-${otherAccountId}`,
-    cashAmount: amount,
+    cashAmount: accountId === 'credit' ? 0 : amount,
+    creditAmount: accountId === 'credit' ? amount : 0,
+    creditAmountAdjusted: accountId === 'credit' ? amount : 0,
     transferAccountId: otherAccountId,
     transferTransactionId: otherId,
     cleared: accountId === 'checking' ? 'Cleared' : 'Uncleared',

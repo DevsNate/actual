@@ -187,4 +187,143 @@ describe('stock credit-card payment boundary', () => {
       ),
     ).toBeNull();
   });
+
+  test('normalizes the captured create, amount edit, and terminal deletion lifecycle', () => {
+    const initial = fixture();
+    const credit = initial.entities.find(
+      entity => entity.entityId === 'acct-credit',
+    )!;
+    const created = parseStockCreditCardPaymentMutation(
+      {
+        be_accounts: [
+          {
+            ...projectStockRequestEntity(credit),
+            last_payment_payee_id: 'payee-to-checking',
+          },
+        ],
+        be_transaction_groups: paymentGroups(),
+      },
+      initial,
+    )!;
+
+    expect(created.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({
+        id: 'payment-out',
+        amount: -12340,
+        cash_amount: -12340,
+        credit_amount: 0,
+        credit_amount_adjusted: 0,
+      }),
+      expect.objectContaining({
+        id: 'payment-in',
+        amount: 12340,
+        cash_amount: 0,
+        credit_amount: 12340,
+        credit_amount_adjusted: 12340,
+      }),
+    ]);
+    const afterCreate = applyChanges(initial, created.changes);
+
+    const edited = parseStockCreditCardPaymentMutation(
+      {
+        be_transaction_groups: amountEditGroups(afterCreate, 23450),
+      },
+      afterCreate,
+    )!;
+    expect(edited).toMatchObject({
+      mutation: { transfer: { kind: 'update' } },
+      expectedDeviceAdvance: 2,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(edited.changedEntities.be_transactions).toEqual([
+      expect.objectContaining({
+        id: 'payment-out',
+        amount: -23450,
+        cash_amount: -23450,
+        credit_amount: 0,
+        credit_amount_adjusted: 0,
+      }),
+      expect.objectContaining({
+        id: 'payment-in',
+        amount: 23450,
+        cash_amount: 0,
+        credit_amount: 23450,
+        credit_amount_adjusted: 23450,
+      }),
+    ]);
+    const afterEdit = applyChanges(afterCreate, edited.changes);
+
+    const deleted = parseStockCreditCardPaymentMutation(
+      {
+        be_transaction_groups: deletionGroups(afterEdit),
+      },
+      afterEdit,
+    )!;
+    expect(deleted).toMatchObject({
+      mutation: { transfer: { kind: 'delete' } },
+      expectedDeviceAdvance: 8,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(deleted.changedEntities.be_transactions).toEqual([]);
+    expect(deleted.changes).toEqual([
+      expect.objectContaining({ entityId: 'payment-out', isTombstone: true }),
+      expect.objectContaining({ entityId: 'payment-in', isTombstone: true }),
+    ]);
+  });
 });
+
+function applyChanges(
+  snapshot: BudgetSnapshot,
+  changes: readonly BudgetEntity[],
+): BudgetSnapshot {
+  const replacements = new Map(
+    changes.map(entity => [entity.entityId, entity]),
+  );
+  const existingIds = new Set(snapshot.entities.map(entity => entity.entityId));
+  return {
+    ...snapshot,
+    entities: [
+      ...snapshot.entities.map(
+        entity => replacements.get(entity.entityId) ?? entity,
+      ),
+      ...changes.filter(entity => !existingIds.has(entity.entityId)),
+    ],
+  };
+}
+
+function paymentEntities(snapshot: BudgetSnapshot): readonly BudgetEntity[] {
+  return ['payment-out', 'payment-in'].map(id =>
+    snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_transactions' && entity.entityId === id,
+    )!,
+  );
+}
+
+function amountEditGroups(snapshot: BudgetSnapshot, amount: number) {
+  return paymentEntities(snapshot).map((entity, index) => {
+    const row = projectStockRequestEntity(entity);
+    return {
+      id: entity.entityId,
+      be_transaction: { ...row, amount: index === 0 ? -amount : amount },
+      be_subtransactions: null,
+    };
+  });
+}
+
+function deletionGroups(snapshot: BudgetSnapshot) {
+  return paymentEntities(snapshot).map(entity => {
+    const row = projectStockRequestEntity(entity);
+    return {
+      id: entity.entityId,
+      be_transaction: {
+        ...row,
+        is_tombstone: true,
+        entities_payee_id: null,
+        transfer_account_id: null,
+        transfer_transaction_id: null,
+      },
+      be_subtransactions: null,
+    };
+  });
+}

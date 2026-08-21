@@ -29,6 +29,12 @@ closed. The server does not invent missing reciprocal identities.
 
 Credit-card payments remain a separate specialization.
 
+For that specialization, the controlled calculation recapture proves that the
+checking leg is normalized to signed cash while the CreditCard leg is
+normalized to signed credit and adjusted-credit with zero cash. Amount edits
+carry the previously calculated amount fields in the client request, and the
+server recomputes both legs from the new signed amount before returning them.
+
 ## Local stock-Web payment acceptance
 
 The unchanged deployed stock Web runtime was exercised against the local
