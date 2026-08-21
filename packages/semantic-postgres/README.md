@@ -79,11 +79,13 @@ Typed account storage owns only the evidence-admitted unlinked Checking-account
 creation, rename, pristine deletion, close, and reopen shapes. Typed ordinary
 transaction storage owns only PAYEE-001 transaction-coupled payee creation,
 transaction deletion, payee rename, and unused-payee deletion. Other account
-types, linked accounts, categorized/general transaction editing, splits,
-transfers, schedules, targets, and credit-card semantics remain gated on their
-canonical domain cutovers. Existing narrow compatibility implementations do
-not broaden that authority. The package also does not duplicate Actual authentication;
-memberships refer to principals produced by the retained Actual session system.
+types, linked accounts, categorized/general transaction editing, schedules,
+target status/assignment mutations, and credit-card semantics remain gated on
+their canonical domain cutovers. Captured split, ordinary-transfer and target
+definition boundaries are documented separately in the change ledger. Existing
+narrow compatibility implementations do not broaden that authority. The
+package also does not duplicate Actual authentication; memberships refer to
+principals produced by the retained Actual session system.
 
 All changes to this boundary must update
 `project-docs/architecture/stock-actual-change-ledger.md` in the same commit.

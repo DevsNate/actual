@@ -10,6 +10,7 @@ export { semanticCanonicalCategoryDomainMigration } from './canonical-category-d
 export { semanticCanonicalOrdinaryTransactionMigration } from './canonical-ordinary-transaction-migration';
 export { semanticCanonicalSplitTransactionMigration } from './canonical-split-transaction-migration';
 export { semanticCanonicalTransferMigration } from './canonical-transfer-migration';
+export { semanticCanonicalTargetDefinitionMigration } from './canonical-target-definition-migration';
 export type {
   CatalogCommand,
   CatalogCommandResult,

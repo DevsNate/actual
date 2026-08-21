@@ -19,7 +19,8 @@
     "./canonical-category-domain-migration": "./src/canonical-category-domain-migration.ts",
     "./canonical-ordinary-transaction-migration": "./src/canonical-ordinary-transaction-migration.ts",
     "./canonical-split-transaction-migration": "./src/canonical-split-transaction-migration.ts",
-    "./canonical-transfer-migration": "./src/canonical-transfer-migration.ts"
+    "./canonical-transfer-migration": "./src/canonical-transfer-migration.ts",
+    "./canonical-target-definition-migration": "./src/canonical-target-definition-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

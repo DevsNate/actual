@@ -11,6 +11,7 @@ import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-pos
 import { semanticCanonicalCategoryDomainMigration } from '@actual-app/semantic-postgres/canonical-category-domain-migration';
 import { semanticCanonicalOrdinaryTransactionMigration } from '@actual-app/semantic-postgres/canonical-ordinary-transaction-migration';
 import { semanticCanonicalSplitTransactionMigration } from '@actual-app/semantic-postgres/canonical-split-transaction-migration';
+import { semanticCanonicalTargetDefinitionMigration } from '@actual-app/semantic-postgres/canonical-target-definition-migration';
 import { semanticCanonicalTransferMigration } from '@actual-app/semantic-postgres/canonical-transfer-migration';
 import { semanticCatalogCommandMigration } from '@actual-app/semantic-postgres/catalog-command-migration';
 import { semanticCatalogSchemaVersionMigration } from '@actual-app/semantic-postgres/catalog-schema-version-migration';
@@ -48,6 +49,7 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCanonicalOrdinaryTransactionMigration,
       semanticCanonicalSplitTransactionMigration,
       semanticCanonicalTransferMigration,
+      semanticCanonicalTargetDefinitionMigration,
     ]);
   } catch (error) {
     await pool.end();

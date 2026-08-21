@@ -50,9 +50,22 @@ tracking, closed-account, or generalized multi-month behavior.
 `stock-monthly-category-calculation-projection.ts` owns only the captured cash
 category states already used by the checking-account boundary: uncategorized
 cash, categorized split lines, and Starting Balance Immediate Income across the
-captured current/next-month rows. Target status, categorized refunds, credit
-spending, carryover, and other monthly-category behavior remain outside this
-projector until their own admission phases.
+captured current/next-month rows.
+
+`stock-target-definition.ts` and
+`stock-target-calculation-projection.ts` form a separate target boundary. They
+admit the TARGET-001 monthly, yearly, Saturday-weekly and every-two-month
+definition sequence, its observed device/server knowledge advances, in-place
+clear semantics, and the exact target/underfunded/left/completion fields retained
+by the controlled capture. Bootstrap target templates with no creation date and
+zero amount remain inactive; this prevents template metadata from becoming a
+synthetic live target. Uncaptured cadences fail closed.
+
+Funded/spent/overspent status, categorized refunds, credit spending, carryover,
+and other monthly-category behavior remain outside that definition projector
+until their mutation domains are admitted. TARGET-001 did not retain the
+unfunded definition state's percentage field, so the compatibility server does
+not invent it.
 
 `stock-monthly-budget-calculation-projection.ts` owns the captured two-row
 monthly-budget projection for Starting Balance income plus admitted cash
@@ -64,10 +77,11 @@ The current projectors admit only:
 
 1. the exact pristine/default bootstrap state captured in BUDGET-001; and
 2. the limited checking-account states covered by the focused account,
-   ordinary-transaction, split, transfer, and account-lifecycle tests.
+   ordinary-transaction, split, transfer, and account-lifecycle tests; and
+3. the captured TARGET-001 definition lifecycle and definition calculations.
 
-Other combinations fail closed. Targets and credit-card payments must not be
-added as narrow parser exceptions around the current limited projector.
+Other combinations fail closed. Target status and credit-card payments must not
+be added as narrow parser exceptions around the current limited projector.
 
 ## Admission sequence
 

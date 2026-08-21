@@ -654,6 +654,84 @@ describe('stock budget gateway', () => {
     );
   });
 
+  test('routes the captured monthly target definition through the canonical writer', async () => {
+    const snapshot = { ...createSnapshot(), serverKnowledge: 99 };
+    const category = snapshot.entities.find(
+      entity =>
+        entity.entityKind === 'be_subcategories' &&
+        entity.payload.internalName === null &&
+        entity.payload.goalType === null,
+    )!;
+    const projected = projectStockEntity(category);
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitChangeSet: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
+      commitCategoryMutation: vi.fn().mockImplementation(input =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 101,
+          endingDeviceKnowledge: 25,
+          response: input.delivery.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      { readBudgetByVersion: vi.fn().mockResolvedValue(snapshot) },
+      'delta',
+      {
+        starting_device_knowledge: 18,
+        ending_device_knowledge: 25,
+        device_knowledge_of_server: 99,
+        changed_entities: {
+          be_subcategories: [
+            {
+              ...projected,
+              pinned_index: null,
+              pinned_goal_index: null,
+              goal_type: 'NEED',
+              goal_created_on: '2026-08-01',
+              goal_needs_whole_amount: true,
+              goal_target_amount: 100000,
+              goal_target_date: null,
+              goal_cadence: 1,
+              goal_cadence_frequency: 1,
+              goal_day: null,
+              monthly_funding: 0,
+            },
+          ],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 101,
+      server_knowledge_of_device: 25,
+      changed_entities: {
+        be_monthly_subcategory_budget_calculations: [
+          { goal_target: 100000, goal_under_funded: 100000 },
+          { goal_target: 100000, goal_under_funded: 100000 },
+        ],
+      },
+    });
+    expect(changeWriter.commitCategoryMutation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mutation: expect.objectContaining({
+          kind: 'replace-target',
+          categoryId: category.entityId,
+        }),
+        delivery: expect.objectContaining({ serverKnowledgeAdvance: 2 }),
+      }),
+    );
+  });
+
   test('routes an ordinary payee rename through the canonical writer', async () => {
     const base = createSnapshot();
     const payee = {

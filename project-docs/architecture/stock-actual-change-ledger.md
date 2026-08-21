@@ -700,3 +700,33 @@ Copy this block for a new architectural delta:
   TypeScript, clean PostgreSQL create/replay/edit/delete readback, and the
   authenticated eleven-migration runtime suite.
 - **Status:** implemented.
+
+### ADD-018 — Canonical captured target definition
+
+- **Disposition:** Add.
+- **Location:** `packages/semantic-core/src/category.ts`,
+  `packages/semantic-postgres/src/target-store.ts`,
+  `packages/sync-server/src/semantic/stock-target-definition.ts`,
+  `packages/sync-server/src/semantic/stock-target-calculation-projection.ts`,
+  and migration `0012_canonical_target_definition.sql`.
+- **Observed stock behavior:** TARGET-001 replaces target fields on one stable
+  live category through monthly, yearly, Saturday-weekly, every-two-month and
+  restored-monthly definitions. The published delete clears those fields in
+  place. Each acknowledgement advances server knowledge by two; the captured
+  editor transitions have distinct device-knowledge ranges.
+- **Fork behavior:** A dedicated schema-44 parser maps only those captured NEED
+  definitions into an optional typed canonical target row. PostgreSQL performs
+  an exact compare-and-swap replacement alongside the entity ledger and replay
+  receipt. The calculation projector emits only the target, underfunded,
+  overall-left and expected-completion fields retained by the definition
+  capture.
+- **Boundary:** Bootstrap cadence templates with zero amount and no creation
+  date are inactive, not synthetic targets. Funded/spent/overspent status,
+  assignments, refunds, credit spending, uncaptured cadences and unretained
+  calculation fields remain gated.
+- **Verification:** Focused lifecycle, cadence, malformed-input, gateway and
+  projection tests; strict TypeScript checks; complete local package suites;
+  migration structure checks; and a clean disposable PostgreSQL
+  create/readback/clear cycle with all 31 storage tests passing.
+- **Status:** implemented through the focused compatibility boundary; stock
+  browser lifecycle acceptance remains pending.

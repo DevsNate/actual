@@ -588,6 +588,26 @@ describe('semantic foundation migration', () => {
     expect(migration).not.toContain('be_monthly_subcategory_budgets');
   });
 
+  test('stores activated targets separately from category identity', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0012_canonical_target_definition.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain('CREATE TABLE semantic_category_targets');
+    expect(migration).toContain('target_type TEXT NOT NULL');
+    expect(migration).toContain('target_amount_milliunits BIGINT NOT NULL');
+    expect(migration).toContain(
+      'REFERENCES semantic_categories(budget_id, category_id)',
+    );
+    expect(migration).not.toContain('be_subcategories');
+  });
+
   test('stores split parents and ordered lines as one canonical aggregate', async () => {
     const migration = await readFile(
       fileURLToPath(

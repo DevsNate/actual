@@ -58,7 +58,27 @@ export type CanonicalCategoryMutation =
       budgetId: string;
       categoryId: string;
       monthlyCategoryBudgetIds: readonly [string, string];
+    }
+  | {
+      kind: 'replace-target';
+      budgetId: string;
+      categoryId: string;
+      expected: CanonicalTargetDefinition | null;
+      target: CanonicalTargetDefinition | null;
     };
+
+/** Project-owned canonical representation of the captured stock NEED target. */
+export type CanonicalTargetDefinition = {
+  type: 'NEED';
+  createdOn: string;
+  amount: number;
+  date: string | null;
+  cadence: 1 | 2 | 13;
+  cadenceFrequency: number;
+  day: number | null;
+  needsWholeAmount: true;
+  monthlyFunding: 0;
+};
 
 export type CommitCanonicalCategoryMutation = {
   mutation: CanonicalCategoryMutation;

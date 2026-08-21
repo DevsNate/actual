@@ -23,6 +23,7 @@ import type { Pool, PoolClient } from 'pg';
 
 import { SemanticStoreError } from './errors';
 import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
+import { writeCanonicalTargetReplacement } from './target-store';
 import { writeCanonicalTransferMutation } from './transfer-store';
 import type {
   CommitChangeSetInput,
@@ -791,6 +792,11 @@ async function writeCanonicalCategoryMutation(
         ],
       );
     }
+    return;
+  }
+
+  if (mutation.kind === 'replace-target') {
+    await writeCanonicalTargetReplacement(client, mutation);
     return;
   }
 

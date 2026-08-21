@@ -5,6 +5,7 @@ import type {
   StockMonthlyBudgetCalculation,
   StockMonthlySubcategoryBudgetCalculation,
 } from './stock-calculation-entities';
+import { projectCapturedTargetRows } from './stock-target-calculation-projection';
 
 const calculationSensitiveKinds = new Set([
   'be_accounts',
@@ -36,8 +37,11 @@ export function projectStockFreshBudgetCalculations(
 
   return {
     be_monthly_budget_calculations: monthlyBudgets.map(projectMonthlyBudget),
-    be_monthly_subcategory_budget_calculations: monthlyCategoryBudgets.map(
-      entity => projectMonthlyCategoryBudget(entity, monthlyBudgetIds),
+    be_monthly_subcategory_budget_calculations: projectCapturedTargetRows(
+      monthlyCategoryBudgets.map(entity =>
+        projectMonthlyCategoryBudget(entity, monthlyBudgetIds),
+      ),
+      snapshot.entities,
     ),
     be_account_calculations: [],
     be_monthly_account_calculations: [],

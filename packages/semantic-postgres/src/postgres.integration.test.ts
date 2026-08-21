@@ -700,6 +700,96 @@ integrationTest('PostgresSemanticStore integration', () => {
       }),
     ).resolves.toMatchObject({ serverKnowledge: 3 });
 
+    const monthlyTarget = {
+      type: 'NEED' as const,
+      createdOn: '2026-08-01',
+      amount: 100000,
+      date: null,
+      cadence: 1 as const,
+      cadenceFrequency: 1,
+      day: null,
+      needsWholeAmount: true as const,
+      monthlyFunding: 0 as const,
+    };
+    await expect(
+      store.commitCategoryMutation({
+        mutation: {
+          kind: 'replace-target',
+          budgetId: 'canonical-category-budget',
+          categoryId: 'category',
+          expected: null,
+          target: monthlyTarget,
+        },
+        delivery: {
+          ...command.delivery,
+          changeSetId: 'canonical-target-create-change',
+          startingDeviceKnowledge: 3,
+          endingDeviceKnowledge: 10,
+          expectedServerKnowledge: 3,
+          idempotencyKey: 'canonical-target-create',
+          payloadDigest: 'b'.repeat(64),
+          changes: [
+            {
+              entityKind: 'be_subcategories',
+              entityId: 'category',
+              isTombstone: false,
+              payload: { goalType: 'NEED', goalTargetAmount: 100000 },
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ serverKnowledge: 5 });
+    const targetState = await pool.query(
+      `SELECT target_type, target_amount_milliunits::text AS amount,
+              cadence, cadence_frequency
+       FROM semantic_category_targets
+       WHERE budget_id = $1 AND category_id = $2`,
+      ['canonical-category-budget', 'category'],
+    );
+    expect(targetState.rows).toEqual([
+      {
+        target_type: 'NEED',
+        amount: '100000',
+        cadence: 1,
+        cadence_frequency: 1,
+      },
+    ]);
+    await expect(
+      store.commitCategoryMutation({
+        mutation: {
+          kind: 'replace-target',
+          budgetId: 'canonical-category-budget',
+          categoryId: 'category',
+          expected: monthlyTarget,
+          target: null,
+        },
+        delivery: {
+          ...command.delivery,
+          changeSetId: 'canonical-target-clear-change',
+          startingDeviceKnowledge: 10,
+          endingDeviceKnowledge: 17,
+          expectedServerKnowledge: 5,
+          idempotencyKey: 'canonical-target-clear',
+          payloadDigest: 'c'.repeat(64),
+          changes: [
+            {
+              entityKind: 'be_subcategories',
+              entityId: 'category',
+              isTombstone: false,
+              payload: { goalType: null, goalTargetAmount: 0 },
+            },
+          ],
+        },
+      }),
+    ).resolves.toMatchObject({ serverKnowledge: 7 });
+    expect(
+      await pool.query(
+        `SELECT 1 FROM semantic_category_targets
+         WHERE budget_id = $1 AND category_id = $2`,
+        ['canonical-category-budget', 'category'],
+      ),
+    ).toMatchObject({ rowCount: 0 });
+
     await expect(
       store.commitCategoryMutation({
         mutation: {
@@ -711,9 +801,9 @@ integrationTest('PostgresSemanticStore integration', () => {
         delivery: {
           ...command.delivery,
           changeSetId: 'canonical-category-delete-change',
-          startingDeviceKnowledge: 3,
-          endingDeviceKnowledge: 6,
-          expectedServerKnowledge: 3,
+          startingDeviceKnowledge: 17,
+          endingDeviceKnowledge: 20,
+          expectedServerKnowledge: 7,
           idempotencyKey: 'canonical-category-delete',
           payloadDigest: 'a'.repeat(64),
           changes: command.delivery.changes.map(change => ({
@@ -722,7 +812,7 @@ integrationTest('PostgresSemanticStore integration', () => {
           })),
         },
       }),
-    ).resolves.toMatchObject({ serverKnowledge: 5 });
+    ).resolves.toMatchObject({ serverKnowledge: 9 });
 
     const terminal = await pool.query(
       `SELECT
