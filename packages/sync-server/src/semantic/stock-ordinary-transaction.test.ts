@@ -317,9 +317,10 @@ describe('stock ordinary transaction and payee boundary', () => {
     ).toBeNull();
 
     // ORDINARY-001 proves this categorized create shape at the stock Web and
-    // server boundaries, but native iOS readback and terminal deletion are not
-    // captured yet. Keep the active mutation parser closed until the evidence
-    // package is complete instead of inferring the remaining lifecycle.
+    // server boundaries, and ORDINARY-001 now also proves the Web deletion and
+    // terminal replay. Native iOS delivery/readback and the edit replay remain
+    // uncaptured. Keep the active mutation parser closed until those remaining
+    // gates are complete instead of inferring the cross-client lifecycle.
     expect(
       parseStockOrdinaryMutation(
         {
