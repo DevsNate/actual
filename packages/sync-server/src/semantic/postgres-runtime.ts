@@ -12,6 +12,7 @@ import { semanticCanonicalBudgetEntityMigration } from '@actual-app/semantic-pos
 import { semanticCanonicalCategoryDomainMigration } from '@actual-app/semantic-postgres/canonical-category-domain-migration';
 import { semanticCanonicalCreditCardAccountMigration } from '@actual-app/semantic-postgres/canonical-credit-card-account-migration';
 import { semanticCanonicalCreditCardPaymentMigration } from '@actual-app/semantic-postgres/canonical-credit-card-payment-migration';
+import { semanticCanonicalMonthlyBudgetIdentityMigration } from '@actual-app/semantic-postgres/canonical-monthly-budget-identity-migration';
 import { semanticCanonicalOrdinaryTransactionMigration } from '@actual-app/semantic-postgres/canonical-ordinary-transaction-migration';
 import { semanticCanonicalScheduledTransactionMigration } from '@actual-app/semantic-postgres/canonical-scheduled-transaction-migration';
 import { semanticCanonicalSplitTransactionMigration } from '@actual-app/semantic-postgres/canonical-split-transaction-migration';
@@ -58,6 +59,7 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCanonicalCreditCardAccountMigration,
       semanticCanonicalScheduledTransactionMigration,
       semanticCanonicalBudgetBootstrapMigration,
+      semanticCanonicalMonthlyBudgetIdentityMigration,
     ]);
   } catch (error) {
     await pool.end();

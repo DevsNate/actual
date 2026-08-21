@@ -25,7 +25,8 @@
     "./canonical-credit-card-payment-migration": "./src/canonical-credit-card-payment-migration.ts",
     "./canonical-credit-card-account-migration": "./src/canonical-credit-card-account-migration.ts",
     "./canonical-scheduled-transaction-migration": "./src/canonical-scheduled-transaction-migration.ts",
-    "./canonical-budget-bootstrap-migration": "./src/canonical-budget-bootstrap-migration.ts"
+    "./canonical-budget-bootstrap-migration": "./src/canonical-budget-bootstrap-migration.ts",
+    "./canonical-monthly-budget-identity-migration": "./src/canonical-monthly-budget-identity-migration.ts"
   },
   "scripts": {
     "test": "vitest --run",

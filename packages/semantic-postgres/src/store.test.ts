@@ -2,8 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 import type {
-  CatalogCommand,
   BudgetDeviceAcknowledgement,
+  CatalogCommand,
 } from '@actual-app/semantic-core';
 import type { Pool } from 'pg';
 
@@ -660,6 +660,26 @@ describe('semantic foundation migration', () => {
     expect(migration).toContain('ADD COLUMN account_id TEXT');
     expect(migration).toContain('semantic_categories_payment_account_fk');
     expect(migration).not.toContain('be_subcategories');
+  });
+
+  test('repairs legacy monthly payment rows to the canonical budget-version identity', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0018_canonical_monthly_budget_identity.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      "entity.entity_kind = 'be_monthly_subcategory_budgets'",
+    );
+    expect(migration).toContain("entity.payload->>'budgetVersionId'");
+    expect(migration).toContain('budget.budget_version_id');
+    expect(migration).toContain("entity.payload->>'monthlyBudgetId'");
+    expect(migration).toContain("'/' || budget.budget_id");
   });
 
   test('stores split parents and ordered lines as one canonical aggregate', async () => {
