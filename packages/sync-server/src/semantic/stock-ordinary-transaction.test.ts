@@ -315,6 +315,36 @@ describe('stock ordinary transaction and payee boundary', () => {
         snapshot,
       ),
     ).toBeNull();
+
+    // ORDINARY-001 proves this categorized create shape at the stock Web and
+    // server boundaries, but native iOS readback and terminal deletion are not
+    // captured yet. Keep the active mutation parser closed until the evidence
+    // package is complete instead of inferring the remaining lifecycle.
+    expect(
+      parseStockOrdinaryMutation(
+        {
+          be_payees: [
+            {
+              ...payeeRow('Phase Four Payee'),
+              auto_fill_subcategory_id: capturedButUnadmittedCategory,
+            },
+          ],
+          be_transaction_groups: [
+            {
+              id: 'transaction-1',
+              be_transaction: {
+                ...transactionRow(),
+                entities_subcategory_id: capturedButUnadmittedCategory,
+                memo: 'Phase Four Categorized',
+                amount: -4560,
+              },
+              be_subtransactions: null,
+            },
+          ],
+        },
+        snapshot,
+      ),
+    ).toBeNull();
     expect(
       parseStockOrdinaryMutation(
         {
