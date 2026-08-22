@@ -21,22 +21,22 @@ import type {
   CreateBudgetCommand,
   CreateBudgetResult,
   PrincipalId,
-} from '@actual-app/semantic-core';
-import type { Pool, PoolClient } from 'pg';
+} from "@actual-app/semantic-core";
+import type { Pool, PoolClient } from "pg";
 
-import { writeCanonicalCategoryAssignment } from './assignment-store';
-import { writeCanonicalBudgetBootstrap } from './budget-bootstrap-store';
-import { writeCanonicalCreditCardPaymentMutation } from './credit-card-payment-store';
-import { SemanticStoreError } from './errors';
-import { writeCanonicalScheduledTransactionMutation } from './scheduled-transaction-store';
-import { writeCanonicalSplitTransactionMutation } from './split-transaction-store';
-import { writeCanonicalTargetReplacement } from './target-store';
-import { writeCanonicalTransferMutation } from './transfer-store';
+import { writeCanonicalCategoryAssignment } from "./assignment-store";
+import { writeCanonicalBudgetBootstrap } from "./budget-bootstrap-store";
+import { writeCanonicalCreditCardPaymentMutation } from "./credit-card-payment-store";
+import { SemanticStoreError } from "./errors";
+import { writeCanonicalScheduledTransactionMutation } from "./scheduled-transaction-store";
+import { writeCanonicalSplitTransactionMutation } from "./split-transaction-store";
+import { writeCanonicalTargetReplacement } from "./target-store";
+import { writeCanonicalTransferMutation } from "./transfer-store";
 import type {
   CommitChangeSetInput,
   CommitChangeSetResult,
   SeedBudgetInput,
-} from './types';
+} from "./types";
 
 type BudgetKnowledgeRow = {
   server_knowledge: string;
@@ -65,7 +65,7 @@ type CatalogReceiptRow = ReceiptRow;
 
 type DeviceCommand = Pick<
   CommitChangeSetInput,
-  'budgetId' | 'originDeviceId' | 'idempotencyKey' | 'payloadDigest'
+  "budgetId" | "originDeviceId" | "idempotencyKey" | "payloadDigest"
 >;
 
 type CatalogRow = {
@@ -86,7 +86,7 @@ export class PostgresSemanticStore {
 
   async seedBudget(input: SeedBudgetInput): Promise<void> {
     validateSeedBudget(input);
-    await this.transact(async client => {
+    await this.transact(async (client) => {
       await client.query(
         `INSERT INTO semantic_budgets
            (budget_id, budget_version_id, name)
@@ -120,7 +120,7 @@ export class PostgresSemanticStore {
     command: CreateBudgetCommand,
   ): Promise<CreateBudgetResult> {
     validateCreateBudgetCommand(command);
-    return this.transact(async client => {
+    return this.transact(async (client) => {
       await lockCreateBudgetIdempotencyKey(client, command);
       const replay = await findCreateBudgetReceipt(client, command);
       if (replay) {
@@ -133,7 +133,7 @@ export class PostgresSemanticStore {
       );
       if (catalogKnowledge !== command.expectedCatalogServerKnowledge) {
         throw new SemanticStoreError(
-          'SERVER_KNOWLEDGE_MISMATCH',
+          "SERVER_KNOWLEDGE_MISMATCH",
           `Expected catalog server knowledge ${command.expectedCatalogServerKnowledge}, received ${catalogKnowledge}`,
         );
       }
@@ -187,12 +187,12 @@ export class PostgresSemanticStore {
           endingDeviceKnowledge: catalogDeviceKnowledge,
           expectedServerKnowledge: command.expectedCatalogServerKnowledge,
           schemaVersion: command.schemaVersion,
-          commandKind: 'create-budget',
+          commandKind: "create-budget",
           idempotencyKey: command.idempotencyKey,
           payloadDigest: command.payloadDigest,
           changes: [
             {
-              entityKind: 'ce_user_budgets',
+              entityKind: "ce_user_budgets",
               entityId: command.membershipId,
               isTombstone: false,
               payload: membershipPayload,
@@ -291,8 +291,8 @@ export class PostgresSemanticStore {
       knowledge: {
         principalId,
         currentServerKnowledge: toSafeInteger(
-          result.rows[0]?.catalog_server_knowledge ?? '0',
-          'catalog server knowledge',
+          result.rows[0]?.catalog_server_knowledge ?? "0",
+          "catalog server knowledge",
         ),
       },
       memberships: result.rows.filter(hasMembership).map(mapMembership),
@@ -303,7 +303,7 @@ export class PostgresSemanticStore {
     command: CatalogCommand,
   ): Promise<CatalogCommandResult> {
     validateCatalogCommand(command);
-    return this.transact(async client => {
+    return this.transact(async (client) => {
       await lockCatalogIdempotencyKey(client, command);
       const replay = await findCatalogReceipt(client, command);
       if (replay) {
@@ -316,7 +316,7 @@ export class PostgresSemanticStore {
       );
       if (currentServerKnowledge !== command.expectedServerKnowledge) {
         throw new SemanticStoreError(
-          'SERVER_KNOWLEDGE_MISMATCH',
+          "SERVER_KNOWLEDGE_MISMATCH",
           `Expected catalog server knowledge ${command.expectedServerKnowledge}, received ${currentServerKnowledge}`,
         );
       }
@@ -324,7 +324,7 @@ export class PostgresSemanticStore {
       const deviceKnowledge = await lockCatalogDeviceKnowledge(client, command);
       if (deviceKnowledge !== command.startingDeviceKnowledge) {
         throw new SemanticStoreError(
-          'DEVICE_KNOWLEDGE_MISMATCH',
+          "DEVICE_KNOWLEDGE_MISMATCH",
           `Expected catalog device knowledge ${command.startingDeviceKnowledge}, received ${deviceKnowledge}`,
         );
       }
@@ -379,7 +379,9 @@ export class PostgresSemanticStore {
     input: CommitChangeSetInput,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(input);
-    return this.transact(client => commitChangeSetInTransaction(client, input));
+    return this.transact((client) =>
+      commitChangeSetInTransaction(client, input),
+    );
   }
 
   async commitUnlinkedAccountCreation(
@@ -387,7 +389,7 @@ export class PostgresSemanticStore {
   ): Promise<CommitChangeSetResult> {
     validateCanonicalAccountCreation(command);
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         insertCanonicalAccountGroup(client, command),
       ),
@@ -399,7 +401,7 @@ export class PostgresSemanticStore {
   ): Promise<CommitChangeSetResult> {
     validateCanonicalAccountRename(command);
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         updateCanonicalAccountName(client, command),
       ),
@@ -411,7 +413,7 @@ export class PostgresSemanticStore {
   ): Promise<CommitChangeSetResult> {
     validateCanonicalPristineAccountDeletion(command);
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         tombstoneCanonicalPristineAccount(client, command),
       ),
@@ -423,7 +425,7 @@ export class PostgresSemanticStore {
   ): Promise<CommitChangeSetResult> {
     validateCanonicalAccountClose(command);
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         closeCanonicalAccount(client, command),
       ),
@@ -435,7 +437,7 @@ export class PostgresSemanticStore {
   ): Promise<CommitChangeSetResult> {
     validateCanonicalAccountReopen(command);
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         setCanonicalAccountClosed(
           client,
@@ -451,7 +453,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalCategoryMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalCategoryMutation(client, command),
       ),
@@ -462,7 +464,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalCategoryAssignment,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalCategoryAssignment(client, command),
       ),
@@ -473,7 +475,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalOrdinaryTransactionMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalOrdinaryTransactionMutation(client, command),
       ),
@@ -484,7 +486,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalOrdinaryPayeeMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalOrdinaryPayeeMutation(client, command),
       ),
@@ -495,7 +497,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalSplitTransactionMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalSplitTransactionMutation(client, command),
       ),
@@ -506,7 +508,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalTransferMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalTransferMutation(client, command),
       ),
@@ -517,7 +519,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalCreditCardPaymentMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalCreditCardPaymentMutation(client, command),
       ),
@@ -528,7 +530,7 @@ export class PostgresSemanticStore {
     command: CommitCanonicalScheduledTransactionMutation,
   ): Promise<CommitChangeSetResult> {
     validateChangeSet(command.delivery);
-    return this.transact(client =>
+    return this.transact((client) =>
       commitChangeSetInTransaction(client, command.delivery, () =>
         writeCanonicalScheduledTransactionMutation(client, command),
       ),
@@ -539,7 +541,7 @@ export class PostgresSemanticStore {
     input: BudgetDeviceAcknowledgement,
   ): Promise<CommitChangeSetResult> {
     validateDeviceAcknowledgement(input);
-    return this.transact(async client => {
+    return this.transact(async (client) => {
       await lockIdempotencyKey(client, input);
       const replay = await findReceipt(client, input);
       if (replay) {
@@ -552,24 +554,24 @@ export class PostgresSemanticStore {
       );
       if (budget.rowCount !== 1) {
         throw new SemanticStoreError(
-          'BUDGET_NOT_FOUND',
+          "BUDGET_NOT_FOUND",
           `Active budget ${input.budgetId} was not found`,
         );
       }
       const serverKnowledge = toSafeInteger(
         budget.rows[0].server_knowledge,
-        'budget server knowledge',
+        "budget server knowledge",
       );
       if (serverKnowledge !== input.expectedServerKnowledge) {
         throw new SemanticStoreError(
-          'SERVER_KNOWLEDGE_MISMATCH',
+          "SERVER_KNOWLEDGE_MISMATCH",
           `Expected server knowledge ${input.expectedServerKnowledge}, received ${serverKnowledge}`,
         );
       }
       const deviceKnowledge = await lockDeviceKnowledge(client, input);
       if (deviceKnowledge !== input.startingDeviceKnowledge) {
         throw new SemanticStoreError(
-          'DEVICE_KNOWLEDGE_MISMATCH',
+          "DEVICE_KNOWLEDGE_MISMATCH",
           `Expected device knowledge ${input.startingDeviceKnowledge}, received ${deviceKnowledge}`,
         );
       }
@@ -610,12 +612,12 @@ export class PostgresSemanticStore {
   ): Promise<T> {
     const client = await this.pool.connect();
     try {
-      await client.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       const result = await work(client);
-      await client.query('COMMIT');
+      await client.query("COMMIT");
       return result;
     } catch (error) {
-      await client.query('ROLLBACK');
+      await client.query("ROLLBACK");
       throw error;
     } finally {
       client.release();
@@ -643,17 +645,17 @@ async function commitChangeSetInTransaction(
   );
   if (budget.rowCount !== 1) {
     throw new SemanticStoreError(
-      'BUDGET_NOT_FOUND',
+      "BUDGET_NOT_FOUND",
       `Active budget ${input.budgetId} was not found`,
     );
   }
   const currentServerKnowledge = toSafeInteger(
     budget.rows[0].server_knowledge,
-    'budget server knowledge',
+    "budget server knowledge",
   );
   if (currentServerKnowledge !== input.expectedServerKnowledge) {
     throw new SemanticStoreError(
-      'SERVER_KNOWLEDGE_MISMATCH',
+      "SERVER_KNOWLEDGE_MISMATCH",
       `Expected server knowledge ${input.expectedServerKnowledge}, received ${currentServerKnowledge}`,
     );
   }
@@ -661,7 +663,7 @@ async function commitChangeSetInTransaction(
   const deviceKnowledge = await lockDeviceKnowledge(client, input);
   if (deviceKnowledge !== input.startingDeviceKnowledge) {
     throw new SemanticStoreError(
-      'DEVICE_KNOWLEDGE_MISMATCH',
+      "DEVICE_KNOWLEDGE_MISMATCH",
       `Expected device knowledge ${input.startingDeviceKnowledge}, received ${deviceKnowledge}`,
     );
   }
@@ -810,19 +812,19 @@ async function writeCanonicalCategoryMutation(
   command: CommitCanonicalCategoryMutation,
 ): Promise<void> {
   const mutation = command.mutation;
-  if (mutation.kind === 'create') {
+  if (mutation.kind === "create") {
     const { group, category, months } = mutation;
     if (
       group.budgetId !== category.budgetId ||
       months.some(
-        month =>
+        (month) =>
           month.budgetId !== category.budgetId ||
           month.categoryId !== category.id,
       )
     ) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Category creation identities do not share one budget and category',
+        "INVALID_OPERATION",
+        "Category creation identities do not share one budget and category",
       );
     }
     await client.query(
@@ -874,12 +876,12 @@ async function writeCanonicalCategoryMutation(
     return;
   }
 
-  if (mutation.kind === 'replace-target') {
+  if (mutation.kind === "replace-target") {
     await writeCanonicalTargetReplacement(client, mutation);
     return;
   }
 
-  if (mutation.kind === 'update') {
+  if (mutation.kind === "update") {
     const destination = await client.query(
       `SELECT 1 FROM semantic_category_groups
        WHERE budget_id = $1 AND category_group_id = $2`,
@@ -887,8 +889,8 @@ async function writeCanonicalCategoryMutation(
     );
     if (destination.rowCount !== 1) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Category update destination group is not canonical',
+        "INVALID_OPERATION",
+        "Category update destination group is not canonical",
       );
     }
     const result = await client.query(
@@ -914,11 +916,54 @@ async function writeCanonicalCategoryMutation(
     );
     if (result.rowCount !== 1) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Category update did not match one live canonical category',
+        "INVALID_OPERATION",
+        "Category update did not match one live canonical category",
       );
     }
     return;
+  }
+
+  if (mutation.kind === "delete-and-reassign-one-transaction") {
+    const replacementCategory = await client.query(
+      `SELECT 1 FROM semantic_categories
+       WHERE budget_id = $1 AND category_id = $2 AND is_tombstone = false
+       FOR UPDATE`,
+      [mutation.budgetId, mutation.replacementCategoryId],
+    );
+    if (replacementCategory.rowCount !== 1) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Category reassignment destination is not one live canonical category",
+      );
+    }
+    const transaction = await client.query(
+      `UPDATE semantic_transactions
+       SET category_id = $3, updated_at = now()
+       WHERE budget_id = $1 AND transaction_id = $2
+         AND category_id = $4 AND payee_id = $5
+         AND transaction_kind = 'ordinary' AND is_tombstone = false`,
+      [
+        mutation.budgetId,
+        mutation.transactionId,
+        mutation.replacementCategoryId,
+        mutation.categoryId,
+        mutation.payeeId,
+      ],
+    );
+    const payee = await client.query(
+      `UPDATE semantic_payees
+       SET auto_fill_category_id = NULL, updated_at = now()
+       WHERE budget_id = $1 AND payee_id = $2
+         AND account_id IS NULL AND auto_fill_category_id = $3
+         AND is_tombstone = false`,
+      [mutation.budgetId, mutation.payeeId, mutation.categoryId],
+    );
+    if (transaction.rowCount !== 1 || payee.rowCount !== 1) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced category deletion requires one exact transaction and payee normalization",
+      );
+    }
   }
 
   const references = await client.query(
@@ -929,8 +974,8 @@ async function writeCanonicalCategoryMutation(
   );
   if (references.rowCount !== 0) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Category deletion is not admitted for a referenced category',
+      "INVALID_OPERATION",
+      "Category deletion is not admitted for a referenced category",
     );
   }
   const months = await client.query(
@@ -953,8 +998,8 @@ async function writeCanonicalCategoryMutation(
   );
   if (months.rowCount !== 2 || category.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Category deletion requires one category and exactly two monthly rows',
+      "INVALID_OPERATION",
+      "Category deletion requires one category and exactly two monthly rows",
     );
   }
 }
@@ -964,15 +1009,15 @@ async function writeCanonicalOrdinaryTransactionMutation(
   command: CommitCanonicalOrdinaryTransactionMutation,
 ): Promise<void> {
   const mutation = command.mutation;
-  if (mutation.kind === 'create-with-payee') {
+  if (mutation.kind === "create-with-payee") {
     const { payee, transaction } = mutation;
     if (
       payee.budgetId !== transaction.budgetId ||
       transaction.payeeId !== payee.id
     ) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Ordinary payee and transaction identities do not share one aggregate',
+        "INVALID_OPERATION",
+        "Ordinary payee and transaction identities do not share one aggregate",
       );
     }
     await client.query(
@@ -1003,18 +1048,18 @@ async function writeCanonicalOrdinaryTransactionMutation(
     return;
   }
 
-  if (mutation.kind === 'create') {
+  if (mutation.kind === "create") {
     if (mutation.transaction.payeeId !== null) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Ordinary transaction-only creation requires a null payee',
+        "INVALID_OPERATION",
+        "Ordinary transaction-only creation requires a null payee",
       );
     }
     await insertCanonicalOrdinaryTransaction(client, mutation.transaction);
     return;
   }
 
-  if (mutation.kind === 'edit') {
+  if (mutation.kind === "edit") {
     const { expected, transaction } = mutation;
     if (
       expected.id !== transaction.id ||
@@ -1029,8 +1074,8 @@ async function writeCanonicalOrdinaryTransactionMutation(
       expected.flag !== transaction.flag
     ) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Ordinary transaction edit identities do not match',
+        "INVALID_OPERATION",
+        "Ordinary transaction edit identities do not match",
       );
     }
     const edited = await client.query(
@@ -1063,8 +1108,8 @@ async function writeCanonicalOrdinaryTransactionMutation(
     );
     if (edited.rowCount !== 1) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Ordinary transaction edit did not match one exact live transaction',
+        "INVALID_OPERATION",
+        "Ordinary transaction edit did not match one exact live transaction",
       );
     }
     return;
@@ -1079,8 +1124,8 @@ async function writeCanonicalOrdinaryTransactionMutation(
   );
   if (transaction.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Ordinary transaction deletion did not match one live transaction',
+      "INVALID_OPERATION",
+      "Ordinary transaction deletion did not match one live transaction",
     );
   }
 }
@@ -1118,7 +1163,7 @@ async function writeCanonicalOrdinaryPayeeMutation(
   command: CommitCanonicalOrdinaryPayeeMutation,
 ): Promise<void> {
   const mutation = command.mutation;
-  if (mutation.kind === 'rename') {
+  if (mutation.kind === "rename") {
     const payee = await client.query(
       `UPDATE semantic_payees
        SET name = $4, updated_at = now()
@@ -1133,8 +1178,111 @@ async function writeCanonicalOrdinaryPayeeMutation(
     );
     if (payee.rowCount !== 1) {
       throw new SemanticStoreError(
-        'INVALID_OPERATION',
-        'Ordinary payee rename did not match one live payee',
+        "INVALID_OPERATION",
+        "Ordinary payee rename did not match one live payee",
+      );
+    }
+    return;
+  }
+
+  if (mutation.kind === "delete-and-clear-transaction-payee") {
+    const { expectedTransaction, transaction } = mutation;
+    if (
+      expectedTransaction.budgetId !== mutation.budgetId ||
+      transaction.budgetId !== mutation.budgetId ||
+      expectedTransaction.id !== transaction.id ||
+      expectedTransaction.payeeId !== mutation.payeeId ||
+      transaction.payeeId !== null ||
+      expectedTransaction.accountId !== transaction.accountId ||
+      expectedTransaction.categoryId !== transaction.categoryId ||
+      expectedTransaction.date !== transaction.date ||
+      expectedTransaction.amount !== transaction.amount ||
+      expectedTransaction.memo !== transaction.memo ||
+      expectedTransaction.cleared !== transaction.cleared ||
+      expectedTransaction.accepted !== transaction.accepted ||
+      expectedTransaction.checkNumber !== transaction.checkNumber ||
+      expectedTransaction.flag !== transaction.flag
+    ) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced ordinary payee deletion must only clear one transaction payee",
+      );
+    }
+
+    const currentPayee = await client.query(
+      `SELECT 1 FROM semantic_payees
+       WHERE budget_id = $1 AND payee_id = $2 AND account_id IS NULL
+         AND is_tombstone = false
+       FOR UPDATE`,
+      [mutation.budgetId, mutation.payeeId],
+    );
+    if (currentPayee.rowCount !== 1) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced ordinary payee deletion did not match one live payee",
+      );
+    }
+
+    const liveReferences = await client.query(
+      `SELECT transaction_id FROM semantic_transactions
+       WHERE budget_id = $1 AND payee_id = $2 AND is_tombstone = false
+       FOR UPDATE`,
+      [mutation.budgetId, mutation.payeeId],
+    );
+    if (
+      liveReferences.rowCount !== 1 ||
+      liveReferences.rows[0]?.transaction_id !== expectedTransaction.id
+    ) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced ordinary payee deletion did not match one exact live transaction",
+      );
+    }
+
+    const updatedTransaction = await client.query(
+      `UPDATE semantic_transactions
+       SET payee_id = NULL, updated_at = now()
+       WHERE budget_id = $1 AND transaction_id = $2
+         AND account_id = $3 AND payee_id = $4
+         AND category_id IS NOT DISTINCT FROM $5
+         AND transaction_date = $6 AND amount_milliunits = $7
+         AND memo IS NOT DISTINCT FROM $8 AND cleared_state = $9
+         AND is_approved = $10 AND check_number IS NOT DISTINCT FROM $11
+         AND flag IS NOT DISTINCT FROM $12
+         AND transaction_kind = 'ordinary' AND is_tombstone = false`,
+      [
+        expectedTransaction.budgetId,
+        expectedTransaction.id,
+        expectedTransaction.accountId,
+        expectedTransaction.payeeId,
+        expectedTransaction.categoryId,
+        expectedTransaction.date,
+        expectedTransaction.amount,
+        expectedTransaction.memo,
+        expectedTransaction.cleared,
+        expectedTransaction.accepted,
+        expectedTransaction.checkNumber,
+        expectedTransaction.flag,
+      ],
+    );
+    if (updatedTransaction.rowCount !== 1) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced ordinary payee deletion transaction readback did not converge",
+      );
+    }
+
+    const tombstonedPayee = await client.query(
+      `UPDATE semantic_payees
+       SET is_tombstone = true, updated_at = now()
+       WHERE budget_id = $1 AND payee_id = $2 AND account_id IS NULL
+         AND is_tombstone = false`,
+      [mutation.budgetId, mutation.payeeId],
+    );
+    if (tombstonedPayee.rowCount !== 1) {
+      throw new SemanticStoreError(
+        "INVALID_OPERATION",
+        "Referenced ordinary payee deletion tombstone did not converge",
       );
     }
     return;
@@ -1149,8 +1297,8 @@ async function writeCanonicalOrdinaryPayeeMutation(
   );
   if (current.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Ordinary payee deletion did not match one unused live payee',
+      "INVALID_OPERATION",
+      "Ordinary payee deletion did not match one unused live payee",
     );
   }
   const liveReferences = await client.query(
@@ -1161,8 +1309,8 @@ async function writeCanonicalOrdinaryPayeeMutation(
   );
   if (liveReferences.rowCount !== 0) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Ordinary payee deletion is not admitted while live transactions refer to it',
+      "INVALID_OPERATION",
+      "Ordinary payee deletion is not admitted while live transactions refer to it",
     );
   }
   const payee = await client.query(
@@ -1174,8 +1322,8 @@ async function writeCanonicalOrdinaryPayeeMutation(
   );
   if (payee.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Ordinary payee deletion did not match one unused live payee',
+      "INVALID_OPERATION",
+      "Ordinary payee deletion did not match one unused live payee",
     );
   }
 }
@@ -1212,8 +1360,8 @@ async function updateCanonicalAccountName(
   );
   if (account.rowCount !== 1 || payee.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Account rename did not match one live canonical account group',
+      "INVALID_OPERATION",
+      "Account rename did not match one live canonical account group",
     );
   }
 }
@@ -1237,11 +1385,11 @@ async function tombstoneCanonicalPristineAccount(
     liveTransactions.rowCount !== 1 ||
     liveTransactions.rows[0]?.transaction_id !==
       deletion.startingBalanceTransactionId ||
-    liveTransactions.rows[0]?.transaction_kind !== 'starting_balance'
+    liveTransactions.rows[0]?.transaction_kind !== "starting_balance"
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Pristine deletion requires exactly one live canonical transaction',
+      "INVALID_OPERATION",
+      "Pristine deletion requires exactly one live canonical transaction",
     );
   }
   const transaction = await client.query(
@@ -1275,8 +1423,8 @@ async function tombstoneCanonicalPristineAccount(
     account.rowCount !== 1
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Pristine deletion did not match one live canonical account group',
+      "INVALID_OPERATION",
+      "Pristine deletion did not match one live canonical account group",
     );
   }
 }
@@ -1327,8 +1475,8 @@ async function setCanonicalAccountClosed(
   );
   if (account.rowCount !== 1) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      `Account ${closed ? 'close' : 'reopen'} did not match one live canonical account`,
+      "INVALID_OPERATION",
+      `Account ${closed ? "close" : "reopen"} did not match one live canonical account`,
     );
   }
 }
@@ -1337,7 +1485,7 @@ async function lockCreateBudgetIdempotencyKey(
   client: PoolClient,
   command: CreateBudgetCommand,
 ): Promise<void> {
-  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
   ]);
 }
@@ -1360,15 +1508,15 @@ async function findCreateBudgetReceipt(
   }
   if (row.payload_digest !== command.payloadDigest) {
     throw new SemanticStoreError(
-      'IDEMPOTENCY_CONFLICT',
-      'The budget creation idempotency key was already used with a different payload',
+      "IDEMPOTENCY_CONFLICT",
+      "The budget creation idempotency key was already used with a different payload",
     );
   }
   return {
     replayed: true,
     catalogServerKnowledge: toSafeInteger(
       row.server_knowledge,
-      'catalog server knowledge',
+      "catalog server knowledge",
     ),
     budgetServerKnowledge: 1,
     budget: parseCreatedBudgetReceipt(row.response),
@@ -1377,16 +1525,16 @@ async function findCreateBudgetReceipt(
 
 function parseCreatedBudgetReceipt(
   value: Readonly<Record<string, unknown>>,
-): CreateBudgetCommand['receipt'] {
+): CreateBudgetCommand["receipt"] {
   if (
-    typeof value.budgetId !== 'string' ||
+    typeof value.budgetId !== "string" ||
     !value.budgetId ||
-    typeof value.budgetVersionId !== 'string' ||
+    typeof value.budgetVersionId !== "string" ||
     !value.budgetVersionId
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'The budget creation replay receipt is malformed',
+      "INVALID_OPERATION",
+      "The budget creation replay receipt is malformed",
     );
   }
   return {
@@ -1415,7 +1563,7 @@ async function lockCreateBudgetCatalogDevice(
   );
   return toSafeInteger(
     result.rows[0].server_knowledge_of_device,
-    'catalog device knowledge',
+    "catalog device knowledge",
   );
 }
 
@@ -1464,7 +1612,7 @@ async function lockCatalogIdempotencyKey(
   client: PoolClient,
   command: CatalogCommand,
 ): Promise<void> {
-  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `catalog\u001f${command.principalId}\u001f${command.originDeviceId}\u001f${command.idempotencyKey}`,
   ]);
 }
@@ -1487,19 +1635,19 @@ async function findCatalogReceipt(
   }
   if (row.payload_digest !== command.payloadDigest) {
     throw new SemanticStoreError(
-      'IDEMPOTENCY_CONFLICT',
-      'The catalog idempotency key was already used with a different payload',
+      "IDEMPOTENCY_CONFLICT",
+      "The catalog idempotency key was already used with a different payload",
     );
   }
   return {
     replayed: true,
     serverKnowledge: toSafeInteger(
       row.server_knowledge,
-      'catalog server knowledge',
+      "catalog server knowledge",
     ),
     endingDeviceKnowledge: toSafeInteger(
       row.ending_device_knowledge,
-      'catalog ending device knowledge',
+      "catalog ending device knowledge",
     ),
     response: row.response,
   };
@@ -1524,7 +1672,7 @@ async function lockCatalogKnowledge(
   );
   return toSafeInteger(
     result.rows[0].server_knowledge,
-    'catalog server knowledge',
+    "catalog server knowledge",
   );
 }
 
@@ -1548,7 +1696,7 @@ async function lockCatalogDeviceKnowledge(
   );
   return toSafeInteger(
     result.rows[0].server_knowledge_of_device,
-    'catalog device knowledge',
+    "catalog device knowledge",
   );
 }
 
@@ -1604,7 +1752,7 @@ async function lockIdempotencyKey(
   client: PoolClient,
   input: DeviceCommand,
 ): Promise<void> {
-  await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [
+  await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [
     `${input.budgetId}\u001f${input.originDeviceId}\u001f${input.idempotencyKey}`,
   ]);
 }
@@ -1627,16 +1775,16 @@ async function findReceipt(
   }
   if (row.payload_digest !== input.payloadDigest) {
     throw new SemanticStoreError(
-      'IDEMPOTENCY_CONFLICT',
-      'The idempotency key was already used with a different payload',
+      "IDEMPOTENCY_CONFLICT",
+      "The idempotency key was already used with a different payload",
     );
   }
   return {
     replayed: true,
-    serverKnowledge: toSafeInteger(row.server_knowledge, 'server knowledge'),
+    serverKnowledge: toSafeInteger(row.server_knowledge, "server knowledge"),
     endingDeviceKnowledge: toSafeInteger(
       row.ending_device_knowledge,
-      'ending device knowledge',
+      "ending device knowledge",
     ),
     response: row.response,
   };
@@ -1662,7 +1810,7 @@ async function lockDeviceKnowledge(
   );
   return toSafeInteger(
     result.rows[0].server_knowledge_of_device,
-    'device knowledge',
+    "device knowledge",
   );
 }
 
@@ -1774,8 +1922,8 @@ function mapMembership(row: CatalogMembershipRow): BudgetMembership {
     budgetVersionId: row.budget_version_id,
     principalId: row.principal_id,
     name: row.name,
-    permissions: toSafeInteger(row.permissions, 'permissions'),
-    lastModifiedAt: timestamp(row.last_modified_at, 'last modified at'),
+    permissions: toSafeInteger(row.permissions, "permissions"),
+    lastModifiedAt: timestamp(row.last_modified_at, "last modified at"),
     source: row.source,
     isTombstone: row.is_tombstone,
   };
@@ -1784,7 +1932,7 @@ function mapMembership(row: CatalogMembershipRow): BudgetMembership {
 function timestamp(value: Date | string, label: string): string {
   const parsed = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(parsed.getTime())) {
-    throw new SemanticStoreError('INVALID_OPERATION', `${label} is invalid`);
+    throw new SemanticStoreError("INVALID_OPERATION", `${label} is invalid`);
   }
   return parsed.toISOString();
 }
@@ -1800,8 +1948,8 @@ function validateSeedBudget(input: SeedBudgetInput): void {
     input.permissions < 0
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Budget creation contains invalid identity, name, or permissions',
+      "INVALID_OPERATION",
+      "Budget creation contains invalid identity, name, or permissions",
     );
   }
 }
@@ -1832,7 +1980,7 @@ function validateCanonicalAccountCreation(
     !validIdentity(startingBalance.categoryId) ||
     !account.name.trim() ||
     !transferPayee.name.trim() ||
-    !['checking', 'credit-card'].includes(account.type) ||
+    !["checking", "credit-card"].includes(account.type) ||
     account.isOnBudget !== true ||
     account.isClosed !== false ||
     !Number.isSafeInteger(account.sortOrder) ||
@@ -1840,32 +1988,32 @@ function validateCanonicalAccountCreation(
     !/^\d{4}-\d{2}-\d{2}$/u.test(startingBalance.date)
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Account creation failed canonical storage validation',
+      "INVALID_OPERATION",
+      "Account creation failed canonical storage validation",
     );
   }
-  const isCredit = account.type === 'credit-card';
+  const isCredit = account.type === "credit-card";
   if (
     isCredit !== Boolean(paymentCategory) ||
     isCredit !== Boolean(monthlyPaymentCategories) ||
     (paymentCategory &&
       (paymentCategory.budgetId !== budgetId ||
         paymentCategory.accountId !== account.id ||
-        paymentCategory.type !== 'DBT' ||
+        paymentCategory.type !== "DBT" ||
         !paymentCategory.id.trim() ||
         !paymentCategory.groupId.trim() ||
         !paymentCategory.name.trim())) ||
     (monthlyPaymentCategories &&
       monthlyPaymentCategories.some(
-        month =>
+        (month) =>
           month.budgetId !== budgetId ||
           month.categoryId !== paymentCategory?.id ||
           !/^\d{4}-\d{2}-01$/u.test(month.month),
       ))
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Credit-card account creation failed canonical payment-category validation',
+      "INVALID_OPERATION",
+      "Credit-card account creation failed canonical payment-category validation",
     );
   }
 }
@@ -1886,8 +2034,8 @@ function validateCanonicalAccountRename(
       `Transfer : ${rename.expectedAccountName}`
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Account rename failed canonical storage validation',
+      "INVALID_OPERATION",
+      "Account rename failed canonical storage validation",
     );
   }
 }
@@ -1903,8 +2051,8 @@ function validateCanonicalPristineAccountDeletion(
     !deletion.startingBalanceTransactionId.trim()
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Pristine account deletion failed canonical storage validation',
+      "INVALID_OPERATION",
+      "Pristine account deletion failed canonical storage validation",
     );
   }
 }
@@ -1923,12 +2071,12 @@ function validateCanonicalAccountClose(
     !adjustment.categoryId.trim() ||
     !Number.isSafeInteger(adjustment.amount) ||
     adjustment.amount === 0 ||
-    adjustment.memo !== 'Closed Account' ||
+    adjustment.memo !== "Closed Account" ||
     !/^\d{4}-\d{2}-\d{2}$/u.test(adjustment.date)
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Account close failed canonical storage validation',
+      "INVALID_OPERATION",
+      "Account close failed canonical storage validation",
     );
   }
 }
@@ -1941,8 +2089,8 @@ function validateCanonicalAccountReopen(
     !command.accountId.trim()
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Account reopen failed canonical storage validation',
+      "INVALID_OPERATION",
+      "Account reopen failed canonical storage validation",
     );
   }
 }
@@ -1952,12 +2100,12 @@ function validateCreateBudgetCommand(command: CreateBudgetCommand): void {
     Number.isSafeInteger(command.expectedCatalogServerKnowledge) &&
     command.expectedCatalogServerKnowledge >= 0;
   const identities = command.entities.map(
-    entity => `${entity.entityKind}\u001f${entity.entityId}`,
+    (entity) => `${entity.entityKind}\u001f${entity.entityId}`,
   );
   const validEntities =
     command.entities.length > 0 &&
     command.entities.every(
-      entity => entity.entityKind.trim() && entity.entityId.trim(),
+      (entity) => entity.entityKind.trim() && entity.entityId.trim(),
     ) &&
     new Set(identities).size === identities.length;
   if (
@@ -1979,8 +2127,8 @@ function validateCreateBudgetCommand(command: CreateBudgetCommand): void {
     !validEntities
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Budget creation failed semantic storage validation',
+      "INVALID_OPERATION",
+      "Budget creation failed semantic storage validation",
     );
   }
 }
@@ -1990,12 +2138,12 @@ function validateCatalogCommand(command: CatalogCommand): void {
     command.startingDeviceKnowledge,
     command.endingDeviceKnowledge,
     command.expectedServerKnowledge,
-  ].every(value => Number.isSafeInteger(value) && value >= 0);
+  ].every((value) => Number.isSafeInteger(value) && value >= 0);
   const validDigest = /^[0-9a-f]{64}$/u.test(command.payloadDigest);
   const validChanges =
     command.changes.length > 0 &&
     command.changes.every(
-      change => change.entityKind.trim() && change.entityId.trim(),
+      (change) => change.entityKind.trim() && change.entityId.trim(),
     );
   if (
     !command.changeSetId ||
@@ -2011,8 +2159,8 @@ function validateCatalogCommand(command: CatalogCommand): void {
     !validChanges
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Catalog command failed semantic storage validation',
+      "INVALID_OPERATION",
+      "Catalog command failed semantic storage validation",
     );
   }
 }
@@ -2022,10 +2170,10 @@ function validateChangeSet(input: CommitChangeSetInput): void {
     input.startingDeviceKnowledge,
     input.endingDeviceKnowledge,
     input.expectedServerKnowledge,
-  ].every(value => Number.isSafeInteger(value) && value >= 0);
+  ].every((value) => Number.isSafeInteger(value) && value >= 0);
   const validDigest = /^[0-9a-f]{64}$/u.test(input.payloadDigest);
   const validChanges = input.changes.every(
-    change => change.entityKind.trim() && change.entityId.trim(),
+    (change) => change.entityKind.trim() && change.entityId.trim(),
   );
   if (
     !input.changeSetId ||
@@ -2042,8 +2190,8 @@ function validateChangeSet(input: CommitChangeSetInput): void {
     !validChanges
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Change set failed semantic storage validation',
+      "INVALID_OPERATION",
+      "Change set failed semantic storage validation",
     );
   }
 }
@@ -2064,8 +2212,8 @@ function validateDeviceAcknowledgement(
     !/^[0-9a-f]{64}$/u.test(input.payloadDigest)
   ) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
-      'Device acknowledgement failed semantic storage validation',
+      "INVALID_OPERATION",
+      "Device acknowledgement failed semantic storage validation",
     );
   }
 }
@@ -2074,7 +2222,7 @@ function toSafeInteger(value: string, field: string): number {
   const number = Number(value);
   if (!Number.isSafeInteger(number) || number < 0) {
     throw new SemanticStoreError(
-      'INVALID_OPERATION',
+      "INVALID_OPERATION",
       `${field} is outside the supported integer range`,
     );
   }

@@ -69,7 +69,10 @@ facts remain separate canonical tables and commit atomically with compatibility
 delivery and replay receipts.
 Migration 0009 admits the PAYEE-001 ordinary payee/transaction aggregate. It
 adds the captured payee autofill facts and exact cleared state while keeping
-grouped schema-44 rows at the stock adapter boundary.
+grouped schema-44 rows at the stock adapter boundary. The same canonical
+boundary admits the separately captured one-reference payee deletion: one
+exact ordinary transaction has only its payee cleared while the payee is
+tombstoned in the same PostgreSQL transaction and replay receipt.
 The full field-by-field audit is recorded in
 `project-docs/architecture/semantic-postgres-contract-audit.md`.
 
@@ -78,7 +81,8 @@ The full field-by-field audit is recorded in
 Typed account storage owns only the evidence-admitted unlinked Checking-account
 creation, rename, pristine deletion, close, and reopen shapes. Typed ordinary
 transaction storage owns only PAYEE-001 transaction-coupled payee creation,
-transaction deletion, payee rename, and unused-payee deletion. Other account
+transaction deletion, payee rename, unused-payee deletion, and the captured
+one-live-ordinary-transaction deletion with a null replacement payee. Other account
 types, linked accounts, categorized/general transaction editing, schedules,
 target status/assignment mutations, and credit-card semantics remain gated on
 their canonical domain cutovers. Captured split, ordinary-transfer and target

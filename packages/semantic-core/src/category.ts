@@ -60,6 +60,15 @@ export type CanonicalCategoryMutation =
       monthlyCategoryBudgetIds: readonly [string, string];
     }
   | {
+      kind: 'delete-and-reassign-one-transaction';
+      budgetId: string;
+      categoryId: string;
+      replacementCategoryId: string;
+      monthlyCategoryBudgetIds: readonly [string, string];
+      transactionId: string;
+      payeeId: string;
+    }
+  | {
       kind: 'replace-target';
       budgetId: string;
       categoryId: string;

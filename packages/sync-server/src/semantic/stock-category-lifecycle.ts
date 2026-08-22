@@ -26,8 +26,196 @@ export function parseStockCategoryMutation(
 ): StockCategoryMutation | null {
   return (
     parseCreate(changedEntities, snapshot) ??
+    parseReferencedDelete(changedEntities, snapshot) ??
     parseUpdateOrDelete(changedEntities, snapshot)
   );
+}
+
+function parseReferencedDelete(
+  changedEntities: Record<string, unknown>,
+  snapshot: BudgetSnapshot,
+): StockCategoryMutation | null {
+  if (
+    !hasExactKeys(changedEntities, [
+      'be_subcategories',
+      'be_transaction_groups',
+    ])
+  ) {
+    return null;
+  }
+  const categoryRows = changedEntities.be_subcategories;
+  const groups = changedEntities.be_transaction_groups;
+  if (!oneRecord(categoryRows) || !oneRecord(groups)) return null;
+  const categoryRow = categoryRows[0];
+  const group = groups[0];
+  const transactionRow = isRecord(group.be_transaction)
+    ? group.be_transaction
+    : null;
+  if (
+    !isUntargetedCategoryRow(categoryRow, true) ||
+    !transactionRow ||
+    !hasExactKeys(group, ['be_subtransactions', 'be_transaction', 'id']) ||
+    group.id !== transactionRow.id ||
+    group.be_subtransactions !== null ||
+    typeof transactionRow.id !== 'string'
+  ) {
+    return null;
+  }
+
+  const category = liveEntity(
+    snapshot,
+    'be_subcategories',
+    String(categoryRow.id),
+  );
+  const transaction = liveEntity(
+    snapshot,
+    'be_transactions',
+    transactionRow.id,
+  );
+  if (
+    !category ||
+    !transaction ||
+    !isDeepStrictEqual(categoryRow, {
+      ...wireCategoryRow(
+        category,
+        'entities_master_category_id' in categoryRow,
+      ),
+      is_tombstone: true,
+    }) ||
+    transaction.payload.subCategoryId !== category.entityId ||
+    transaction.payload.scheduledTransactionId !== null ||
+    transaction.payload.transferAccountId !== null ||
+    transaction.payload.transferTransactionId !== null ||
+    transaction.payload.transferSubtransactionId !== null
+  ) {
+    return null;
+  }
+
+  const expectedTransaction = projectStockRequestEntity(transaction);
+  const replacementCategoryId = transactionRow.entities_subcategory_id;
+  if (
+    typeof replacementCategoryId !== 'string' ||
+    replacementCategoryId === category.entityId ||
+    !liveEntity(snapshot, 'be_subcategories', replacementCategoryId) ||
+    !isDeepStrictEqual(transactionRow, {
+      ...expectedTransaction,
+      entities_subcategory_id: replacementCategoryId,
+    })
+  ) {
+    return null;
+  }
+
+  const references = liveCategoryReferences(snapshot, category.entityId);
+  if (references.length !== 1 || references[0] !== transaction) return null;
+  const payeeId = transaction.payload.payeeId;
+  const payee =
+    typeof payeeId === 'string'
+      ? liveEntity(snapshot, 'be_payees', payeeId)
+      : undefined;
+  if (
+    !payee ||
+    payee.payload.accountId !== null ||
+    payee.payload.autoFillSubCategoryId !== category.entityId
+  ) {
+    return null;
+  }
+
+  const months = snapshot.entities.filter(
+    entity =>
+      entity.entityKind === 'be_monthly_subcategory_budgets' &&
+      !entity.isTombstone &&
+      entity.payload.subCategoryId === category.entityId,
+  );
+  if (months.length !== 2) return null;
+
+  const categoryTombstone = { ...category, isTombstone: true };
+  const monthTombstones = months.map(entity => ({
+    ...entity,
+    isTombstone: true,
+  }));
+  const reassignedTransaction: BudgetEntity = {
+    ...transaction,
+    payload: {
+      ...transaction.payload,
+      subCategoryId: replacementCategoryId,
+    },
+  };
+  const normalizedPayee: BudgetEntity = {
+    ...payee,
+    payload: {
+      ...payee.payload,
+      autoFillSubCategoryId: null,
+    },
+  };
+  const replaced = new Map(
+    [
+      categoryTombstone,
+      ...monthTombstones,
+      reassignedTransaction,
+      normalizedPayee,
+    ].map(entity => [`${entity.entityKind}\0${entity.entityId}`, entity]),
+  );
+  const augmented = {
+    ...snapshot,
+    entities: snapshot.entities.map(
+      entity =>
+        replaced.get(`${entity.entityKind}\0${entity.entityId}`) ?? entity,
+    ),
+  };
+  const previousCalculations = projectStockBudgetCalculations(snapshot)
+    .be_monthly_subcategory_budget_calculations;
+  const nextCalculations = projectStockBudgetCalculations(augmented)
+    .be_monthly_subcategory_budget_calculations;
+  const previousById = new Map(
+    previousCalculations.map(row => [String(row.id), row]),
+  );
+  const replacementCalculations = nextCalculations.filter(row =>
+    !isDeepStrictEqual(previousById.get(String(row.id)), row),
+  );
+  const terminalCalculations = previousCalculations
+    .filter(row =>
+      months.some(
+        month =>
+          row.entities_monthly_subcategory_budget_id === month.entityId,
+      ),
+    )
+    .map(row => ({ ...row, is_tombstone: true }));
+  if (
+    replacementCalculations.length !== 2 ||
+    terminalCalculations.length !== 2
+  ) {
+    return null;
+  }
+
+  return {
+    mutation: {
+      kind: 'delete-and-reassign-one-transaction',
+      budgetId: snapshot.budgetId,
+      categoryId: category.entityId,
+      replacementCategoryId,
+      monthlyCategoryBudgetIds: [months[0].entityId, months[1].entityId],
+      transactionId: transaction.entityId,
+      payeeId: payee.entityId,
+    },
+    changes: [
+      categoryTombstone,
+      ...monthTombstones,
+      reassignedTransaction,
+      normalizedPayee,
+    ],
+    changedEntities: {
+      ...buildStockBudgetEmptyDelta(snapshot),
+      be_monthly_subcategory_budgets:
+        monthTombstones.map(projectStockRequestEntity),
+      be_monthly_subcategory_budget_calculations: [
+        ...replacementCalculations,
+        ...terminalCalculations,
+      ],
+      be_payees: [projectStockRequestEntity(normalizedPayee)],
+    },
+    expectedDeviceAdvance: 4,
+    serverKnowledgeAdvance: 2,
+  };
 }
 
 function parseCreate(
@@ -510,7 +698,14 @@ function hasLiveCategoryReferences(
   snapshot: BudgetSnapshot,
   categoryId: string,
 ) {
-  return snapshot.entities.some(
+  return liveCategoryReferences(snapshot, categoryId).length > 0;
+}
+
+function liveCategoryReferences(
+  snapshot: BudgetSnapshot,
+  categoryId: string,
+) {
+  return snapshot.entities.filter(
     entity =>
       !entity.isTombstone &&
       [

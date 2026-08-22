@@ -645,17 +645,26 @@ Copy this block for a new architectural delta:
   payee autofill, edits amount and memo while sending the prior normalized cash
   amount, deletes the complete row, replays stably, and reaches stock iOS as
   exact terminal tombstones.
+- **Referenced-payee deletion:** A controlled stock-Web capture deleted one
+  ordinary payee referenced by exactly one live ordinary transaction using
+  **No Payee** as the required replacement. The schema-44 request carried the
+  complete payee tombstone and the complete live transaction with only
+  `entities_payee_id` cleared. Device knowledge advanced by two, server
+  knowledge by one, the acknowledgement returned no changed entities, and a
+  full reload preserved the live transaction and terminal payee state.
 - **Fork behavior:** A strict stock adapter emits typed transaction/payee
   commands. Canonical rows, compatibility projections, calculation changes,
-  knowledge, and exact replay receipts commit atomically. Live-reference payee
-  deletion fails closed.
+  knowledge, and exact replay receipts commit atomically. The captured
+  one-reference null-replacement deletion clears the exact transaction payee
+  and tombstones the payee in that same commit.
 - **Boundary:** The uncategorized PAYEE-001 shape and exact categorized
   ORDINARY-001 create/amount-and-memo-edit/delete lifecycle are admitted. The
   preserved stock Web amount-only edit envelope is supported provisionally and
   is not promoted to fully admitted stock-server behavior without its stock
   acknowledgement fixture.
   Standalone creation, merge, other edit shapes, splits, transfers, payments,
-  schedules, imports, and matching remain gated.
+  schedules, imports, matching, multiple referenced transactions, and non-null
+  replacement payees remain gated.
 - **Verification:** Focused positive and adversarial parser tests, strict
   TypeScript checks, all local package suites, clean disposable PostgreSQL
   create/replay/delete/rename/delete readback, and authenticated runtime

@@ -1,4 +1,4 @@
-import type { BudgetChangeSetCommand, BudgetChangeSetResult } from './budget';
+import type { BudgetChangeSetCommand, BudgetChangeSetResult } from "./budget";
 
 export type CanonicalOrdinaryPayee = {
   id: string;
@@ -25,7 +25,7 @@ export type CanonicalOrdinaryTransaction = {
   date: string;
   amount: number;
   memo: string | null;
-  cleared: 'Uncleared' | 'Cleared' | 'Reconciled';
+  cleared: "Uncleared" | "Cleared" | "Reconciled";
   accepted: boolean;
   checkNumber: string | null;
   flag: string | null;
@@ -33,37 +33,44 @@ export type CanonicalOrdinaryTransaction = {
 
 export type CanonicalOrdinaryTransactionMutation =
   | {
-      kind: 'create';
+      kind: "create";
       transaction: CanonicalOrdinaryTransaction;
     }
   | {
-      kind: 'create-with-payee';
+      kind: "create-with-payee";
       payee: CanonicalOrdinaryPayee;
       transaction: CanonicalOrdinaryTransaction;
     }
   | {
-      kind: 'edit';
+      kind: "edit";
       expected: CanonicalOrdinaryTransaction;
       transaction: CanonicalOrdinaryTransaction;
     }
   | {
-      kind: 'delete';
+      kind: "delete";
       budgetId: string;
       transactionId: string;
     };
 
 export type CanonicalOrdinaryPayeeMutation =
   | {
-      kind: 'rename';
+      kind: "rename";
       budgetId: string;
       payeeId: string;
       expectedName: string;
       name: string;
     }
   | {
-      kind: 'delete';
+      kind: "delete";
       budgetId: string;
       payeeId: string;
+    }
+  | {
+      kind: "delete-and-clear-transaction-payee";
+      budgetId: string;
+      payeeId: string;
+      expectedTransaction: CanonicalOrdinaryTransaction;
+      transaction: CanonicalOrdinaryTransaction;
     };
 
 export type CommitCanonicalOrdinaryTransactionMutation = {

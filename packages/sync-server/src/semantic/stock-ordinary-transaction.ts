@@ -1,4 +1,4 @@
-import { isDeepStrictEqual } from 'node:util';
+import { isDeepStrictEqual } from "node:util";
 
 import type {
   BudgetChangeSetCommand,
@@ -6,65 +6,65 @@ import type {
   BudgetSnapshot,
   CanonicalOrdinaryPayeeMutation,
   CanonicalOrdinaryTransactionMutation,
-} from '@actual-app/semantic-core';
+} from "@actual-app/semantic-core";
 
-import { buildStockBudgetEmptyDelta } from './stock-budget-bootstrap';
-import { projectStockBudgetCalculations } from './stock-budget-calculation-projection';
-import { projectStockRequestEntity } from './stock-budget-projection';
-import { isRecord } from './stock-operation';
-import { normalizeCapturedCheckingTransactionAmounts } from './stock-transaction-normalization';
+import { buildStockBudgetEmptyDelta } from "./stock-budget-bootstrap";
+import { projectStockBudgetCalculations } from "./stock-budget-calculation-projection";
+import { projectStockRequestEntity } from "./stock-budget-projection";
+import { isRecord } from "./stock-operation";
+import { normalizeCapturedCheckingTransactionAmounts } from "./stock-transaction-normalization";
 
 const PAYEE_KEYS = [
-  'auto_fill_amount',
-  'auto_fill_amount_enabled',
-  'auto_fill_memo',
-  'auto_fill_memo_enabled',
-  'auto_fill_subcategory_enabled',
-  'auto_fill_subcategory_id',
-  'auto_fill_user_defined_subcategory_id',
-  'enabled',
-  'entities_account_id',
-  'id',
-  'internal_name',
-  'is_tombstone',
-  'name',
-  'rename_on_import_enabled',
+  "auto_fill_amount",
+  "auto_fill_amount_enabled",
+  "auto_fill_memo",
+  "auto_fill_memo_enabled",
+  "auto_fill_subcategory_enabled",
+  "auto_fill_subcategory_id",
+  "auto_fill_user_defined_subcategory_id",
+  "enabled",
+  "entities_account_id",
+  "id",
+  "internal_name",
+  "is_tombstone",
+  "name",
+  "rename_on_import_enabled",
 ] as const;
 
 const TRANSACTION_KEYS = [
-  'accepted',
-  'amount',
-  'cash_amount',
-  'check_number',
-  'cleared',
-  'credit_amount',
-  'credit_amount_adjusted',
-  'date',
-  'date_entered_from_schedule',
-  'debt_transaction_type',
-  'entities_account_id',
-  'entities_payee_id',
-  'entities_scheduled_transaction_id',
-  'entities_subcategory_id',
-  'flag',
-  'id',
-  'imported_date',
-  'imported_payee',
-  'is_tombstone',
-  'matched_transaction_id',
-  'memo',
-  'original_imported_payee',
-  'provider_cleansed_payee',
-  'source',
-  'subcategory_credit_amount_preceding',
-  'transfer_account_id',
-  'transfer_subtransaction_id',
-  'transfer_transaction_id',
-  'ynab_id',
+  "accepted",
+  "amount",
+  "cash_amount",
+  "check_number",
+  "cleared",
+  "credit_amount",
+  "credit_amount_adjusted",
+  "date",
+  "date_entered_from_schedule",
+  "debt_transaction_type",
+  "entities_account_id",
+  "entities_payee_id",
+  "entities_scheduled_transaction_id",
+  "entities_subcategory_id",
+  "flag",
+  "id",
+  "imported_date",
+  "imported_payee",
+  "is_tombstone",
+  "matched_transaction_id",
+  "memo",
+  "original_imported_payee",
+  "provider_cleansed_payee",
+  "source",
+  "subcategory_credit_amount_preceding",
+  "transfer_account_id",
+  "transfer_subtransaction_id",
+  "transfer_transaction_id",
+  "ynab_id",
 ] as const;
 
 type StockOrdinaryMutationBase = {
-  changes: BudgetChangeSetCommand['changes'];
+  changes: BudgetChangeSetCommand["changes"];
   changedEntities: Readonly<Record<string, unknown>>;
   expectedDeviceAdvance: number;
   serverKnowledgeAdvance: 1 | 2;
@@ -73,11 +73,11 @@ type StockOrdinaryMutationBase = {
 export type StockOrdinaryMutation =
   | (StockOrdinaryMutationBase & {
       mutation: CanonicalOrdinaryTransactionMutation;
-      mutationDomain: 'transaction';
+      mutationDomain: "transaction";
     })
   | (StockOrdinaryMutationBase & {
       mutation: CanonicalOrdinaryPayeeMutation;
-      mutationDomain: 'payee';
+      mutationDomain: "payee";
     });
 
 export function parseStockOrdinaryMutation(
@@ -89,6 +89,7 @@ export function parseStockOrdinaryMutation(
     parseCreateWithPayee(changedEntities, snapshot) ??
     parseTransactionEdit(changedEntities, snapshot) ??
     parseTransactionDelete(changedEntities, snapshot) ??
+    parseReferencedPayeeDelete(changedEntities, snapshot) ??
     parsePayeeMutation(changedEntities, snapshot)
   );
 }
@@ -97,7 +98,7 @@ function parseCreateWithoutPayee(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
-  if (!hasExactKeys(changedEntities, ['be_transaction_groups'])) return null;
+  if (!hasExactKeys(changedEntities, ["be_transaction_groups"])) return null;
   const group = exactlyOneRecord(changedEntities.be_transaction_groups);
   const transactionRow =
     group && isRecord(group.be_transaction) ? group.be_transaction : null;
@@ -107,10 +108,10 @@ function parseCreateWithoutPayee(
     group.id !== transactionRow.id ||
     group.be_subtransactions !== null ||
     !isNewOrdinaryTransaction(transactionRow, null) ||
-    snapshot.entities.some(entity => entity.entityId === transactionRow.id) ||
+    snapshot.entities.some((entity) => entity.entityId === transactionRow.id) ||
     !liveEntity(
       snapshot,
-      'be_accounts',
+      "be_accounts",
       String(transactionRow.entities_account_id),
     )
   ) {
@@ -123,9 +124,9 @@ function parseCreateWithoutPayee(
     entities: [...snapshot.entities, transaction],
   };
   return {
-    mutationDomain: 'transaction',
+    mutationDomain: "transaction",
     mutation: {
-      kind: 'create',
+      kind: "create",
       transaction: canonicalTransaction(snapshot.budgetId, transaction),
     },
     changes: [transaction],
@@ -143,7 +144,7 @@ function parseCreateWithPayee(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
-  if (!hasExactKeys(changedEntities, ['be_payees', 'be_transaction_groups'])) {
+  if (!hasExactKeys(changedEntities, ["be_payees", "be_transaction_groups"])) {
     return null;
   }
   const payeeRow = exactlyOneRecord(changedEntities.be_payees);
@@ -162,12 +163,12 @@ function parseCreateWithPayee(
       String(payeeRow.id),
       transactionRow.entities_subcategory_id,
     ) ||
-    snapshot.entities.some(entity =>
+    snapshot.entities.some((entity) =>
       [payeeRow.id, transactionRow.id].includes(entity.entityId),
     ) ||
     !liveEntity(
       snapshot,
-      'be_accounts',
+      "be_accounts",
       String(transactionRow.entities_account_id),
     ) ||
     !isLiveOptionalCategory(snapshot, transactionRow.entities_subcategory_id)
@@ -183,9 +184,9 @@ function parseCreateWithPayee(
   };
   const empty = buildStockBudgetEmptyDelta(snapshot);
   return {
-    mutationDomain: 'transaction',
+    mutationDomain: "transaction",
     mutation: {
-      kind: 'create-with-payee',
+      kind: "create-with-payee",
       payee: {
         id: payee.entityId,
         budgetId: snapshot.budgetId,
@@ -227,7 +228,7 @@ function parseTransactionEdit(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
-  if (!hasExactKeys(changedEntities, ['be_transaction_groups'])) return null;
+  if (!hasExactKeys(changedEntities, ["be_transaction_groups"])) return null;
   const group = exactlyOneRecord(changedEntities.be_transaction_groups);
   const row =
     group && isRecord(group.be_transaction) ? group.be_transaction : null;
@@ -236,23 +237,23 @@ function parseTransactionEdit(
     !row ||
     group.id !== row.id ||
     group.be_subtransactions !== null ||
-    typeof row.id !== 'string'
+    typeof row.id !== "string"
   ) {
     return null;
   }
-  const current = liveEntity(snapshot, 'be_transactions', row.id);
+  const current = liveEntity(snapshot, "be_transactions", row.id);
   if (!current || !isCanonicalOrdinaryEntity(current)) return null;
   const expected = projectStockRequestEntity(current);
   const changed = changedKeys(expected, row).sort();
   if (
     !(
-      isDeepStrictEqual(changed, ['amount']) ||
-      isDeepStrictEqual(changed, ['amount', 'memo'])
+      isDeepStrictEqual(changed, ["amount"]) ||
+      isDeepStrictEqual(changed, ["amount", "memo"])
     ) ||
     row.cash_amount !== expected.amount ||
     !Number.isSafeInteger(row.amount) ||
     row.amount === 0 ||
-    (row.memo !== null && typeof row.memo !== 'string') ||
+    (row.memo !== null && typeof row.memo !== "string") ||
     !isDeepStrictEqual(row, {
       ...expected,
       amount: row.amount,
@@ -265,14 +266,14 @@ function parseTransactionEdit(
   const edited = transactionEntity(snapshot, row);
   const augmented = {
     ...snapshot,
-    entities: snapshot.entities.map(entity =>
+    entities: snapshot.entities.map((entity) =>
       entity === current ? edited : entity,
     ),
   };
   return {
-    mutationDomain: 'transaction',
+    mutationDomain: "transaction",
     mutation: {
-      kind: 'edit',
+      kind: "edit",
       expected: canonicalTransaction(snapshot.budgetId, current),
       transaction: canonicalTransaction(snapshot.budgetId, edited),
     },
@@ -291,7 +292,7 @@ function parseTransactionDelete(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
-  if (!hasExactKeys(changedEntities, ['be_transaction_groups'])) return null;
+  if (!hasExactKeys(changedEntities, ["be_transaction_groups"])) return null;
   const group = exactlyOneRecord(changedEntities.be_transaction_groups);
   const row =
     group && isRecord(group.be_transaction) ? group.be_transaction : null;
@@ -300,11 +301,11 @@ function parseTransactionDelete(
     !row ||
     group.id !== row.id ||
     group.be_subtransactions !== null ||
-    typeof row.id !== 'string'
+    typeof row.id !== "string"
   ) {
     return null;
   }
-  const current = liveEntity(snapshot, 'be_transactions', row.id);
+  const current = liveEntity(snapshot, "be_transactions", row.id);
   if (
     !current ||
     !isCanonicalOrdinaryEntity(current) ||
@@ -318,14 +319,14 @@ function parseTransactionDelete(
   const tombstone = { ...current, isTombstone: true };
   const augmented = {
     ...snapshot,
-    entities: snapshot.entities.map(entity =>
+    entities: snapshot.entities.map((entity) =>
       entity === current ? tombstone : entity,
     ),
   };
   return {
-    mutationDomain: 'transaction',
+    mutationDomain: "transaction",
     mutation: {
-      kind: 'delete',
+      kind: "delete",
       budgetId: snapshot.budgetId,
       transactionId: current.entityId,
     },
@@ -343,20 +344,20 @@ function parsePayeeMutation(
   changedEntities: Record<string, unknown>,
   snapshot: BudgetSnapshot,
 ): StockOrdinaryMutation | null {
-  if (!hasExactKeys(changedEntities, ['be_payees'])) return null;
+  if (!hasExactKeys(changedEntities, ["be_payees"])) return null;
   const row = exactlyOneRecord(changedEntities.be_payees);
-  if (!row || typeof row.id !== 'string' || !hasExactKeys(row, PAYEE_KEYS)) {
+  if (!row || typeof row.id !== "string" || !hasExactKeys(row, PAYEE_KEYS)) {
     return null;
   }
-  const current = liveEntity(snapshot, 'be_payees', row.id);
+  const current = liveEntity(snapshot, "be_payees", row.id);
   if (!current || current.payload.accountId !== null) return null;
   const expected = projectStockRequestEntity(current);
   if (row.is_tombstone === true) {
     if (
       !isDeepStrictEqual(row, { ...expected, is_tombstone: true }) ||
       snapshot.entities.some(
-        entity =>
-          entity.entityKind === 'be_transactions' &&
+        (entity) =>
+          entity.entityKind === "be_transactions" &&
           !entity.isTombstone &&
           entity.payload.payeeId === current.entityId,
       )
@@ -364,9 +365,9 @@ function parsePayeeMutation(
       return null;
     }
     return {
-      mutationDomain: 'payee',
+      mutationDomain: "payee",
       mutation: {
-        kind: 'delete',
+        kind: "delete",
         budgetId: snapshot.budgetId,
         payeeId: current.entityId,
       },
@@ -379,16 +380,16 @@ function parsePayeeMutation(
   const changed = changedKeys(expected, row);
   if (
     changed.length !== 1 ||
-    changed[0] !== 'name' ||
-    typeof row.name !== 'string' ||
+    changed[0] !== "name" ||
+    typeof row.name !== "string" ||
     !row.name.trim()
   ) {
     return null;
   }
   return {
-    mutationDomain: 'payee',
+    mutationDomain: "payee",
     mutation: {
-      kind: 'rename',
+      kind: "rename",
       budgetId: snapshot.budgetId,
       payeeId: current.entityId,
       expectedName: requireString(current.payload.name),
@@ -403,12 +404,90 @@ function parsePayeeMutation(
   };
 }
 
+function parseReferencedPayeeDelete(
+  changedEntities: Record<string, unknown>,
+  snapshot: BudgetSnapshot,
+): StockOrdinaryMutation | null {
+  if (!hasExactKeys(changedEntities, ["be_payees", "be_transaction_groups"])) {
+    return null;
+  }
+  const payeeRow = exactlyOneRecord(changedEntities.be_payees);
+  const group = exactlyOneRecord(changedEntities.be_transaction_groups);
+  const transactionRow =
+    group && isRecord(group.be_transaction) ? group.be_transaction : null;
+  if (
+    !payeeRow ||
+    !group ||
+    !transactionRow ||
+    !hasExactKeys(payeeRow, PAYEE_KEYS) ||
+    !hasExactKeys(transactionRow, TRANSACTION_KEYS) ||
+    group.id !== transactionRow.id ||
+    group.be_subtransactions !== null ||
+    typeof payeeRow.id !== "string" ||
+    typeof transactionRow.id !== "string"
+  ) {
+    return null;
+  }
+
+  const currentPayee = liveEntity(snapshot, "be_payees", payeeRow.id);
+  const currentTransaction = liveEntity(
+    snapshot,
+    "be_transactions",
+    transactionRow.id,
+  );
+  if (
+    !currentPayee ||
+    currentPayee.payload.accountId !== null ||
+    !currentTransaction ||
+    !isCanonicalOrdinaryEntity(currentTransaction) ||
+    currentTransaction.payload.payeeId !== currentPayee.entityId ||
+    !isDeepStrictEqual(payeeRow, {
+      ...projectStockRequestEntity(currentPayee),
+      is_tombstone: true,
+    }) ||
+    !isDeepStrictEqual(transactionRow, {
+      ...projectStockRequestEntity(currentTransaction),
+      entities_payee_id: null,
+    }) ||
+    snapshot.entities.filter(
+      (entity) =>
+        entity.entityKind === "be_transactions" &&
+        !entity.isTombstone &&
+        entity.payload.payeeId === currentPayee.entityId,
+    ).length !== 1
+  ) {
+    return null;
+  }
+
+  const transaction = {
+    ...currentTransaction,
+    payload: { ...currentTransaction.payload, payeeId: null },
+  };
+  return {
+    mutationDomain: "payee",
+    mutation: {
+      kind: "delete-and-clear-transaction-payee",
+      budgetId: snapshot.budgetId,
+      payeeId: currentPayee.entityId,
+      expectedTransaction: canonicalTransaction(
+        snapshot.budgetId,
+        currentTransaction,
+      ),
+      transaction: canonicalTransaction(snapshot.budgetId, transaction),
+    },
+    changes: [{ ...currentPayee, isTombstone: true }, transaction],
+    changedEntities: buildStockBudgetEmptyDelta(snapshot),
+    expectedDeviceAdvance: 2,
+    serverKnowledgeAdvance: 1,
+  };
+}
+
 function payeeEntity(
   snapshot: BudgetSnapshot,
   row: Readonly<Record<string, unknown>>,
 ): BudgetEntity {
   return {
-    entityKind: 'be_payees',
+    entityKind: "be_payees",
     entityId: String(row.id),
     isTombstone: false,
     payload: {
@@ -437,7 +516,7 @@ function transactionEntity(
 ): BudgetEntity {
   const amounts = normalizeCapturedCheckingTransactionAmounts(row.amount);
   return {
-    entityKind: 'be_transactions',
+    entityKind: "be_transactions",
     entityId: String(row.id),
     isTombstone: false,
     payload: {
@@ -492,7 +571,7 @@ function isNewOrdinaryPayee(
 ): boolean {
   return (
     hasExactKeys(row, PAYEE_KEYS) &&
-    typeof row.id === 'string' &&
+    typeof row.id === "string" &&
     row.id.length > 0 &&
     row.is_tombstone === false &&
     row.entities_account_id === null &&
@@ -505,7 +584,7 @@ function isNewOrdinaryPayee(
     row.auto_fill_memo_enabled === false &&
     row.auto_fill_amount_enabled === false &&
     row.rename_on_import_enabled === true &&
-    typeof row.name === 'string' &&
+    typeof row.name === "string" &&
     row.name.trim().length > 0 &&
     row.internal_name === null
   );
@@ -518,10 +597,10 @@ function isNewOrdinaryTransaction(
 ): boolean {
   return (
     hasExactKeys(row, TRANSACTION_KEYS) &&
-    typeof row.id === 'string' &&
+    typeof row.id === "string" &&
     row.id.length > 0 &&
     row.is_tombstone === false &&
-    typeof row.entities_account_id === 'string' &&
+    typeof row.entities_account_id === "string" &&
     row.entities_payee_id === payeeId &&
     row.entities_subcategory_id === categoryId &&
     row.entities_scheduled_transaction_id === null &&
@@ -533,8 +612,8 @@ function isNewOrdinaryTransaction(
     row.credit_amount === 0 &&
     row.credit_amount_adjusted === 0 &&
     row.subcategory_credit_amount_preceding === 0 &&
-    (row.memo === null || typeof row.memo === 'string') &&
-    ['Uncleared', 'Cleared', 'Reconciled'].includes(String(row.cleared)) &&
+    (row.memo === null || typeof row.memo === "string") &&
+    ["Uncleared", "Cleared", "Reconciled"].includes(String(row.cleared)) &&
     row.accepted === true &&
     nullableString(row.check_number) &&
     nullableString(row.flag) &&
@@ -558,14 +637,14 @@ function isLiveOptionalCategory(
 ): boolean {
   return (
     categoryId === null ||
-    (typeof categoryId === 'string' &&
-      Boolean(liveEntity(snapshot, 'be_subcategories', categoryId)))
+    (typeof categoryId === "string" &&
+      Boolean(liveEntity(snapshot, "be_subcategories", categoryId)))
   );
 }
 
 function isCanonicalOrdinaryEntity(entity: BudgetEntity): boolean {
   return (
-    entity.entityKind === 'be_transactions' &&
+    entity.entityKind === "be_transactions" &&
     entity.payload.scheduledTransactionId === null &&
     entity.payload.transferAccountId === null &&
     entity.payload.transferTransactionId === null &&
@@ -577,7 +656,7 @@ function calculationDelta(before: BudgetSnapshot, after: BudgetSnapshot) {
   const left = projectStockBudgetCalculations(before);
   const right = projectStockBudgetCalculations(after);
   return Object.fromEntries(
-    Object.keys(right).map(key => {
+    Object.keys(right).map((key) => {
       const previous = left[key as keyof typeof left];
       const current = right[key as keyof typeof right];
       return [key, isDeepStrictEqual(previous, current) ? [] : current];
@@ -587,7 +666,7 @@ function calculationDelta(before: BudgetSnapshot, after: BudgetSnapshot) {
 
 function liveEntity(snapshot: BudgetSnapshot, kind: string, id: string) {
   return snapshot.entities.find(
-    entity =>
+    (entity) =>
       entity.entityKind === kind &&
       entity.entityId === id &&
       !entity.isTombstone,
@@ -617,11 +696,11 @@ function changedKeys(
   right: Readonly<Record<string, unknown>>,
 ) {
   const keys = new Set([...Object.keys(left), ...Object.keys(right)]);
-  return [...keys].filter(key => !isDeepStrictEqual(left[key], right[key]));
+  return [...keys].filter((key) => !isDeepStrictEqual(left[key], right[key]));
 }
 
 function requireString(value: unknown): string {
-  if (typeof value !== 'string' || !value) throw new Error('Expected string');
+  if (typeof value !== "string" || !value) throw new Error("Expected string");
   return value;
 }
 
@@ -631,36 +710,36 @@ function optionalString(value: unknown): string | null {
 }
 
 function nullableString(value: unknown): boolean {
-  return value === null || typeof value === 'string';
+  return value === null || typeof value === "string";
 }
 
 function requireInteger(value: unknown): number {
-  if (!Number.isSafeInteger(value)) throw new Error('Expected safe integer');
+  if (!Number.isSafeInteger(value)) throw new Error("Expected safe integer");
   return Number(value);
 }
 
 function requireBoolean(value: unknown): boolean {
-  if (typeof value !== 'boolean') throw new Error('Expected boolean');
+  if (typeof value !== "boolean") throw new Error("Expected boolean");
   return value;
 }
 
 function requireDate(value: unknown): string {
   const result = requireDateOrNull(value);
-  if (!result) throw new Error('Expected ISO date');
+  if (!result) throw new Error("Expected ISO date");
   return result;
 }
 
 function requireDateOrNull(value: unknown): string | null {
-  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/u.test(value)
+  return typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/u.test(value)
     ? value
     : null;
 }
 
 function requireCleared(
   value: unknown,
-): 'Uncleared' | 'Cleared' | 'Reconciled' {
-  if (value === 'Uncleared' || value === 'Cleared' || value === 'Reconciled') {
+): "Uncleared" | "Cleared" | "Reconciled" {
+  if (value === "Uncleared" || value === "Cleared" || value === "Reconciled") {
     return value;
   }
-  throw new Error('Expected cleared state');
+  throw new Error("Expected cleared state");
 }
