@@ -153,6 +153,73 @@ describe("stock ordinary transaction and payee boundary", () => {
     ]);
   });
 
+  test("admits captured categorized payee-less duplicate as ordinary creation", () => {
+    const snapshot = fixture();
+    const category = snapshot.entities.find(
+      (entity) =>
+        entity.entityKind === "be_subcategories" &&
+        !entity.isTombstone &&
+        entity.payload.internalName === null,
+    );
+    expect(category).toBeDefined();
+
+    const parsed = parseStockOrdinaryMutation(
+      {
+        be_transaction_groups: [
+          {
+            id: "transaction-duplicate-1",
+            be_transaction: {
+              ...transactionRow(),
+              id: "transaction-duplicate-1",
+              entities_payee_id: null,
+              entities_subcategory_id: category!.entityId,
+              memo: "CATEGORY REFERENCED DELETE",
+              amount: -1230,
+              cleared: "Cleared",
+            },
+            be_subtransactions: null,
+          },
+        ],
+      },
+      snapshot,
+    );
+
+    expect(parsed).toMatchObject({
+      mutationDomain: "transaction",
+      mutation: {
+        kind: "create",
+        transaction: {
+          id: "transaction-duplicate-1",
+          accountId: "account-1",
+          payeeId: null,
+          categoryId: category!.entityId,
+          amount: -1230,
+          memo: "CATEGORY REFERENCED DELETE",
+          cleared: "Cleared",
+        },
+      },
+      expectedDeviceAdvance: 1,
+      serverKnowledgeAdvance: 2,
+    });
+    expect(parsed?.changedEntities).toMatchObject({
+      be_account_calculations: [expect.any(Object)],
+      be_monthly_account_calculations: [expect.any(Object), expect.any(Object)],
+      be_monthly_budget_calculations: [expect.any(Object), expect.any(Object)],
+      be_monthly_subcategory_budget_calculations: [
+        expect.any(Object),
+        expect.any(Object),
+      ],
+      be_transactions: [
+        expect.objectContaining({
+          id: "transaction-duplicate-1",
+          entities_payee_id: null,
+          entities_subcategory_id: category!.entityId,
+          cash_amount: -1230,
+        }),
+      ],
+    });
+  });
+
   test("admits captured transaction-coupled payee creation and normalizes cash amount", () => {
     const snapshot = fixture();
     const parsed = parseStockOrdinaryMutation(
@@ -427,7 +494,7 @@ describe("stock ordinary transaction and payee boundary", () => {
               be_transaction: {
                 ...transactionRow(),
                 entities_payee_id: null,
-                entities_subcategory_id: capturedCategory,
+                entities_subcategory_id: "missing-category",
               },
               be_subtransactions: null,
             },

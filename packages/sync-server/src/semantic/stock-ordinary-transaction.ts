@@ -107,13 +107,18 @@ function parseCreateWithoutPayee(
     !transactionRow ||
     group.id !== transactionRow.id ||
     group.be_subtransactions !== null ||
-    !isNewOrdinaryTransaction(transactionRow, null) ||
+    !isNewOrdinaryTransaction(
+      transactionRow,
+      null,
+      transactionRow.entities_subcategory_id,
+    ) ||
     snapshot.entities.some((entity) => entity.entityId === transactionRow.id) ||
     !liveEntity(
       snapshot,
       "be_accounts",
       String(transactionRow.entities_account_id),
-    )
+    ) ||
+    !isLiveOptionalCategory(snapshot, transactionRow.entities_subcategory_id)
   ) {
     return null;
   }
@@ -136,7 +141,8 @@ function parseCreateWithoutPayee(
       be_transactions: [projectStockRequestEntity(transaction)],
     },
     expectedDeviceAdvance: 1,
-    serverKnowledgeAdvance: 1,
+    serverKnowledgeAdvance:
+      transactionRow.entities_subcategory_id === null ? 1 : 2,
   };
 }
 
@@ -659,7 +665,15 @@ function calculationDelta(before: BudgetSnapshot, after: BudgetSnapshot) {
     Object.keys(right).map((key) => {
       const previous = left[key as keyof typeof left];
       const current = right[key as keyof typeof right];
-      return [key, isDeepStrictEqual(previous, current) ? [] : current];
+      const priorRows = new Map(
+        previous.map((row) => [String(row.id), row] as const),
+      );
+      return [
+        key,
+        current.filter(
+          (row) => !isDeepStrictEqual(row, priorRows.get(String(row.id)) ?? {}),
+        ),
+      ];
     }),
   );
 }
