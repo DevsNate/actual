@@ -19,6 +19,7 @@ import type {
 
 import { parseStockAccountLifecycleDelta } from './stock-account-lifecycle';
 import { parseStockAccountRenameDelta } from './stock-account-rename';
+import { parseStockAccountReorder } from './stock-account-reorder';
 import {
   buildStockBudgetBackfill,
   buildStockBudgetBootstrap,
@@ -207,12 +208,16 @@ export async function handleStockBudgetSync(
   const accountRename = openedBudgetChanges
     ? null
     : parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
-  const accountDelete =
+  const accountReorder =
     openedBudgetChanges || accountRename
+      ? null
+      : parseStockAccountReorder(syncRequest.changedEntities, snapshot);
+  const accountDelete =
+    openedBudgetChanges || accountRename || accountReorder
       ? null
       : parseStockPristineAccountDelete(syncRequest.changedEntities, snapshot);
   const accountLifecycle =
-    openedBudgetChanges || accountRename || accountDelete
+    openedBudgetChanges || accountRename || accountReorder || accountDelete
       ? null
       : parseStockAccountLifecycleDelta(syncRequest.changedEntities, snapshot);
   const targetMutation =
@@ -309,6 +314,7 @@ export async function handleStockBudgetSync(
   const changes =
     openedBudgetChanges ??
     accountRename?.changes ??
+    accountReorder?.changes ??
     accountDelete?.changes ??
     accountLifecycle?.changes ??
     targetMutation?.changes ??
@@ -326,6 +332,7 @@ export async function handleStockBudgetSync(
     !matchesExpectedDeviceAdvance(
       syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge,
       targetMutation?.expectedDeviceAdvance ??
+        accountReorder?.expectedDeviceAdvance ??
         categoryAssignment?.expectedDeviceAdvance ??
         categoryMutation?.expectedDeviceAdvance ??
         ordinaryMutation?.expectedDeviceAdvance ??
@@ -341,6 +348,7 @@ export async function handleStockBudgetSync(
 
   const serverKnowledgeAdvance =
     targetMutation?.serverKnowledgeAdvance ??
+    accountReorder?.serverKnowledgeAdvance ??
     categoryAssignment?.serverKnowledgeAdvance ??
     categoryMutation?.serverKnowledgeAdvance ??
     ordinaryMutation?.serverKnowledgeAdvance ??
@@ -355,6 +363,7 @@ export async function handleStockBudgetSync(
     nextServerKnowledge,
     syncRequest.endingDeviceKnowledge,
     accountDelete?.changedEntities ??
+      accountReorder?.changedEntities ??
       accountLifecycle?.changedEntities ??
       targetMutation?.changedEntities ??
       categoryAssignment?.changedEntities ??

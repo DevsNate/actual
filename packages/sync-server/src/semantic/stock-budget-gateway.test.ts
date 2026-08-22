@@ -554,6 +554,112 @@ describe('stock budget gateway', () => {
     );
   });
 
+  test('commits the captured two-row account reorder with an empty acknowledgement', async () => {
+    const baseSnapshot = createSnapshot();
+    const account = (id: string, name: string, sortableIndex: number) => ({
+      entityKind: 'be_accounts' as const,
+      entityId: id,
+      isTombstone: false,
+      payload: {
+        budgetVersionId: 'version-1',
+        creationCommandKey: `create-${id}`,
+        accountName: name,
+        accountType: 'CreditCard',
+        note: null,
+        lastPaymentPayeeId: null,
+        isClosed: false,
+        sortableIndex,
+        isFavorite: false,
+        sortableFavoriteIndex: 0,
+        onBudget: true,
+        lastReconciledAt: null,
+        debtStartDate: null,
+        debtOriginalBalance: null,
+        debtInterestRates: null,
+        debtMinimumPayments: null,
+        debtAssetValues: null,
+        debtEscrowAmounts: null,
+        debtMigratedFromAccountId: null,
+      },
+    });
+    const accounts = [
+      account('account-a', 'AC1', 0),
+      account('account-b', 'Cc', 1),
+      account('account-c', 'CC Capture 2', 2),
+      account('account-d', 'CC Capture 3', 3),
+    ];
+    const snapshot = {
+      ...baseSnapshot,
+      serverKnowledge: 81,
+      entities: [...baseSnapshot.entities, ...accounts],
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
+      commitChangeSet: vi.fn().mockImplementation(command =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 82,
+          endingDeviceKnowledge: 2,
+          response: command.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      { readBudgetByVersion: vi.fn().mockResolvedValue(snapshot) },
+      'delta',
+      {
+        starting_device_knowledge: 0,
+        ending_device_knowledge: 2,
+        device_knowledge_of_server: 81,
+        changed_entities: {
+          be_accounts: [
+            {
+              ...projectStockRequestEntity(accounts[1]),
+              sortable_index: 357913941,
+            },
+            {
+              ...projectStockRequestEntity(accounts[3]),
+              sortable_index: 715827882,
+            },
+          ],
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 82,
+      server_knowledge_of_device: 2,
+      changed_entities: { be_accounts: [] },
+    });
+    expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedServerKnowledge: 81,
+        serverKnowledgeAdvance: 1,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 2,
+        changes: [
+          expect.objectContaining({
+            entityId: 'account-b',
+            payload: expect.objectContaining({ sortableIndex: 357913941 }),
+          }),
+          expect.objectContaining({
+            entityId: 'account-d',
+            payload: expect.objectContaining({ sortableIndex: 715827882 }),
+          }),
+        ],
+      }),
+    );
+  });
+
   test('commits captured category creation through the canonical writer', async () => {
     const snapshot = { ...createSnapshot(), serverKnowledge: 88 };
     const group = snapshot.entities.find(
