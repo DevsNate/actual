@@ -682,6 +682,30 @@ describe('semantic foundation migration', () => {
     expect(migration).toContain("'/' || budget.budget_id");
   });
 
+  test('assigns one stable opaque short identity to every budget version', async () => {
+    const migration = await readFile(
+      fileURLToPath(
+        new URL(
+          '../migrations/0019_short_budget_version_identity.sql',
+          import.meta.url,
+        ),
+      ),
+      'utf8',
+    );
+
+    expect(migration).toContain(
+      'CREATE SEQUENCE semantic_short_budget_version_id_seq',
+    );
+    expect(migration).toContain('ADD COLUMN short_budget_version_id BIGINT');
+    expect(migration).toContain(
+      "DEFAULT nextval('semantic_short_budget_version_id_seq')",
+    );
+    expect(migration).toContain(
+      'CREATE UNIQUE INDEX semantic_budgets_short_budget_version_id_key',
+    );
+    expect(migration).not.toContain('be_expected_income');
+  });
+
   test('stores split parents and ordered lines as one canonical aggregate', async () => {
     const migration = await readFile(
       fileURLToPath(

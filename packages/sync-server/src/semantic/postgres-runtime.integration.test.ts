@@ -58,9 +58,10 @@ integrationTest('semantic catalog runtime integration', () => {
     );
 
     const migrations = await seedPool.query<{ count: string }>(
-      'SELECT count(*) FROM semantic_schema_migrations',
+      `SELECT count(*) FROM semantic_schema_migrations
+       WHERE filename = '0019_short_budget_version_identity.sql'`,
     );
-    expect(migrations.rows[0]?.count).toBe('17');
+    expect(migrations.rows[0]?.count).toBe('1');
 
     const app = express();
     app.use('/semantic/v1', runtime.handlers);

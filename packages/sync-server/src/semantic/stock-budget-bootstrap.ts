@@ -10,7 +10,6 @@ const bootstrapArrayTables = [
   'be_account_calculations',
   'be_account_mappings',
   'be_accounts',
-  'be_expected_income',
   'be_master_categories',
   'be_monthly_account_calculations',
   'be_monthly_budget_calculations',
@@ -80,6 +79,7 @@ export function buildStockBudgetBootstrap(
   const calculations = projectStockBudgetCalculations(snapshot);
   const allowedSourceTables = new Set<string>([
     'be_budget',
+    'be_expected_income',
     ...bootstrapArrayTables,
     'be_money_movement_groups',
     'be_money_movements',
@@ -98,6 +98,8 @@ export function buildStockBudgetBootstrap(
       [];
   }
   changedEntities.be_budget = source.changedEntities.be_budget;
+  changedEntities.be_expected_income =
+    source.changedEntities.be_expected_income ?? null;
   changedEntities.first_month = source.firstMonth;
   changedEntities.last_month = source.lastMonth;
   return changedEntities;
@@ -141,7 +143,6 @@ export function buildStockBudgetEmptyDelta(
 
 const calculationSensitiveKinds = new Set([
   'be_accounts',
-  'be_expected_income',
   'be_scheduled_subtransactions',
   'be_scheduled_transactions',
   'be_subtransactions',
@@ -166,6 +167,10 @@ export function buildStockBudgetReadDelta(
   for (const entity of changed) {
     if (entity.entityKind === 'be_budget') {
       result.be_budget = projectStockResponseEntity(entity);
+      continue;
+    }
+    if (entity.entityKind === 'be_expected_income') {
+      result.be_expected_income = projectStockResponseEntity(entity);
       continue;
     }
     if (!deltaArrayTableSet.has(entity.entityKind)) {

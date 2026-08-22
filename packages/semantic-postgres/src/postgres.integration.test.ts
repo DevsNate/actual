@@ -2330,8 +2330,10 @@ integrationTest("PostgresSemanticStore integration", () => {
     expect(byVersion).toMatchObject({
       budgetId: operation.budgetId,
       budgetVersionId: operation.budgetVersionId,
+      shortBudgetVersionId: expect.any(Number),
       serverKnowledge: 1,
     });
+    expect(Number.isSafeInteger(byVersion?.shortBudgetVersionId)).toBe(true);
     expect(byVersion?.entities).toHaveLength(58);
     await expect(
       budgetReader.readBudgetByVersion(

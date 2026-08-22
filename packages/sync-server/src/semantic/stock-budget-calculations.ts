@@ -9,7 +9,6 @@ import { projectCapturedTargetRows } from './stock-target-calculation-projection
 
 const calculationSensitiveKinds = new Set([
   'be_accounts',
-  'be_expected_income',
   'be_scheduled_subtransactions',
   'be_scheduled_transactions',
   'be_subtransactions',

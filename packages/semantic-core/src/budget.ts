@@ -93,6 +93,8 @@ export type BudgetCreator = {
 export type BudgetSnapshot = {
   budgetId: string;
   budgetVersionId: string;
+  /** Stable opaque numeric identity projected by Stock as short_budget_version_id. */
+  shortBudgetVersionId?: number;
   name: string;
   serverKnowledge: number;
   currencyFormat: Readonly<Record<string, unknown>>;

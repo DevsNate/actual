@@ -30,7 +30,10 @@ export function projectStockBudgetSource(
   for (const [entityKind, rows] of [...grouped].sort(([left], [right]) =>
     left.localeCompare(right),
   )) {
-    changedEntities[entityKind] = entityKind === 'be_budget' ? rows[0] : rows;
+    changedEntities[entityKind] =
+      entityKind === 'be_budget' || entityKind === 'be_expected_income'
+        ? requireSingleton(entityKind, rows)
+        : rows;
   }
 
   const months = snapshot.entities
@@ -48,6 +51,16 @@ export function projectStockBudgetSource(
     firstMonth: bootstrapMonth,
     lastMonth: bootstrapMonth,
   };
+}
+
+function requireSingleton(
+  entityKind: string,
+  rows: readonly Readonly<Record<string, unknown>>[],
+) {
+  if (rows.length !== 1) {
+    throw new Error(`Stock ${entityKind} projection requires exactly one row`);
+  }
+  return rows[0];
 }
 
 export function projectStockRequestEntity(
@@ -134,6 +147,7 @@ const payloadRules: Readonly<
 > = {
   be_accounts: rule(['budgetVersionId', 'creationCommandKey']),
   be_budget: rule(['budgetVersionId', 'deviceKnowledge']),
+  be_expected_income: rule(['budgetVersionId']),
   be_master_categories: rule(['budgetVersionId', 'deviceKnowledge']),
   be_monthly_budgets: rule([
     'budgetVersionId',

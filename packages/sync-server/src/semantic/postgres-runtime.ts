@@ -21,6 +21,7 @@ import { semanticCanonicalTransferMigration } from '@actual-app/semantic-postgre
 import { semanticCatalogCommandMigration } from '@actual-app/semantic-postgres/catalog-command-migration';
 import { semanticCatalogSchemaVersionMigration } from '@actual-app/semantic-postgres/catalog-schema-version-migration';
 import { semanticFoundationMigration } from '@actual-app/semantic-postgres/foundation-migration';
+import { shortBudgetVersionIdentityMigration } from '@actual-app/semantic-postgres/short-budget-version-identity-migration';
 import { Pool } from 'pg';
 
 import { createSemanticAccountHandlers } from './account-api';
@@ -60,6 +61,7 @@ export async function createPostgresSemanticCatalogHandlers(
       semanticCanonicalScheduledTransactionMigration,
       semanticCanonicalBudgetBootstrapMigration,
       semanticCanonicalMonthlyBudgetIdentityMigration,
+      shortBudgetVersionIdentityMigration,
     ]);
   } catch (error) {
     await pool.end();

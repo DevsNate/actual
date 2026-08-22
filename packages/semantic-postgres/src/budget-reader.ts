@@ -9,6 +9,7 @@ import type { Pool } from 'pg';
 type BudgetRow = {
   budget_id: string;
   budget_version_id: string;
+  short_budget_version_id: string;
   name: string;
   server_knowledge: string;
   currency_format: Readonly<Record<string, unknown>> | null;
@@ -52,7 +53,8 @@ export class PostgresBudgetReader implements BudgetReader, BudgetVersionReader {
     const identityColumn =
       identityKind === 'budget' ? 'm.budget_id' : 'p.budget_version_id';
     const budget = await this.pool.query<BudgetRow>(
-      `SELECT p.budget_id, p.budget_version_id, p.name, p.server_knowledge,
+      `SELECT p.budget_id, p.budget_version_id, p.short_budget_version_id,
+              p.name, p.server_knowledge,
               p.currency_format, p.date_format
        FROM semantic_budget_memberships m
        JOIN semantic_budgets p ON p.budget_id = m.budget_id
@@ -75,6 +77,7 @@ export class PostgresBudgetReader implements BudgetReader, BudgetVersionReader {
     return {
       budgetId: row.budget_id,
       budgetVersionId: row.budget_version_id,
+      shortBudgetVersionId: integer(row.short_budget_version_id),
       name: row.name,
       serverKnowledge: integer(row.server_knowledge),
       currencyFormat: row.currency_format ?? {},

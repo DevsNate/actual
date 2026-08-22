@@ -660,6 +660,76 @@ describe('stock budget gateway', () => {
     );
   });
 
+  test('commits the captured singleton expected-income creation', async () => {
+    const snapshot = {
+      ...createSnapshot(),
+      serverKnowledge: 82,
+      shortBudgetVersionId: 3000002030081,
+    };
+    const changeWriter: StockBudgetChangeWriter = {
+      acknowledgeDevice: vi.fn(),
+      commitAccountRename: vi.fn(),
+      commitPristineAccountDeletion: vi.fn(),
+      commitAccountClose: vi.fn(),
+      commitAccountReopen: vi.fn(),
+      commitCategoryMutation: vi.fn(),
+      commitOrdinaryTransactionMutation: vi.fn(),
+      commitOrdinaryPayeeMutation: vi.fn(),
+      commitChangeSet: vi.fn().mockImplementation(command =>
+        Promise.resolve({
+          replayed: false,
+          serverKnowledge: 83,
+          endingDeviceKnowledge: 1,
+          response: command.response,
+        }),
+      ),
+    };
+
+    const response = await stockRequest(
+      { readBudgetByVersion: vi.fn().mockResolvedValue(snapshot) },
+      'delta',
+      {
+        starting_device_knowledge: 0,
+        ending_device_knowledge: 1,
+        device_knowledge_of_server: 82,
+        changed_entities: {
+          be_expected_income: {
+            id: 'version-1',
+            user_entered_income: 1234560,
+            is_tombstone: false,
+          },
+        },
+      },
+      changeWriter,
+    ).expect(200);
+
+    expect(response.body).toMatchObject({
+      current_server_knowledge: 83,
+      server_knowledge_of_device: 1,
+      changed_entities: { be_expected_income: null },
+    });
+    expect(changeWriter.commitChangeSet).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedServerKnowledge: 82,
+        serverKnowledgeAdvance: 1,
+        startingDeviceKnowledge: 0,
+        endingDeviceKnowledge: 1,
+        changes: [
+          {
+            entityKind: 'be_expected_income',
+            entityId: 'version-1',
+            isTombstone: false,
+            payload: {
+              budgetVersionId: 'version-1',
+              shortBudgetVersionId: 3000002030081,
+              userEnteredIncome: 1234560,
+            },
+          },
+        ],
+      }),
+    );
+  });
+
   test('commits captured category creation through the canonical writer', async () => {
     const snapshot = { ...createSnapshot(), serverKnowledge: 88 };
     const group = snapshot.entities.find(

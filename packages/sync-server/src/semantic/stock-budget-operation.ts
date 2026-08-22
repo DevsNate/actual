@@ -33,6 +33,7 @@ import {
 } from './stock-category-assignment';
 import { parseStockCategoryMutation } from './stock-category-lifecycle';
 import { parseStockCreditCardPaymentMutation } from './stock-credit-card-payment';
+import { parseStockExpectedIncomeMutation } from './stock-expected-income';
 import {
   isRecord,
   nonnegativeInteger,
@@ -205,9 +206,13 @@ export async function handleStockBudgetSync(
     snapshot,
     context.principal.id,
   );
-  const accountRename = openedBudgetChanges
+  const expectedIncome = openedBudgetChanges
     ? null
-    : parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
+    : parseStockExpectedIncomeMutation(syncRequest.changedEntities, snapshot);
+  const accountRename =
+    openedBudgetChanges || expectedIncome
+      ? null
+      : parseStockAccountRenameDelta(syncRequest.changedEntities, snapshot);
   const accountReorder =
     openedBudgetChanges || accountRename
       ? null
@@ -313,6 +318,7 @@ export async function handleStockBudgetSync(
         );
   const changes =
     openedBudgetChanges ??
+    expectedIncome?.changes ??
     accountRename?.changes ??
     accountReorder?.changes ??
     accountDelete?.changes ??
@@ -332,6 +338,7 @@ export async function handleStockBudgetSync(
     !matchesExpectedDeviceAdvance(
       syncRequest.endingDeviceKnowledge - syncRequest.startingDeviceKnowledge,
       targetMutation?.expectedDeviceAdvance ??
+        expectedIncome?.expectedDeviceAdvance ??
         accountReorder?.expectedDeviceAdvance ??
         categoryAssignment?.expectedDeviceAdvance ??
         categoryMutation?.expectedDeviceAdvance ??
@@ -348,6 +355,7 @@ export async function handleStockBudgetSync(
 
   const serverKnowledgeAdvance =
     targetMutation?.serverKnowledgeAdvance ??
+    expectedIncome?.serverKnowledgeAdvance ??
     accountReorder?.serverKnowledgeAdvance ??
     categoryAssignment?.serverKnowledgeAdvance ??
     categoryMutation?.serverKnowledgeAdvance ??
@@ -363,6 +371,7 @@ export async function handleStockBudgetSync(
     nextServerKnowledge,
     syncRequest.endingDeviceKnowledge,
     accountDelete?.changedEntities ??
+      expectedIncome?.changedEntities ??
       accountReorder?.changedEntities ??
       accountLifecycle?.changedEntities ??
       targetMutation?.changedEntities ??
